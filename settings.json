@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "defaultMode": "plan",
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(gh auth status)",
+      "Bash(gh repo view:*)",
+      "Bash(gh repo list:*)",
+      "Bash(gh search repos:*)",
+      "Bash(gh api repos/Enterprise-Plus/*)",
+      "Bash(git -C repos/* log:*)",
+      "Bash(git -C repos/* rev-parse:*)",
+      "Bash(iconv:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)"
+    ],
+    "deny": [
+      "Edit(./repos/**)",
+      "Bash(git -C repos/* push:*)",
+      "Bash(git -C repos/* commit:*)",
+      "Bash(git -C repos/* checkout -b:*)"
+    ]
+  }
+}
