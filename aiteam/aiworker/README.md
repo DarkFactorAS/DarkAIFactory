@@ -36,6 +36,16 @@ Issues retain the `ai-agent-picked` label after processing. If processing fails,
 the worker also adds `ai-agent-failed` and posts an error comment. Remove the
 pickup label after resolving the failure to let the issue be retried.
 
+## Run from Visual Studio Code
+
+Open the repository root in VS Code, copy `aiteam/.env.example` to
+`aiteam/.env`, and set the Jira and GitHub credentials there. Install the C#
+extension, then select **AI Worker (.NET)** in Run and Debug and press F5. VS
+Code builds the worker first, loads `aiteam/.env`, and prompts for the absolute
+path to the target code repository. The default target is the current workspace.
+
+The **build aiworker** task is also available from **Terminal > Run Build Task**.
+
 ## Configuration
 
 | Variable | Default | Description |
