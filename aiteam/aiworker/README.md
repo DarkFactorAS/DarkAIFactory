@@ -24,10 +24,10 @@ skips epics. Set `JIRA_JQL` to use a different query.
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
 `aiteam/aiworker/`.
 
-The target repository is mounted read/write. Copilot can run commands and modify
-files inside the container, and its non-interactive run automatically approves
-tools except for the denied push/PR commands. Use a dedicated repository
-checkout and a Jira service account with only the required project permissions.
+The target repository is mounted read/write. Copilot can modify its files, but
+shell execution is disabled, so it cannot run tests or Git commands. Run
+validation and Git workflows separately. Use a dedicated repository checkout
+and a Jira service account with only the required project permissions.
 The Copilot token should have only the **Copilot Requests** permission. The
 worker does not push changes or create pull requests. It follows repository
 Markdown instructions, including applicable `AGENTS.md` and Git workflow rules.
