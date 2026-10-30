@@ -1,7 +1,7 @@
 services:
   coding-agent:
     build:
-      context: .
+      context: ./aiworker
     restart: unless-stopped
     init: true
     environment:

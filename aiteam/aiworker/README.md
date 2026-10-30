@@ -13,8 +13,16 @@ skips epics. Set `JIRA_JQL` to use a different query.
 2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
 3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with the
    **Copilot Requests** permission.
-4. Set `TARGET_REPOSITORY_PATH` to the code repository the agent should modify.
-5. From this directory, start the worker with `docker compose up --build -d`.
+4. Set `TARGET_REPOSITORY_PATH` to the absolute host path of the code repository
+   the agent should modify.
+5. From the `aiteam` directory, start the worker with:
+
+   ```sh
+   docker compose --env-file aiworker/.env -f docker-compose.yml up --build -d
+   ```
+
+The Compose file is in `aiteam/`, while its Docker build context and `.env` file
+are in `aiteam/aiworker/`.
 
 The target repository is mounted read/write. Copilot can run commands and modify
 files inside the container, and its non-interactive run automatically approves
