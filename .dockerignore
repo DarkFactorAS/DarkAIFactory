@@ -1,0 +1,6 @@
+.git
+.env
+.vs
+**/bin
+**/obj
+UserSettings
