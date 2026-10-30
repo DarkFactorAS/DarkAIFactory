@@ -9,7 +9,7 @@ skips epics. Set `JIRA_JQL` to use a different query.
 
 ## Run
 
-1. Copy `.env.example` to `.env`.
+1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
 3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with the
    **Copilot Requests** permission.
@@ -18,11 +18,11 @@ skips epics. Set `JIRA_JQL` to use a different query.
 5. From the `aiteam` directory, start the worker with:
 
    ```sh
-   docker compose --env-file aiworker/.env -f docker-compose.yml up --build -d
+   docker compose --env-file .env -f docker-compose.yml up --build -d
    ```
 
-The Compose file is in `aiteam/`, while its Docker build context and `.env` file
-are in `aiteam/aiworker/`.
+The Compose file and `.env` are in `aiteam/`; the Docker build context is
+`aiteam/aiworker/`.
 
 The target repository is mounted read/write. Copilot can run commands and modify
 files inside the container, and its non-interactive run automatically approves
