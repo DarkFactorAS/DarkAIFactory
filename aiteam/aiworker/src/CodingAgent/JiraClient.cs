@@ -28,7 +28,7 @@ internal sealed class JiraClient : IDisposable
             $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
             "&fields=summary,description&maxResults=20";
         using var response = await _httpClient.GetAsync(
-            $"/rest/api/3/search?{query}",
+            $"/rest/api/3/search/jql?{query}",
             cancellationToken);
         response.EnsureSuccessStatusCode();
 
