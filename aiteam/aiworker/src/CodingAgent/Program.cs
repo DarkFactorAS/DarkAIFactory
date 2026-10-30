@@ -27,7 +27,21 @@ try
 {
     while (!cancellation.IsCancellationRequested)
     {
-        var issues = await jira.FindWorkAsync(cancellation.Token);
+        IReadOnlyList<JiraIssue> issues;
+        try
+        {
+            issues = await jira.FindWorkAsync(cancellation.Token);
+        }
+        catch (Exception exception) when (
+            !cancellation.IsCancellationRequested &&
+            (exception is HttpRequestException || exception is OperationCanceledException))
+        {
+            Console.Error.WriteLine(
+                $"Jira polling failed: {exception.Message}. Retrying in {configuration.PollInterval.TotalSeconds:0} seconds.");
+            await Task.Delay(configuration.PollInterval, cancellation.Token);
+            continue;
+        }
+
         foreach (var issue in issues)
         {
             cancellation.Token.ThrowIfCancellationRequested();

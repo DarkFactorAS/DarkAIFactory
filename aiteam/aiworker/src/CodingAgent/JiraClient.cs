@@ -128,6 +128,21 @@ internal sealed class JiraClient : IDisposable
             return;
         }
 
+        if (type is "inlineCard" or "blockCard" or "embedCard")
+        {
+            if (element.TryGetProperty("attrs", out var attributes))
+            {
+                output.Append(ReadString(attributes, "url"));
+            }
+
+            if (type is "blockCard" or "embedCard")
+            {
+                output.Append('\n');
+            }
+
+            return;
+        }
+
         if (element.TryGetProperty("content", out var content))
         {
             if (type == "listItem")

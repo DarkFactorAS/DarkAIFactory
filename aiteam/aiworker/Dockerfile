@@ -8,7 +8,9 @@ RUN dotnet publish src/CodingAgent/CodingAgent.csproj --configuration Release --
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl git \
-    && curl --fail --silent --show-error --location https://gh.io/copilot-install | bash \
+    && curl --fail --silent --show-error --location https://gh.io/copilot-install --output /tmp/copilot-install \
+    && bash /tmp/copilot-install \
+    && rm /tmp/copilot-install \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish/ .

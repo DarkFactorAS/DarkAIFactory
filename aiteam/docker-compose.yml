@@ -2,6 +2,7 @@ services:
   coding-agent:
     build:
       context: ./aiworker
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     restart: unless-stopped
     init: true
     environment:
@@ -15,6 +16,7 @@ services:
       JIRA_FAILURE_LABEL: ${JIRA_FAILURE_LABEL:-ai-agent-failed}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
       GH_TOKEN: ${GH_TOKEN:-}
+      HOME: /tmp
       WORKSPACE_PATH: /workspace/repository
     volumes:
       - type: bind

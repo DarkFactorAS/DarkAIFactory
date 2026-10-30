@@ -13,9 +13,11 @@ skips epics. Set `JIRA_JQL` to use a different query.
 2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
 3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with the
    **Copilot Requests** permission.
-4. Set `TARGET_REPOSITORY_PATH` to the absolute host path of the code repository
+4. Set `HOST_UID` and `HOST_GID` to the host user and group IDs that own the
+   target checkout (get them with `id -u` and `id -g`).
+5. Set `TARGET_REPOSITORY_PATH` to the absolute host path of the code repository
    the agent should modify.
-5. From the `aiteam` directory, start the worker with:
+6. From the `aiteam` directory, start the worker with:
 
    ```sh
    docker compose --env-file .env -f docker-compose.yml up --build -d
@@ -24,7 +26,9 @@ skips epics. Set `JIRA_JQL` to use a different query.
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
 `aiteam/aiworker/`.
 
-The target repository is mounted read/write. Copilot can modify its files, but
+The target repository is mounted read/write, and the container runs with the
+configured host UID/GID so it can modify the checkout. Its home directory is
+`/tmp`. Copilot can modify repository files, but
 shell execution is disabled, so it cannot run tests or Git commands. Run
 validation and Git workflows separately. Use a dedicated repository checkout
 and a Jira service account with only the required project permissions.
@@ -54,6 +58,8 @@ The **build aiworker** task is also available from **Terminal > Run Build Task**
 | `JIRA_EMAIL` | required | Jira account email |
 | `JIRA_API_TOKEN` | required | Jira API token |
 | `GH_TOKEN` | required | GitHub token with Copilot Requests permission |
+| `HOST_UID` | `1000` | Host user ID used to access the target checkout |
+| `HOST_GID` | `1000` | Host group ID used to access the target checkout |
 | `TARGET_REPOSITORY_PATH` | required | Host path to the code repository |
 | `JIRA_PROJECT_KEY` | `DFAI` | Project used by the default JQL |
 | `JIRA_STATUS_NAME` | `Selected for Development` | Status used by the default JQL |
