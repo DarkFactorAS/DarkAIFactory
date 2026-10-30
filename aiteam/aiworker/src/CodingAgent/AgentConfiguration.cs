@@ -32,7 +32,6 @@ internal sealed record AgentConfiguration(
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
             $"AND status = \"{EscapeJql(jiraStatusName)}\" " +
             $"AND issuetype != Epic " +
-            $"AND (labels is EMPTY OR labels not in (\"{EscapeJql(pickupLabel)}\")) " +
             "ORDER BY priority DESC, created ASC";
 
         var githubToken = Environment.GetEnvironmentVariable("GH_TOKEN");
@@ -58,7 +57,7 @@ internal sealed record AgentConfiguration(
             Required("JIRA_EMAIL"),
             Required("JIRA_API_TOKEN"),
             githubToken,
-            Get("JIRA_JQL", defaultJql),
+            AddPickupLabelExclusion(Get("JIRA_JQL", defaultJql), pickupLabel),
             pickupLabel,
             failureLabel,
             Path.GetFullPath(Get("WORKSPACE_PATH", "/workspace/repository")),
@@ -81,6 +80,68 @@ internal sealed record AgentConfiguration(
     private static string EscapeJql(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
+
+    private static string AddPickupLabelExclusion(string jql, string pickupLabel)
+    {
+        var orderByIndex = FindOrderByIndex(jql);
+        var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
+        var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
+
+        return $"{filter} AND (labels is EMPTY OR labels not in (\"{EscapeJql(pickupLabel)}\")){orderBy}";
+    }
+
+    private static int FindOrderByIndex(string jql)
+    {
+        var inString = false;
+        for (var index = 0; index < jql.Length; index++)
+        {
+            if (inString)
+            {
+                if (jql[index] == '\\')
+                {
+                    index++;
+                }
+                else if (jql[index] == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            if (jql[index] == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (index > 0 && !char.IsWhiteSpace(jql[index - 1]))
+            {
+                continue;
+            }
+
+            if (string.Compare(jql, index, "ORDER", 0, 5, StringComparison.OrdinalIgnoreCase) != 0 ||
+                index + 5 >= jql.Length ||
+                !char.IsWhiteSpace(jql[index + 5]))
+            {
+                continue;
+            }
+
+            var byIndex = index + 5;
+            while (byIndex < jql.Length && char.IsWhiteSpace(jql[byIndex]))
+            {
+                byIndex++;
+            }
+
+            if (string.Compare(jql, byIndex, "BY", 0, 2, StringComparison.OrdinalIgnoreCase) == 0 &&
+                (byIndex + 2 == jql.Length || char.IsWhiteSpace(jql[byIndex + 2])))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
 
     private static void ValidateLabel(string label, string variableName)
     {
