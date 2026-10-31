@@ -7,7 +7,7 @@ public sealed class AgentSettings : AppSettings
     public string JiraBaseUrl { get; set; } = string.Empty;
     public string JiraEmail { get; set; } = string.Empty;
     public string JiraApiToken { get; set; } = string.Empty;
-    public string GitHubToken { get; set; } = string.Empty;
+    public string AgentGitHubToken { get; set; } = string.Empty;
     public string GitHubRepositoryToken { get; set; } = string.Empty;
     public string TargetRepositoryUrl { get; set; } = string.Empty;
     public string JiraProjectKey { get; set; } = "DFAI";

@@ -4,7 +4,7 @@ internal sealed record AgentConfiguration(
     Uri JiraBaseUrl,
     string JiraEmail,
     string JiraApiToken,
-    string GitHubToken,
+    string AgentGitHubToken,
     string GitHubRepositoryToken,
     Uri RepositoryUrl,
     string JiraJql,
@@ -50,7 +50,7 @@ internal sealed record AgentConfiguration(
             $"AND issuetype != Epic " +
             "ORDER BY priority DESC, created ASC";
 
-        var githubToken = Required(settings.GitHubToken, nameof(settings.GitHubToken));
+        var agentGitHubToken = Required(settings.AgentGitHubToken, nameof(settings.AgentGitHubToken));
         var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {
@@ -61,7 +61,7 @@ internal sealed record AgentConfiguration(
             jiraUri,
             Required(settings.JiraEmail, nameof(settings.JiraEmail)),
             Required(settings.JiraApiToken, nameof(settings.JiraApiToken)),
-            githubToken,
+            agentGitHubToken,
             Required(settings.GitHubRepositoryToken, nameof(settings.GitHubRepositoryToken)),
             repositoryUri,
             AddPickupLabelExclusion(Get(settings.JiraJql, defaultJql), pickupLabel),

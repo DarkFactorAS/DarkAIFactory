@@ -96,7 +96,7 @@ internal sealed class CopilotRunner
         };
         startInfo.Environment["NO_COLOR"] = "1";
         startInfo.Environment["TERM"] = "dumb";
-        startInfo.Environment["GH_TOKEN"] = _configuration.GitHubToken;
+        startInfo.Environment["GH_TOKEN"] = _configuration.AgentGitHubToken;
         startInfo.Environment.Remove("GITHUB_TOKEN");
         foreach (var name in startInfo.Environment.Keys.Where(name =>
                      name.StartsWith("JIRA_", StringComparison.OrdinalIgnoreCase) ||

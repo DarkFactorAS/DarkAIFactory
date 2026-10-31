@@ -25,7 +25,7 @@ public sealed class AppConfigurationTests
                   "JiraBaseUrl": "https://example.atlassian.net",
                   "JiraEmail": "bot@example.com",
                   "JiraApiToken": "test-only",
-                  "GitHubToken": "test-only",
+                  "AgentGitHubToken": "test-only",
                   "GitHubRepositoryToken": "test-only",
                   "JiraAnalyzedLabel": "custom-analyzed",
                   "PollIntervalSeconds": 5,
@@ -43,7 +43,7 @@ public sealed class AppConfigurationTests
 
             Assert.Equal("custom-analyzed", configuration.AnalyzedLabel);
             Assert.Equal(TimeSpan.FromSeconds(5), configuration.PollInterval);
-            Assert.Equal("test-only", configuration.GitHubToken);
+            Assert.Equal("test-only", configuration.AgentGitHubToken);
             Assert.StartsWith("project = \"FIRST\"", configuration.JiraJql);
             Assert.Equal("localhost", settings.DatabaseConnection.Server);
         }

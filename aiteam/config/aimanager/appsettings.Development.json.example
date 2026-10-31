@@ -4,7 +4,7 @@
   "JiraBaseUrl": "https://your-company.atlassian.net",
   "JiraEmail": "your-jira-account@example.com",
   "JiraApiToken": "",
-  "GitHubToken": "",
+  "AgentGitHubToken": "",
   "GitHubRepositoryToken": "",
   "JiraStatusName": "Selected for Development",
   "JiraJql": "",

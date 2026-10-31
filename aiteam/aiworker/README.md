@@ -18,7 +18,7 @@ settings but does not require a database connection.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the selected appsettings JSON file, set `JiraBaseUrl`, `JiraEmail`, and `JiraApiToken`.
-3. Set `GitHubToken` to a fine-grained GitHub personal access token with only the
+3. Set `AgentGitHubToken` to a fine-grained GitHub personal access token with only the
    **Copilot Requests** permission.
 4. Set `GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
@@ -96,7 +96,7 @@ included in the Docker image.
 | `JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
 | `JiraEmail` | required | Jira account email |
 | `JiraApiToken` | required | Jira API token |
-| `GitHubToken` | required | Fine-grained token with Copilot Requests permission |
+| `AgentGitHubToken` | required | Fine-grained token with Copilot Requests permission |
 | `GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
 | `TargetRepositoryUrl` | required | HTTPS URL of the GitHub repository to clone |
 | `JiraProjectKey` | `DFAI` | Project used by the default JQL |

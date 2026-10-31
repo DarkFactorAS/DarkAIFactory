@@ -27,7 +27,7 @@ internal sealed class SettingsScope : IDisposable
     public SettingsScope WithValidDefaults() => Set("JiraBaseUrl", "https://example.atlassian.net")
         .Set("JiraEmail", "bot@example.com")
         .Set("JiraApiToken", "jira-token")
-        .Set("GitHubToken", "gh-token")
+        .Set("AgentGitHubToken", "gh-token")
         .Set("GitHubRepositoryToken", "repo-token");
 
     public SettingsScope Set(string name, string? value)

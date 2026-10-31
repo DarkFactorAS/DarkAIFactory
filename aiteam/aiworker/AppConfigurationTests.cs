@@ -25,7 +25,7 @@ public sealed class AppConfigurationTests
                   "JiraBaseUrl": "https://example.atlassian.net",
                   "JiraEmail": "bot@example.com",
                   "JiraApiToken": "test-only",
-                  "GitHubToken": "test-only",
+                  "AgentGitHubToken": "test-only",
                   "GitHubRepositoryToken": "test-only",
                   "TargetRepositoryUrl": "https://github.com/owner/repo",
                   "JiraPickupLabel": "custom-picked",
@@ -45,6 +45,7 @@ public sealed class AppConfigurationTests
             Assert.Equal(3306, helper.Settings.DatabaseConnection.Port);
             var settings = Assert.IsType<AgentSettings>(helper.Settings);
             var configuration = AgentConfiguration.Load(settings);
+            Assert.Equal("test-only", configuration.AgentGitHubToken);
             Assert.Equal("custom-picked", configuration.PickupLabel);
             Assert.Equal(TimeSpan.FromSeconds(5), configuration.PollInterval);
         }

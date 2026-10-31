@@ -35,7 +35,9 @@ app configuration but does not connect to the database or run migrations.
 aimanager and aibuildpage require a database and run their startup patchers.
 
 For each agent, also set `JiraBaseUrl`, `JiraEmail`, `JiraApiToken`,
-`GitHubToken` (Copilot Requests) and `GitHubRepositoryToken` (repository access).
+`AgentGitHubToken` (Copilot Requests) and `GitHubRepositoryToken` (repository access).
+Existing JSON files must rename `GitHubToken` to `AgentGitHubToken`, keeping
+the same value. `GitHubRepositoryToken` is unchanged.
 The manager's `JiraAnalyzedLabel` defaults to `ai-analyzed`.
 `PollIntervalSeconds` is a JSON integer, with minimum 5. Optional omitted settings
 use the defaults in the templates. Required empty credentials fail validation.
@@ -45,7 +47,7 @@ Do not copy agent credentials into aibuildpage, which does not use Jira/GitHub.
 `.env` now contains only deployment/build settings: MariaDB container credentials,
 volume/config paths, `DOTNET_ENVIRONMENT` and NuGet authentication. Move existing
 Jira/GitHub values into each agent's selected JSON file before removing them from
-`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `GitHubToken`; there is
+`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `AgentGitHubToken`; there is
 no runtime fallback to environment tokens. The runner supplies only this configured
 Copilot token to its child process; repository credentials stay with Git.
 

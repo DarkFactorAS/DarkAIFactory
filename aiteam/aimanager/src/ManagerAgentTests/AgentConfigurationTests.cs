@@ -20,7 +20,7 @@ public sealed class AgentConfigurationTests
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
-        Assert.Equal("gh-token", config.GitHubToken);
+        Assert.Equal("gh-token", config.AgentGitHubToken);
         Assert.Equal(
             "project = \"DFAI\" AND status = \"Selected for Development\" AND issuetype != Epic " +
             "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY priority DESC, created ASC",
@@ -41,20 +41,20 @@ public sealed class AgentConfigurationTests
     }
 
     [Fact]
-    public void Load_RequiresSomeGitHubToken()
+    public void Load_RequiresSomeAgentGitHubToken()
     {
-        using var env = new SettingsScope().WithValidDefaults().Set("GitHubToken", null);
+        using var env = new SettingsScope().WithValidDefaults().Set("AgentGitHubToken", null);
 
         Assert.Throws<InvalidOperationException>(Load);
     }
 
     [Fact]
-    public void Load_TrimsGitHubToken()
+    public void Load_TrimsAgentGitHubToken()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("GitHubToken", " fallback ");
+            .Set("AgentGitHubToken", " fallback ");
 
-        Assert.Equal("fallback", Load().GitHubToken);
+        Assert.Equal("fallback", Load().AgentGitHubToken);
     }
 
     [Theory]

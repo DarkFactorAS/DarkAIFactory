@@ -70,7 +70,7 @@ manager completion label in Jira.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the selected appsettings JSON file, set `JiraBaseUrl`, `JiraEmail`, and `JiraApiToken`.
-3. Set `GitHubToken` to a fine-grained token with **Copilot Requests** permission.
+3. Set `AgentGitHubToken` to a fine-grained token with **Copilot Requests** permission.
 4. Set `GitHubRepositoryToken` with **Contents: read** permission for all mapped
    repositories and their submodules. The manager needs no push or pull-request
    permissions. Use a separate read-only token from aiworker when running both.
@@ -122,7 +122,7 @@ from Jira tickets.
 | `JiraBaseUrl` | required | Shared HTTPS Jira instance |
 | `JiraEmail` | required | Jira account email |
 | `JiraApiToken` | required | Jira API token |
-| `GitHubToken` | required | Token with Copilot Requests permission |
+| `AgentGitHubToken` | required | Token with Copilot Requests permission |
 | `GitHubRepositoryToken` | required | Read-only access to all mapped repositories |
 | `JiraStatusName` | `Selected for Development` | Eligible ticket status |
 | `JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
