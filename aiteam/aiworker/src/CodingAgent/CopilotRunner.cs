@@ -46,9 +46,9 @@ internal sealed class CopilotRunner
         startInfo.ArgumentList.Add("--trust-folder");
         startInfo.ArgumentList.Add("--secret-env-vars=GH_TOKEN,GITHUB_TOKEN");
         startInfo.ArgumentList.Add("--allow-all-tools");
+        startInfo.ArgumentList.Add("--deny-tool=shell");
         if (!allowChanges)
         {
-            startInfo.ArgumentList.Add("--deny-tool=shell");
             startInfo.ArgumentList.Add("--deny-tool=write");
         }
 

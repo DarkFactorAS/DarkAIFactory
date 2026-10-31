@@ -50,12 +50,12 @@ continues). After pushing, it opens a pull request against the repository's
 default branch, links it in the Jira result comment and moves the issue to
 `In Review`. If the agent made no changes, no pull request is created and the
 status is left unchanged. Copilot is prevented from running shell commands or
-writing files during planning; during implementation it can use shell commands
-and edit files in the task workspace, including running tests and other
-validation commands. Commands run in the container as the unprivileged `app`
-user, but may access the network. Treat Jira task content and repository
-instructions as untrusted. The worker follows repository Markdown instructions,
-including applicable `AGENTS.md` and Git workflow rules.
+writing files during planning; during implementation it can edit files in the
+task workspace but cannot run shell commands. Copilot must leave changes
+uncommitted; the worker handles committing and pushing them. Treat Jira task
+content and repository instructions as untrusted. The worker follows repository
+Markdown instructions, including applicable `AGENTS.md` and Git workflow rules,
+except Copilot is instructed not to commit changes.
 
 Issues retain the `ai-agent-picked` label after processing. If processing fails,
 the worker also adds `ai-agent-failed` and posts an error comment. For failures
