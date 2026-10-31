@@ -36,7 +36,6 @@ internal sealed class CopilotRunner
     public async Task<string> RunAsync(
         string workspacePath,
         string prompt,
-        bool allowChanges,
         CancellationToken cancellationToken)
     {
         var startInfo = CreateStartInfo(workspacePath);
@@ -47,10 +46,7 @@ internal sealed class CopilotRunner
         startInfo.ArgumentList.Add("--secret-env-vars=GH_TOKEN,GITHUB_TOKEN");
         startInfo.ArgumentList.Add("--allow-all-tools");
         startInfo.ArgumentList.Add("--deny-tool=shell");
-        if (!allowChanges)
-        {
-            startInfo.ArgumentList.Add("--deny-tool=write");
-        }
+        startInfo.ArgumentList.Add("--deny-tool=write");
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start the Copilot CLI.");

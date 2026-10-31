@@ -109,30 +109,6 @@ public sealed class JiraClientTests
             () => client.TransitionToAsync("DFAI-3", "In Progress", CancellationToken.None));
     }
 
-    [Fact]
-    public async Task CreatePullRequestAsync_UsesDefaultBranchAndReturnsUrl()
-    {
-        var handler = new SequenceHandler(
-            (HttpStatusCode.OK, """{"default_branch":"main"}"""),
-            (HttpStatusCode.Created, """{"html_url":"https://github.com/owner/repo/pull/7"}"""));
-
-        var url = await GitHubRepository.CreatePullRequestAsync(
-            CreateConfiguration() with { RepositoryUrl = new Uri("https://github.com/owner/repo.git") },
-            "ai-agent/DFAI-3-x",
-            "DFAI-3",
-            "Do thing",
-            CancellationToken.None,
-            handler);
-
-        Assert.Equal("https://github.com/owner/repo/pull/7", url);
-        Assert.Equal("/repos/owner/repo", handler.Requests[0].Request.RequestUri!.AbsolutePath);
-        Assert.Equal("/repos/owner/repo/pulls", handler.Requests[1].Request.RequestUri!.AbsolutePath);
-        using var body = JsonDocument.Parse(handler.Requests[1].Body!);
-        Assert.Equal("ai-agent/DFAI-3-x", body.RootElement.GetProperty("head").GetString());
-        Assert.Equal("main", body.RootElement.GetProperty("base").GetString());
-        Assert.Equal("DFAI-3: Do thing", body.RootElement.GetProperty("title").GetString());
-    }
-
     private sealed class StubHandler(HttpStatusCode status, string responseBody = "{}") : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }

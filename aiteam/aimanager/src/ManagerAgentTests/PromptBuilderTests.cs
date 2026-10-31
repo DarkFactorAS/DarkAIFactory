@@ -17,15 +17,39 @@ public sealed class PromptBuilderTests
     }
 
     [Fact]
-    public void ImplementationPrompt_ContainsIssueAndPlan()
+    public void PlanPrompt_ForbidsImplementation()
     {
-        var prompt = PromptBuilder.BuildImplementationPrompt(Issue, "step one");
+        var prompt = PromptBuilder.BuildPlanPrompt(Issue);
 
-        Assert.Contains("Jira key: DFAI-1", prompt);
-        Assert.Contains("My description", prompt);
-        Assert.Contains("<plan>", prompt);
-        Assert.Contains("step one", prompt);
-        Assert.Contains("untrusted", prompt);
+        Assert.Contains("do not implement code", prompt);
+        Assert.Contains("edit files", prompt);
+        Assert.Contains("run commands or builds", prompt);
+        Assert.Contains("commit, push, or create pull requests", prompt);
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(24_000)]
+    [InlineData(24_001)]
+    [InlineData(50_000)]
+    public void BuildPlanComments_PreservesFullPlan(int length)
+    {
+        var plan = new string('a', length);
+        var comments = PromptBuilder.BuildPlanComments(plan);
+        var parts = comments.Select(comment => comment[(comment.IndexOf("\n\n", StringComparison.Ordinal) + 2)..]);
+
+        Assert.Equal(plan, string.Concat(parts));
+        Assert.All(comments, comment => Assert.True(comment.Length < 25_000));
+    }
+
+    [Fact]
+    public void BuildPlanComments_DoesNotSplitSurrogatePairs()
+    {
+        var plan = new string('a', 23_999) + "\U0001F600" + "end";
+        var comments = PromptBuilder.BuildPlanComments(plan);
+
+        Assert.EndsWith(new string('a', 23_999), comments[0]);
+        Assert.EndsWith("\U0001F600end", comments[1]);
     }
 
     [Fact]

@@ -23,7 +23,9 @@ public sealed class AiDatabasePatcherTests
         };
         if (successful)
         {
-            expectedCalls.AddRange(["patch:StartupDatabasePatcher:2", "successful"]);
+            expectedCalls.AddRange([
+                "patch:StartupDatabasePatcher:2", "successful",
+                "patch:StartupDatabasePatcher:3", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -35,6 +37,10 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("PRIMARY KEY (`id`)", dbPatcher.Sql[1]);
             Assert.Contains("`jira_project_key`", dbPatcher.Sql[1]);
             Assert.Contains("`target_repository_url`", dbPatcher.Sql[1]);
+            Assert.Contains("CREATE TABLE `manager_plans`", dbPatcher.Sql[2]);
+            Assert.Contains("`jira_key` VARCHAR(255) NOT NULL", dbPatcher.Sql[2]);
+            Assert.Contains("`plan` LONGTEXT NOT NULL", dbPatcher.Sql[2]);
+            Assert.Contains("UNIQUE KEY `uq_manager_plans_jira_key`", dbPatcher.Sql[2]);
         }
     }
 
@@ -47,7 +53,17 @@ public sealed class AiDatabasePatcherTests
         Assert.Equal(2, dbPatcher.Sql.Count);
     }
 
-    private sealed class StubDbPatcher(bool successful, bool failProjectPatch = false) : IDBPatcher
+    [Fact]
+    public void RunPatcher_ReportsPlanTablePatchFailure()
+    {
+        var dbPatcher = new StubDbPatcher(true, failPlanPatch: true);
+
+        Assert.False(new AiDatabasePatcher(dbPatcher).RunPatcher());
+        Assert.Equal(3, dbPatcher.Sql.Count);
+    }
+
+    private sealed class StubDbPatcher(
+        bool successful, bool failProjectPatch = false, bool failPlanPatch = false) : IDBPatcher
     {
         private bool _successful = successful;
         public List<string> Calls { get; } = [];
@@ -68,7 +84,7 @@ public sealed class AiDatabasePatcherTests
         {
             Calls.Add($"patch:{system}:{patchId}");
             Sql.Add(sql);
-            if (patchId == 2 && failProjectPatch)
+            if ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch))
             {
                 _successful = false;
             }

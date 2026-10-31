@@ -14,15 +14,15 @@ public sealed class AgentConfigurationTests
 
         var config = Load();
 
-        Assert.Equal("ai-agent-picked", config.PickupLabel);
-        Assert.Equal("ai-agent-failed", config.FailureLabel);
+        Assert.Equal("ai-manager-planned", config.PickupLabel);
+        Assert.Equal("ai-manager-failed", config.FailureLabel);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
         Assert.Equal("gh-token", config.GitHubToken);
         Assert.Equal(
             "project = \"DFAI\" AND status = \"Selected for Development\" AND issuetype != Epic " +
-            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY priority DESC, created ASC",
+            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY priority DESC, created ASC",
             config.JiraJql);
     }
 
@@ -152,7 +152,7 @@ public sealed class AgentConfigurationTests
             .Set("JIRA_JQL", "project = X order  by created DESC");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) order  by created DESC",
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) order  by created DESC",
             Load().JiraJql);
     }
 
@@ -162,7 +162,7 @@ public sealed class AgentConfigurationTests
         using var env = new EnvironmentScope().WithValidDefaults().Set("JIRA_JQL", "project = X");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
             Load().JiraJql);
     }
 
@@ -173,7 +173,7 @@ public sealed class AgentConfigurationTests
             .Set("JIRA_JQL", "summary ~ \"x ORDER BY y\"");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
+            "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
             Load().JiraJql);
     }
 
@@ -201,7 +201,7 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal(
             "project = \"DFAI\" AND (priority = High OR priority = Highest) " +
-            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY created",
+            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created",
             Load().JiraJql);
     }
 
@@ -231,7 +231,7 @@ public sealed class AgentConfigurationTests
         {
             var query = Uri.UnescapeDataString(request.RequestUri!.Query);
             Assert.Contains($"project = \"{projectKey}\"", query);
-            Assert.Contains("labels not in (\"ai-agent-picked\")", query);
+            Assert.Contains("labels not in (\"ai-manager-planned\")", query);
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"issues":[]}""")

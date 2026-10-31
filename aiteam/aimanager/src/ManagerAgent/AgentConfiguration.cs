@@ -43,8 +43,8 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException($"Manager project {project.Id}: jira_project_key must not be empty.");
         }
         var jiraStatusName = Get("JIRA_STATUS_NAME", "Selected for Development");
-        var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-agent-picked");
-        var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-agent-failed");
+        var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-manager-planned");
+        var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-manager-failed");
         ValidateLabel(pickupLabel, "JIRA_PICKUP_LABEL");
         ValidateLabel(failureLabel, "JIRA_FAILURE_LABEL");
 
