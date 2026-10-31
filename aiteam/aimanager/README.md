@@ -111,6 +111,9 @@ dotnet test aiteam/aimanager/src/ManagerAgentTests/ManagerAgent.Tests.csproj
 The **test aimanager** VS Code task runs the same command. The tests are not
 included in the Docker image.
 
+The `Manager-CI-DotNet` workflow builds the manager and runs these tests in
+Release configuration on pull requests and pushes to `main`.
+
 ## Configuration
 
 | Variable | Default | Description |
