@@ -9,14 +9,25 @@ settings. Environment Jira/GitHub variables are no longer read or used as overri
 aimanager's project keys and repository URLs remain in the database; aiworker
 uses JSON `JiraProjectKey` and `TargetRepositoryUrl`.
 
-For each app (`aiworker`, `aimanager`, `aibuildpage`), copy its
-`appsettings.Production.json.example` to the following files in the same folder:
+Each app (`aiworker`, `aimanager`, `aibuildpage`) has a template for every
+supported environment. Copy the selected `appsettings.<environment>.json.example`
+to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 
 - `appsettings.Production.json`: deployed database host `aiteam_database`.
 - `appsettings.Development.json`: local database host `localhost` and its
   published port (Compose does not publish MariaDB by default).
 - `appsettings.DevelopmentDocker.json`: database host `host.docker.internal`
   and the port of the database running on your host.
+
+For example, to configure aimanager for local development:
+
+```sh
+cp aiteam/config/aimanager/appsettings.Development.json.example \
+   aiteam/config/aimanager/appsettings.Development.json
+```
+
+Run this from the repository root, only if the destination does not already
+contain your configuration. The same naming convention applies to all three apps.
 
 Set the actual database name, username and password. Do not commit these runtime
 files; Git ignores them. The templates contain no credentials. aiworker loads
