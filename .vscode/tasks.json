@@ -16,6 +16,17 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "test aiworker",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/aiteam/aiworker/CodingAgent.Tests.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
     }
   ]
 }

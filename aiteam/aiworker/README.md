@@ -50,6 +50,19 @@ press F5. VS Code builds the worker first and loads `aiteam/.env`.
 
 The **build aiworker** task is also available from **Terminal > Run Build Task**.
 
+## Tests
+
+Unit tests (xunit) live in `CodingAgent.Tests.csproj` and the `*Tests.cs` files
+next to it. They cover configuration loading, the Jira client (with a stubbed
+HTTP handler) and prompt building. Run them with:
+
+```sh
+dotnet test aiteam/aiworker/CodingAgent.Tests.csproj
+```
+
+The **test aiworker** VS Code task runs the same command. The tests are not
+included in the Docker image.
+
 ## Configuration
 
 | Variable | Default | Description |
