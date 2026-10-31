@@ -53,6 +53,8 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
     });
 
 Console.WriteLine($"Manager agent planning Jira tasks every {pollInterval.TotalSeconds:0} seconds.");
+var loggedProjects = new HashSet<ManagerProject>();
+var loggedNoProjects = false;
 try
 {
     while (!cancellation.IsCancellationRequested)
@@ -60,9 +62,10 @@ try
         using var scope = host.Services.CreateScope();
         var projects = scope.ServiceProvider.GetRequiredService<ManagerProjectRepository>().GetProjects();
         var plans = scope.ServiceProvider.GetRequiredService<ManagerPlanRepository>();
-        if (projects.Count == 0)
+        if (projects.Count == 0 && !loggedNoProjects)
         {
             Console.WriteLine("No manager projects configured in manager_projects. Waiting for project mappings.");
+            loggedNoProjects = true;
         }
 
         foreach (var project in projects)
@@ -71,8 +74,11 @@ try
             var configuration = AgentConfiguration.Load(settings, project);
             using var jira = new JiraClient(configuration);
             var copilot = new CopilotRunner(configuration);
-            Console.WriteLine(
-                $"Polling manager project {project.Id}: {project.JiraProjectKey}. Repository: {configuration.RepositoryUrl}");
+            if (loggedProjects.Add(project))
+            {
+                Console.WriteLine(
+                    $"Polling manager project {project.Id}: {project.JiraProjectKey}. Repository: {configuration.RepositoryUrl}");
+            }
             IReadOnlyList<JiraIssue> issues;
             try
             {

@@ -40,6 +40,9 @@ Mappings reload in ID order every polling cycle. Each Jira project maps to one
 HTTPS GitHub repository; multiple projects may share a repository. Empty mappings
 are logged and the manager waits. Invalid mappings or database read failures
 stop the manager. A Jira polling failure does not prevent polling other projects.
+Polling logs announce each distinct project mapping only once per process,
+including newly added or changed mappings. The empty-project waiting message
+is also printed only once. Polling continues every cycle and errors are still reported.
 The manager reads project keys and repository URLs only from `manager_projects`;
 aiworker uses those options as JSON `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
 
