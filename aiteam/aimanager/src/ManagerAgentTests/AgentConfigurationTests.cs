@@ -3,12 +3,16 @@ namespace ManagerAgent.Tests;
 [Collection("Environment")]
 public sealed class AgentConfigurationTests
 {
+    private static readonly ManagerProject DefaultProject = new(1, "DFAI", "https://github.com/owner/repo");
+
+    private static AgentConfiguration Load() => AgentConfiguration.Load(DefaultProject);
+
     [Fact]
     public void Load_AppliesDefaults()
     {
         using var env = new EnvironmentScope().WithValidDefaults();
 
-        var config = AgentConfiguration.Load();
+        var config = Load();
 
         Assert.Equal("ai-agent-picked", config.PickupLabel);
         Assert.Equal("ai-agent-failed", config.FailureLabel);
@@ -27,12 +31,11 @@ public sealed class AgentConfigurationTests
     [InlineData("JIRA_EMAIL")]
     [InlineData("JIRA_API_TOKEN")]
     [InlineData("GITHUB_REPOSITORY_TOKEN")]
-    [InlineData("TARGET_REPOSITORY_URL")]
     public void Load_RequiresVariable(string name)
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set(name, null);
 
-        var exception = Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        var exception = Assert.Throws<InvalidOperationException>(Load);
         Assert.Contains(name, exception.Message);
     }
 
@@ -41,7 +44,7 @@ public sealed class AgentConfigurationTests
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set("GH_TOKEN", null);
 
-        Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        Assert.Throws<InvalidOperationException>(Load);
     }
 
     [Fact]
@@ -50,7 +53,7 @@ public sealed class AgentConfigurationTests
         using var env = new EnvironmentScope().WithValidDefaults()
             .Set("GH_TOKEN", null).Set("GITHUB_TOKEN", " fallback ");
 
-        Assert.Equal("fallback", AgentConfiguration.Load().GitHubToken);
+        Assert.Equal("fallback", Load().GitHubToken);
     }
 
     [Theory]
@@ -61,7 +64,7 @@ public sealed class AgentConfigurationTests
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set("JIRA_BASE_URL", url);
 
-        Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        Assert.Throws<InvalidOperationException>(Load);
     }
 
     [Theory]
@@ -74,9 +77,10 @@ public sealed class AgentConfigurationTests
     [InlineData("https://github.com/owner/repo/extra")]
     public void Load_RejectsInvalidRepositoryUrl(string url)
     {
-        using var env = new EnvironmentScope().WithValidDefaults().Set("TARGET_REPOSITORY_URL", url);
+        using var env = new EnvironmentScope().WithValidDefaults();
 
-        Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        Assert.Throws<InvalidOperationException>(() =>
+            AgentConfiguration.Load(DefaultProject with { TargetRepositoryUrl = url }));
     }
 
     [Fact]
@@ -85,7 +89,7 @@ public sealed class AgentConfigurationTests
         using var env = new EnvironmentScope().WithValidDefaults()
             .Set("JIRA_IN_PROGRESS_STATUS", "Doing").Set("JIRA_IN_REVIEW_STATUS", "Code Review");
 
-        var config = AgentConfiguration.Load();
+        var config = Load();
 
         Assert.Equal("Doing", config.InProgressStatus);
         Assert.Equal("Code Review", config.InReviewStatus);
@@ -94,10 +98,10 @@ public sealed class AgentConfigurationTests
     [Fact]
     public void Load_AcceptsRepositoryUrlWithGitSuffix()
     {
-        using var env = new EnvironmentScope().WithValidDefaults()
-            .Set("TARGET_REPOSITORY_URL", "https://github.com/owner/repo.git");
+        using var env = new EnvironmentScope().WithValidDefaults();
 
-        Assert.Equal("github.com", AgentConfiguration.Load().RepositoryUrl.Host);
+        Assert.Equal("github.com", AgentConfiguration.Load(
+            DefaultProject with { TargetRepositoryUrl = "https://github.com/owner/repo.git" }).RepositoryUrl.Host);
     }
 
     [Theory]
@@ -108,7 +112,7 @@ public sealed class AgentConfigurationTests
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set("POLL_INTERVAL_SECONDS", value);
 
-        Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        Assert.Throws<InvalidOperationException>(Load);
     }
 
     [Fact]
@@ -116,7 +120,7 @@ public sealed class AgentConfigurationTests
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set("POLL_INTERVAL_SECONDS", "5");
 
-        Assert.Equal(TimeSpan.FromSeconds(5), AgentConfiguration.Load().PollInterval);
+        Assert.Equal(TimeSpan.FromSeconds(5), Load().PollInterval);
     }
 
     [Theory]
@@ -126,16 +130,16 @@ public sealed class AgentConfigurationTests
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set(name, "two words");
 
-        Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+        Assert.Throws<InvalidOperationException>(Load);
     }
 
     [Fact]
     public void Load_EscapesDefaultJqlValues()
     {
         using var env = new EnvironmentScope().WithValidDefaults()
-            .Set("JIRA_PROJECT_KEY", "A\"B").Set("JIRA_STATUS_NAME", "C\\D");
+            .Set("JIRA_STATUS_NAME", "C\\D");
 
-        var jql = AgentConfiguration.Load().JiraJql;
+        var jql = AgentConfiguration.Load(DefaultProject with { JiraProjectKey = "A\"B" }).JiraJql;
 
         Assert.Contains("project = \"A\\\"B\"", jql);
         Assert.Contains("status = \"C\\\\D\"", jql);
@@ -148,8 +152,8 @@ public sealed class AgentConfigurationTests
             .Set("JIRA_JQL", "project = X order  by created DESC");
 
         Assert.Equal(
-            "project = X AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) order  by created DESC",
-            AgentConfiguration.Load().JiraJql);
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) order  by created DESC",
+            Load().JiraJql);
     }
 
     [Fact]
@@ -158,8 +162,8 @@ public sealed class AgentConfigurationTests
         using var env = new EnvironmentScope().WithValidDefaults().Set("JIRA_JQL", "project = X");
 
         Assert.Equal(
-            "project = X AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
-            AgentConfiguration.Load().JiraJql);
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
+            Load().JiraJql);
     }
 
     [Fact]
@@ -169,7 +173,81 @@ public sealed class AgentConfigurationTests
             .Set("JIRA_JQL", "summary ~ \"x ORDER BY y\"");
 
         Assert.Equal(
-            "summary ~ \"x ORDER BY y\" AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
-            AgentConfiguration.Load().JiraJql);
+            "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
+            Load().JiraJql);
+    }
+
+    [Fact]
+    public void Load_UsesDatabaseMappingsInsteadOfEnvironment()
+    {
+        using var env = new EnvironmentScope().WithValidDefaults()
+            .Set("JIRA_PROJECT_KEY", "IGNORED")
+            .Set("TARGET_REPOSITORY_URL", null);
+
+        var first = AgentConfiguration.Load(new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
+        var second = AgentConfiguration.Load(new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
+
+        Assert.Equal("https://github.com/owner/first", first.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"FIRST\" AND ", first.JiraJql);
+        Assert.Equal("https://github.com/owner/second", second.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"SECOND\" AND ", second.JiraJql);
+    }
+
+    [Fact]
+    public void Load_ScopesOrQueryToMappedProject()
+    {
+        using var env = new EnvironmentScope().WithValidDefaults()
+            .Set("JIRA_JQL", "priority = High OR priority = Highest ORDER BY created");
+
+        Assert.Equal(
+            "project = \"DFAI\" AND (priority = High OR priority = Highest) " +
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY created",
+            Load().JiraJql);
+    }
+
+    [Fact]
+    public async Task MappedProjects_SendDistinctProjectQueriesToJira()
+    {
+        using var env = new EnvironmentScope().WithValidDefaults();
+        var projects = new[]
+        {
+            new ManagerProject(1, "FIRST", "https://github.com/owner/first"),
+            new ManagerProject(2, "SECOND", "https://github.com/owner/second")
+        };
+
+        foreach (var project in projects)
+        {
+            var configuration = AgentConfiguration.Load(project);
+            using var client = new JiraClient(configuration, new ProjectQueryHandler(project.JiraProjectKey));
+
+            Assert.Empty(await client.FindWorkAsync(CancellationToken.None));
+        }
+    }
+
+    private sealed class ProjectQueryHandler(string projectKey) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var query = Uri.UnescapeDataString(request.RequestUri!.Query);
+            Assert.Contains($"project = \"{projectKey}\"", query);
+            Assert.Contains("labels not in (\"ai-agent-picked\")", query);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"issues":[]}""")
+            });
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void Load_RejectsEmptyProjectKey(string key)
+    {
+        using var env = new EnvironmentScope().WithValidDefaults();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            AgentConfiguration.Load(DefaultProject with { JiraProjectKey = key }));
+        Assert.Contains("Manager project 1", exception.Message);
     }
 }

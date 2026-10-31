@@ -14,7 +14,7 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
-    public static AgentConfiguration Load()
+    public static AgentConfiguration Load(ManagerProject project)
     {
         var jiraBaseUrl = Required("JIRA_BASE_URL");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -24,7 +24,7 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("JIRA_BASE_URL must be an https URL without embedded credentials.");
         }
 
-        var repositoryUrl = Required("TARGET_REPOSITORY_URL");
+        var repositoryUrl = project.TargetRepositoryUrl.Trim();
         if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
             repositoryUri.Scheme != Uri.UriSchemeHttps ||
             !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
@@ -34,10 +34,14 @@ internal sealed record AgentConfiguration(
             repositoryUri.AbsolutePath.Trim('/').Split('/').Length != 2)
         {
             throw new InvalidOperationException(
-                "TARGET_REPOSITORY_URL must be an https GitHub repository URL in the form https://github.com/owner/repository.");
+                $"Manager project {project.Id}: target_repository_url must be an https GitHub repository URL in the form https://github.com/owner/repository.");
         }
 
-        var jiraProjectKey = Get("JIRA_PROJECT_KEY", "DFAI");
+        var jiraProjectKey = project.JiraProjectKey.Trim();
+        if (jiraProjectKey.Length == 0)
+        {
+            throw new InvalidOperationException($"Manager project {project.Id}: jira_project_key must not be empty.");
+        }
         var jiraStatusName = Get("JIRA_STATUS_NAME", "Selected for Development");
         var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-agent-picked");
         var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-agent-failed");
@@ -60,13 +64,10 @@ internal sealed record AgentConfiguration(
             githubToken = githubToken.Trim();
         }
 
-        var pollSeconds = int.TryParse(Get("POLL_INTERVAL_SECONDS", "30"), out var parsedSeconds)
-            ? parsedSeconds
-            : throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be an integer.");
-        if (pollSeconds < 5)
-        {
-            throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be at least 5 seconds.");
-        }
+        var jqlOverride = Environment.GetEnvironmentVariable("JIRA_JQL");
+        var jql = string.IsNullOrWhiteSpace(jqlOverride)
+            ? defaultJql
+            : ScopeToProject(jqlOverride.Trim(), jiraProjectKey);
 
         return new AgentConfiguration(
             jiraUri,
@@ -75,12 +76,33 @@ internal sealed record AgentConfiguration(
             githubToken,
             Required("GITHUB_REPOSITORY_TOKEN"),
             repositoryUri,
-            AddPickupLabelExclusion(Get("JIRA_JQL", defaultJql), pickupLabel),
+            AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,
             failureLabel,
             Get("JIRA_IN_PROGRESS_STATUS", "In Progress"),
             Get("JIRA_IN_REVIEW_STATUS", "In Review"),
-            TimeSpan.FromSeconds(pollSeconds));
+            LoadPollInterval());
+    }
+
+    public static TimeSpan LoadPollInterval()
+    {
+        var pollSeconds = int.TryParse(Get("POLL_INTERVAL_SECONDS", "30"), out var parsedSeconds)
+            ? parsedSeconds
+            : throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be an integer.");
+        if (pollSeconds < 5)
+        {
+            throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be at least 5 seconds.");
+        }
+
+        return TimeSpan.FromSeconds(pollSeconds);
+    }
+
+    private static string ScopeToProject(string jql, string projectKey)
+    {
+        var orderByIndex = FindOrderByIndex(jql);
+        var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
+        var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
+        return $"project = \"{EscapeJql(projectKey)}\" AND ({filter}){orderBy}";
     }
 
     private static string Required(string name)

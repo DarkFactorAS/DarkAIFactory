@@ -6,15 +6,45 @@ GitHub Copilot CLI to prepare an implementation plan, posts the plan to Jira,
 then implements the task and pushes the changes to a new GitHub branch before
 posting the result.
 
-By default, it watches project `DFAI` in status `Selected for Development` and
-skips epics. Set `JIRA_JQL` to use a different query.
+It reads Jira project keys and target repository URLs from `manager_projects`
+in the database. For each project it watches status `Selected for Development`
+and skips epics by default. Credentials and status/label settings are shared
+across all projects on the configured Jira instance.
+
+## Project mappings
+
+Startup creates `manager_projects` with an auto-incrementing `BIGINT` primary
+key `id`, a unique `jira_project_key` and a `target_repository_url`.
+Populate it after the first startup, for example:
+
+```sql
+INSERT INTO manager_projects (jira_project_key, target_repository_url)
+VALUES
+    ('DFAI', 'https://github.com/owner/first-repository.git'),
+    ('BOTS', 'https://github.com/owner/second-repository.git');
+```
+
+Each Jira project maps to one HTTPS GitHub repository; multiple projects may
+map to the same repository. The manager reloads mappings in ID order every
+polling cycle and processes each project's tasks using its mapped repository
+for cloning, pushing and pull requests. Changes take effect on the next cycle
+without restarting. An empty table is logged and the manager waits for mappings;
+there is no fallback to `JIRA_PROJECT_KEY` or `TARGET_REPOSITORY_URL`.
+Invalid mappings or database read failures stop the manager rather than silently
+processing tasks against another repository. A Jira polling failure is logged
+and does not prevent the remaining projects from being polled in that cycle.
+
+`JIRA_JQL` can override the task filter and ordering, but the manager always
+adds the mapped project constraint and pickup-label exclusion. Use a filter
+without a fixed project (for example `status = "Ready" ORDER BY created ASC`)
+to apply it across all mapped projects.
 
 ## Database patcher
 
 Before checking Copilot availability or polling Jira, the manager waits for the
 database connection and runs `AiDatabasePatcher`, derived from
 `DarkFactor.Common.Lib`'s `StartupDatabasePatcher`, just like aibuildpage.
-It currently applies only the base patches. Patching failure is logged and
+It applies the base patches and the project-mapping table migration. Patching failure is logged and
 stops the manager with exit code 1.
 
 Copy `aiteam/config/aimanager/appsettings.Production.json.example` to
@@ -44,10 +74,11 @@ docker build -f aiteam/aimanager/Dockerfile \
    **Copilot Requests** permission.
 4. Set `GITHUB_REPOSITORY_TOKEN` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
-   permissions for the target repository. The worker uses this token only to
+   permissions for every mapped repository. The worker uses this token only to
    clone, push its branch and open the pull request.
-5. Set `TARGET_REPOSITORY_URL` to an HTTPS GitHub repository URL, such as
-   `https://github.com/owner/repository.git`.
+5. Configure the database as described above and populate `manager_projects`
+   after the manager's first startup. `TARGET_REPOSITORY_URL` and `JIRA_PROJECT_KEY`
+   in the shared `.env` are only used by aiworker, not aimanager.
 6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
    `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
 7. The MariaDB data volume is external, so Compose does not create it. Create
@@ -91,7 +122,8 @@ the pickup label and rerunning the implementation.
 ## Run from Visual Studio Code
 
 Open the repository root in VS Code, copy `aiteam/.env.example` to
-`aiteam/.env`, and set the Jira and GitHub credentials and repository URL there.
+`aiteam/.env`, and set the Jira and GitHub credentials there. Configure
+repository URLs and Jira project keys in `manager_projects`.
 Install the C# extension, then select **AI Worker (.NET)** in Run and Debug and
 press F5. VS Code builds the worker first and loads `aiteam/.env`.
 
@@ -122,11 +154,9 @@ Release configuration on pull requests and pushes to `main`.
 | `JIRA_EMAIL` | required | Jira account email |
 | `JIRA_API_TOKEN` | required | Jira API token |
 | `GH_TOKEN` | required | Fine-grained token with Copilot Requests permission |
-| `GITHUB_REPOSITORY_TOKEN` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
-| `TARGET_REPOSITORY_URL` | required | HTTPS URL of the GitHub repository to clone |
-| `JIRA_PROJECT_KEY` | `DFAI` | Project used by the default JQL |
+| `GITHUB_REPOSITORY_TOKEN` | required | Fine-grained token with Contents and Pull requests read/write access to all mapped repositories |
 | `JIRA_STATUS_NAME` | `Selected for Development` | Status used by the default JQL |
-| `JIRA_JQL` | generated from project/status | Optional complete JQL override |
+| `JIRA_JQL` | generated from project/status | Optional task filter/ordering override, always constrained to each mapped project |
 | `JIRA_PICKUP_LABEL` | `ai-agent-picked` | Label used to avoid repeat pickup |
 | `JIRA_FAILURE_LABEL` | `ai-agent-failed` | Label added when processing fails |
 | `JIRA_IN_PROGRESS_STATUS` | `In Progress` | Status the issue is moved to when work starts |
