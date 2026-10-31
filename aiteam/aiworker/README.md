@@ -43,8 +43,12 @@ the pushed branch separately. The worker follows repository Markdown
 instructions, including applicable `AGENTS.md` and Git workflow rules.
 
 Issues retain the `ai-agent-picked` label after processing. If processing fails,
-the worker also adds `ai-agent-failed` and posts an error comment. Remove the
-pickup label after resolving the failure to let the issue be retried.
+the worker also adds `ai-agent-failed` and posts an error comment. For failures
+before a branch is pushed, the worker attempts to restore the issue's original
+status; after resolving the failure, remove the pickup label to retry. Verify
+the status manually if restoration fails. If a branch was already pushed, follow
+the stage-specific recovery instructions in the Jira comment instead of removing
+the pickup label and rerunning the implementation.
 
 ## Run from Visual Studio Code
 

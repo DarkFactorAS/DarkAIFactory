@@ -10,7 +10,7 @@ internal sealed class EnvironmentScope : IDisposable
         "JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_API_TOKEN", "GH_TOKEN", "GITHUB_TOKEN",
         "GITHUB_REPOSITORY_TOKEN", "TARGET_REPOSITORY_URL", "JIRA_PROJECT_KEY",
         "JIRA_STATUS_NAME", "JIRA_JQL", "JIRA_PICKUP_LABEL", "JIRA_FAILURE_LABEL",
-        "POLL_INTERVAL_SECONDS"
+        "JIRA_IN_PROGRESS_STATUS", "JIRA_IN_REVIEW_STATUS", "POLL_INTERVAL_SECONDS"
     ];
 
     private readonly Dictionary<string, string?> _original = new();

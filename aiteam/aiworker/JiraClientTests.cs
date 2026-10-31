@@ -80,6 +80,25 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task TransitionToAsync_PrefersDestinationOverMatchingName()
+    {
+        const string transitions = """
+            {"transitions":[
+              {"id":"wrong","name":"In Progress","to":{"name":"Other"}},
+              {"id":"right","name":"Start work","to":{"name":"In Progress"}}]}
+            """;
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, transitions),
+            (HttpStatusCode.NoContent, "{}"));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.TransitionToAsync("DFAI-3", "In Progress", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.Requests[1].Body!);
+        Assert.Equal("right", body.RootElement.GetProperty("transition").GetProperty("id").GetString());
+    }
+
+    [Fact]
     public async Task TransitionToAsync_ThrowsOnHttpFailure()
     {
         using var client = new JiraClient(
@@ -137,7 +156,7 @@ public sealed class JiraClientTests
     public async Task FindWorkAsync_ParsesAdfDescription()
     {
         const string json = """
-        {"issues":[{"key":"DFAI-1","fields":{"summary":"Title","description":{"type":"doc","content":[
+        {"issues":[{"key":"DFAI-1","fields":{"summary":"Title","status":{"name":"Selected for Development"},"description":{"type":"doc","content":[
           {"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}]},
@@ -152,6 +171,8 @@ public sealed class JiraClientTests
         var issue = Assert.Single(issues);
         Assert.Equal("DFAI-1", issue.Key);
         Assert.Equal("Title", issue.Summary);
+        Assert.Equal("Selected for Development", issue.StatusName);
+        Assert.Contains("fields=summary,description,status", handler.Request!.RequestUri!.Query);
         var lines = issue.Description.Split(Environment.NewLine);
         Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x" }, lines);
     }
