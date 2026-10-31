@@ -117,7 +117,11 @@ try
                         plans.MarkPostedToJira(issue.Key);
                     }
 
-                    await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
+                    await jira.AddLabelAsync(issue.Key, "ai-analyzed", cancellation.Token);
+                    if (!string.Equals(configuration.PickupLabel, "ai-analyzed", StringComparison.Ordinal))
+                    {
+                        await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
+                    }
                     Console.WriteLine($"Plan for {issue.Key} stored in Jira and manager_plans.");
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

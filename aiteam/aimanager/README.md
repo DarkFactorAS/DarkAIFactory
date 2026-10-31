@@ -47,7 +47,8 @@ those settings remain available to aiworker.
 For each eligible ticket, the manager creates a temporary repository checkout,
 generates a plan without changing files and removes the checkout. It saves the
 plan in `manager_plans` **before** posting to Jira, marks it as posted after all
-comments succeed, then adds `ai-manager-planned`. Long plans are split into
+comments succeed, then adds `ai-analyzed` and the configured completion label
+(`ai-manager-planned` by default). Long plans are split into
 numbered Jira comments without truncation.
 
 A saved plan is reused on retries, so a Jira or label failure does not trigger
@@ -55,7 +56,8 @@ another agent run. If posting fails partway through a multi-comment plan, retry
 may duplicate comments already posted. Database and Jira writes are not a
 single transaction. Failures are logged and reported to Jira with
 `ai-manager-failed`; incomplete tickets are retried next cycle. Plans already
-posted to Jira are not posted again when only the completion label needs retrying.
+posted to Jira are not posted again when only the analysis or completion label
+needs retrying. `ai-analyzed` is always added, even with a custom completion label.
 
 Manager labels are distinct from aiworker's pickup labels, leaving planned
 tickets available for implementation. Ticket statuses remain unchanged.

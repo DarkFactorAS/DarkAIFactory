@@ -2,8 +2,8 @@
 
 This Dockerized worker polls Jira for eligible tasks, clones the configured
 GitHub repository and its submodules into a private temporary workspace, asks
-GitHub Copilot CLI to prepare an implementation plan, posts the plan to Jira,
-then implements the task and pushes the changes to a new GitHub branch before
+GitHub Copilot CLI to prepare an internal implementation plan without posting it
+to Jira, then implements the task and pushes the changes to a new GitHub branch before
 posting the result.
 
 By default, it watches project `DFAI` in status `Selected for Development` and
