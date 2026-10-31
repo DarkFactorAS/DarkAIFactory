@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
 var pollInterval = AgentConfiguration.LoadPollInterval();
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)

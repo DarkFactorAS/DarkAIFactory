@@ -1,7 +1,20 @@
 using CodingAgent;
+using DFCommonLib.Config;
+using DFCommonLib.Logger;
+using DFCommonLib.Utils;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
 var configuration = AgentConfiguration.Load();
+
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
+new DFServices(builder.Services).SetupLogger().LogToConsole(DFLogLevel.INFO);
+using var host = builder.Build();
+var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings;
+DFLogger.LogOutput(DFLogLevel.INFO, "Startup", $"Starting {appSettings.AppName}");
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>

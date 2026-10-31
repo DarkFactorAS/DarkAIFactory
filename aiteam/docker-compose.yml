@@ -3,10 +3,16 @@ services:
     build:
       context: ..
       dockerfile: aiteam/aiworker/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    volumes:
+      - ${AIWORKER_CONFIG_PATH:-./config/aiworker}:/app/Config:ro
     restart: unless-stopped
     init: true
     environment:
       JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
       JIRA_EMAIL: ${JIRA_EMAIL:-}
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
       JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-DFAI}
@@ -42,6 +48,7 @@ services:
     init: true
     environment:
       JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
       JIRA_EMAIL: ${JIRA_EMAIL:-}
       JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
       JIRA_STATUS_NAME: ${JIRA_STATUS_NAME:-Selected for Development}

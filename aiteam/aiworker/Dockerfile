@@ -1,7 +1,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY aiteam/aiworker/NuGet.config ./
 COPY aiteam/aiworker/src/CodingAgent/CodingAgent.csproj src/CodingAgent/
-RUN dotnet restore src/CodingAgent/CodingAgent.csproj
+RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
+    --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
+    dotnet restore src/CodingAgent/CodingAgent.csproj
 COPY aiteam/aiworker/src/CodingAgent/ src/CodingAgent/
 RUN dotnet publish src/CodingAgent/CodingAgent.csproj --configuration Release --no-restore --output /app/publish
 

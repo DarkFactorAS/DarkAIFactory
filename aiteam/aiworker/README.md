@@ -11,6 +11,11 @@ skips epics. Set `JIRA_JQL` to use a different query.
 
 ## Run
 
+First configure the app's environment-specific JSON file as described in
+[App configuration](../config/README.md). Jira/GitHub settings still use `.env`.
+Docker mounts `aiteam/config/aiworker` at `/app/Config`. The worker loads app
+settings but does not require a database connection.
+
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
 3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with only the

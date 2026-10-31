@@ -9,5 +9,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ManagerAgent.Tests" />
     <PackageReference Include="DarkFactor.Common.Lib" Version="1.6.6" />
+    <Content Include="../../../config/aimanager/appsettings.*.json" Link="Config/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,12 @@
+{
+  "AppName": "AiBuildPage",
+  "EnableLogging": true,
+  "DatabaseConnection": {
+    "Server": "aiteam_database",
+    "Port": 3306,
+    "Database": "aiteam",
+    "Username": "aiteam",
+    "Password": "",
+    "SslMode": "None"
+  }
+}
