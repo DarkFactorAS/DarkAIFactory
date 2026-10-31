@@ -99,13 +99,13 @@ The **build aimanager** task is also available from **Terminal > Run Build Task*
 
 ## Tests
 
-Unit tests (xunit) live in `ManagerAgent.Tests.csproj` and the `*Tests.cs` files
-next to it. They cover configuration loading, the Jira client (with a stubbed
+Unit tests (xunit) and their `ManagerAgent.Tests.csproj` project live in
+`src/ManagerAgentTests/`. They cover configuration loading, the Jira client (with a stubbed
 HTTP handler), prompt building and base database patching success/failure.
 Run them with:
 
 ```sh
-dotnet test aiteam/aimanager/ManagerAgent.Tests.csproj
+dotnet test aiteam/aimanager/src/ManagerAgentTests/ManagerAgent.Tests.csproj
 ```
 
 The **test aimanager** VS Code task runs the same command. The tests are not

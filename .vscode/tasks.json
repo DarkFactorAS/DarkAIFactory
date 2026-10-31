@@ -29,6 +29,17 @@
       "group": "test"
     },
     {
+      "label": "test aimanager",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/aiteam/aimanager/src/ManagerAgentTests/ManagerAgent.Tests.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
       "label": "build aibuildpage",
       "type": "process",
       "command": "dotnet",
