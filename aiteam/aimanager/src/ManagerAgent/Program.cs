@@ -117,8 +117,8 @@ try
                         plans.MarkPostedToJira(issue.Key);
                     }
 
-                    await jira.AddLabelAsync(issue.Key, "ai-analyzed", cancellation.Token);
-                    if (!string.Equals(configuration.PickupLabel, "ai-analyzed", StringComparison.Ordinal))
+                    await jira.AddLabelAsync(issue.Key, configuration.AnalyzedLabel, cancellation.Token);
+                    if (!string.Equals(configuration.PickupLabel, configuration.AnalyzedLabel, StringComparison.Ordinal))
                     {
                         await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
                     }

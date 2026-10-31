@@ -14,6 +14,8 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
+    public string AnalyzedLabel { get; init; } = "ai-analyzed";
+
     public static AgentConfiguration Load(ManagerProject project)
     {
         var jiraBaseUrl = Required("JIRA_BASE_URL");
@@ -45,8 +47,10 @@ internal sealed record AgentConfiguration(
         var jiraStatusName = Get("JIRA_STATUS_NAME", "Selected for Development");
         var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-manager-planned");
         var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-manager-failed");
+        var analyzedLabel = Get("JIRA_ANALYZED_LABEL", "ai-analyzed");
         ValidateLabel(pickupLabel, "JIRA_PICKUP_LABEL");
         ValidateLabel(failureLabel, "JIRA_FAILURE_LABEL");
+        ValidateLabel(analyzedLabel, "JIRA_ANALYZED_LABEL");
 
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
@@ -81,7 +85,10 @@ internal sealed record AgentConfiguration(
             failureLabel,
             Get("JIRA_IN_PROGRESS_STATUS", "In Progress"),
             Get("JIRA_IN_REVIEW_STATUS", "In Review"),
-            LoadPollInterval());
+            LoadPollInterval())
+        {
+            AnalyzedLabel = analyzedLabel
+        };
     }
 
     public static TimeSpan LoadPollInterval()

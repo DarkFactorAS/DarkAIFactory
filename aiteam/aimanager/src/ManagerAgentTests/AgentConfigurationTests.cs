@@ -16,6 +16,7 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal("ai-manager-planned", config.PickupLabel);
         Assert.Equal("ai-manager-failed", config.FailureLabel);
+        Assert.Equal("ai-analyzed", config.AnalyzedLabel);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
@@ -126,11 +127,21 @@ public sealed class AgentConfigurationTests
     [Theory]
     [InlineData("JIRA_PICKUP_LABEL")]
     [InlineData("JIRA_FAILURE_LABEL")]
+    [InlineData("JIRA_ANALYZED_LABEL")]
     public void Load_RejectsLabelsWithWhitespace(string name)
     {
         using var env = new EnvironmentScope().WithValidDefaults().Set(name, "two words");
 
         Assert.Throws<InvalidOperationException>(Load);
+    }
+
+    [Fact]
+    public void Load_AcceptsAnalyzedLabelOverride()
+    {
+        using var env = new EnvironmentScope().WithValidDefaults()
+            .Set("JIRA_ANALYZED_LABEL", " custom-analyzed ");
+
+        Assert.Equal("custom-analyzed", Load().AnalyzedLabel);
     }
 
     [Fact]

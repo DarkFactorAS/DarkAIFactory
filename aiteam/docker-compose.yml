@@ -47,6 +47,7 @@ services:
       JIRA_STATUS_NAME: ${JIRA_STATUS_NAME:-Selected for Development}
       JIRA_JQL: ${JIRA_JQL:-}
       JIRA_PICKUP_LABEL: ${MANAGER_JIRA_PICKUP_LABEL:-ai-manager-planned}
+      JIRA_ANALYZED_LABEL: ${JIRA_ANALYZED_LABEL:-ai-analyzed}
       JIRA_FAILURE_LABEL: ${MANAGER_JIRA_FAILURE_LABEL:-ai-manager-failed}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
       GH_TOKEN: ${GH_TOKEN:-}
