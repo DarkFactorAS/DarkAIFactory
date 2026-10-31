@@ -186,6 +186,17 @@ public sealed class AgentConfigurationTests
     }
 
     [Fact]
+    public void Load_ScopesOrderingOnlyOverrideWithoutEmptyFilter()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("Jira:JiraJql", "ORDER BY created DESC");
+
+        Assert.Equal(
+            "project = \"DFAI\" AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created DESC",
+            Load().JiraJql);
+    }
+
+    [Fact]
     public void Load_AppendsPickupExclusionWithoutOrderBy()
     {
         using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
@@ -203,6 +214,18 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal(
             "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
+            Load().JiraJql);
+    }
+
+    [Fact]
+    public void Load_IgnoresOrderByInsideSingleQuotedString()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("Jira:JiraJql", "summary ~ 'x ORDER BY y' ORDER BY created");
+
+        Assert.Equal(
+            "project = \"DFAI\" AND (summary ~ 'x ORDER BY y') " +
+            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created",
             Load().JiraJql);
     }
 

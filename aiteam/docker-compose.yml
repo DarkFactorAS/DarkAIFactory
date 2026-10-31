@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-DevelopmentDocker}
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
       HOME: /tmp
     security_opt:
       - no-new-privileges:true

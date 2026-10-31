@@ -154,6 +154,21 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task FindWorkAsync_FetchesAllPages()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-1","fields":{"summary":"First"}}],"nextPageToken":"token+1/="}"""),
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-2","fields":{"summary":"Second"}}]}"""));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issues = await client.FindWorkAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "DFAI-1", "DFAI-2" }, issues.Select(issue => issue.Key));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("nextPageToken=token%2B1%2F%3D", handler.Requests[1].Request.RequestUri!.Query);
+    }
+
+    [Fact]
     public async Task FindWorkAsync_HandlesNullDescription()
     {
         var handler = new StubHandler(

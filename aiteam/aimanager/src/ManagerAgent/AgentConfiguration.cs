@@ -99,7 +99,10 @@ internal sealed record AgentConfiguration(
         var orderByIndex = FindOrderByIndex(jql);
         var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
         var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
-        return $"project = \"{EscapeJql(projectKey)}\" AND ({filter}){orderBy}";
+        var projectFilter = $"project = \"{EscapeJql(projectKey)}\"";
+        return filter.Length == 0
+            ? $"{projectFilter}{orderBy}"
+            : $"{projectFilter} AND ({filter}){orderBy}";
     }
 
     private static string Required(string? value, string name)
@@ -129,26 +132,26 @@ internal sealed record AgentConfiguration(
 
     private static int FindOrderByIndex(string jql)
     {
-        var inString = false;
+        char? stringQuote = null;
         for (var index = 0; index < jql.Length; index++)
         {
-            if (inString)
+            if (stringQuote.HasValue)
             {
                 if (jql[index] == '\\')
                 {
                     index++;
                 }
-                else if (jql[index] == '"')
+                else if (jql[index] == stringQuote.Value)
                 {
-                    inString = false;
+                    stringQuote = null;
                 }
 
                 continue;
             }
 
-            if (jql[index] == '"')
+            if (jql[index] is '"' or '\'')
             {
-                inString = true;
+                stringQuote = jql[index];
                 continue;
             }
 

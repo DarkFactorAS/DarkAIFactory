@@ -94,6 +94,7 @@ internal sealed class CopilotRunner
         startInfo.Environment["TERM"] = "dumb";
         startInfo.Environment["GH_TOKEN"] = _configuration.AgentGitHubToken;
         startInfo.Environment.Remove("GITHUB_TOKEN");
+        startInfo.Environment.Remove("COPILOT_GITHUB_TOKEN");
         foreach (var name in startInfo.Environment.Keys.Where(name =>
                      name.StartsWith("JIRA_", StringComparison.OrdinalIgnoreCase) ||
                      name.Equals("GITHUB_REPOSITORY_TOKEN", StringComparison.OrdinalIgnoreCase)).ToArray())

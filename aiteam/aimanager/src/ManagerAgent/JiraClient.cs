@@ -28,23 +28,35 @@ internal sealed class JiraClient : IDisposable
         var query =
             $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
             "&fields=summary,description,status&maxResults=20";
-        using var response = await _httpClient.GetAsync(
-            $"/rest/api/3/search/jql?{query}",
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         var issues = new List<JiraIssue>();
-        foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+        string? nextPageToken = null;
+        do
         {
-            var fields = issue.GetProperty("fields");
-            issues.Add(new JiraIssue(
-                issue.GetProperty("key").GetString() ?? throw new InvalidDataException("A Jira result has no issue key."),
-                ReadString(fields, "summary"),
-                ReadAdfText(fields, "description"),
-                fields.TryGetProperty("status", out var status) ? ReadString(status, "name") : string.Empty));
+            var pageQuery = string.IsNullOrEmpty(nextPageToken)
+                ? query
+                : $"{query}&nextPageToken={Uri.EscapeDataString(nextPageToken)}";
+            using var response = await _httpClient.GetAsync(
+                $"/rest/api/3/search/jql?{pageQuery}",
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+            {
+                var fields = issue.GetProperty("fields");
+                issues.Add(new JiraIssue(
+                    issue.GetProperty("key").GetString() ?? throw new InvalidDataException("A Jira result has no issue key."),
+                    ReadString(fields, "summary"),
+                    ReadAdfText(fields, "description"),
+                    fields.TryGetProperty("status", out var status) ? ReadString(status, "name") : string.Empty));
+            }
+
+            nextPageToken = document.RootElement.TryGetProperty("nextPageToken", out var token)
+                ? token.GetString()
+                : null;
         }
+        while (!string.IsNullOrEmpty(nextPageToken));
 
         return issues;
     }
