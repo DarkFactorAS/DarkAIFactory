@@ -1,9 +1,10 @@
 # Jira Coding Agent
 
 This Dockerized worker polls Jira for eligible tasks, clones the configured
-GitHub repository into a temporary workspace, asks GitHub Copilot CLI to prepare
-an implementation plan, posts the plan to Jira, then implements the task and
-pushes the changes to a new GitHub branch before posting the result.
+GitHub repository and its submodules into a private temporary workspace, asks
+GitHub Copilot CLI to prepare an implementation plan, posts the plan to Jira,
+then implements the task and pushes the changes to a new GitHub branch before
+posting the result.
 
 By default, it watches project `DFAI` in status `Selected for Development` and
 skips epics. Set `JIRA_JQL` to use a different query.
@@ -27,12 +28,14 @@ skips epics. Set `JIRA_JQL` to use a different query.
 
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
 `aiteam/aiworker/`. For each issue, the worker clones the repository to an
-isolated temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
-and pushes a commit if the agent made changes. The temporary checkout is
-removed afterward. The worker does not create pull requests. Copilot cannot
-execute shell commands, so it cannot run tests; validate the pushed branch
-separately. The worker follows repository Markdown instructions, including
-applicable `AGENTS.md` and Git workflow rules.
+private temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
+and pushes a commit if the agent made changes. Successfully delivered workspaces
+are removed. Workspaces for failed or interrupted tasks are retained for
+recovery; their paths are written to the worker log, and Jira failure comments
+identify any branch that was already pushed. The worker does not create pull
+requests. Copilot cannot execute shell commands, so it cannot run tests; validate
+the pushed branch separately. The worker follows repository Markdown
+instructions, including applicable `AGENTS.md` and Git workflow rules.
 
 Issues retain the `ai-agent-picked` label after processing. If processing fails,
 the worker also adds `ai-agent-failed` and posts an error comment. Remove the
