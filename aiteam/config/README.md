@@ -1,9 +1,13 @@
 # App configuration
 
 All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
-as `ConfigurationHelper<AppSettings>`, reading
-`Config/appsettings.<environment>.json`. Jira/GitHub settings remain in `.env`;
-aimanager's project mappings remain in the database.
+as `ConfigurationHelper<AgentSettings>` for the agents and
+`ConfigurationHelper<AppSettings>` for aibuildpage, reading
+`Config/appsettings.<environment>.json`. Jira/GitHub credentials, labels, queries
+and polling settings now live in each agent's JSON file alongside app/database
+settings. Environment Jira/GitHub variables are no longer read or used as overrides.
+aimanager's project keys and repository URLs remain in the database; aiworker
+uses JSON `JiraProjectKey` and `TargetRepositoryUrl`.
 
 For each app (`aiworker`, `aimanager`, `aibuildpage`), copy its
 `appsettings.Production.json.example` to the following files in the same folder:
@@ -18,6 +22,21 @@ Set the actual database name, username and password. Do not commit these runtime
 files; Git ignores them. The templates contain no credentials. aiworker loads
 app configuration but does not connect to the database or run migrations.
 aimanager and aibuildpage require a database and run their startup patchers.
+
+For each agent, also set `JiraBaseUrl`, `JiraEmail`, `JiraApiToken`,
+`GitHubToken` (Copilot Requests) and `GitHubRepositoryToken` (repository access).
+The manager's `JiraAnalyzedLabel` defaults to `ai-analyzed`.
+`PollIntervalSeconds` is a JSON integer, with minimum 5. Optional omitted settings
+use the defaults in the templates. Required empty credentials fail validation.
+The manager and worker have separate JSON files, allowing different tokens and labels.
+Do not copy agent credentials into aibuildpage, which does not use Jira/GitHub.
+
+`.env` now contains only deployment/build settings: MariaDB container credentials,
+volume/config paths, `DOTNET_ENVIRONMENT` and NuGet authentication. Move existing
+Jira/GitHub values into each agent's selected JSON file before removing them from
+`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `GitHubToken`; there is
+no runtime fallback to environment tokens. The runner supplies only this configured
+Copilot token to its child process; repository credentials stay with Git.
 
 The selected environment is `DOTNET_ENVIRONMENT` for the console apps; the web
 app also honors ASP.NET Core environment selection. Production is the default.

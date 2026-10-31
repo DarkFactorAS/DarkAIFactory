@@ -7,24 +7,24 @@ to Jira, then implements the task and pushes the changes to a new GitHub branch 
 posting the result.
 
 By default, it watches project `DFAI` in status `Selected for Development` and
-skips epics. Set `JIRA_JQL` to use a different query.
+skips epics. Set `JiraJql` to use a different query.
 
 ## Run
 
 First configure the app's environment-specific JSON file as described in
-[App configuration](../config/README.md). Jira/GitHub settings still use `.env`.
+[App configuration](../config/README.md). Jira/GitHub settings are JSON properties.
 Docker mounts `aiteam/config/aiworker` at `/app/Config`. The worker loads app
 settings but does not require a database connection.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
-2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
-3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with only the
+2. In the selected appsettings JSON file, set `JiraBaseUrl`, `JiraEmail`, and `JiraApiToken`.
+3. Set `GitHubToken` to a fine-grained GitHub personal access token with only the
    **Copilot Requests** permission.
-4. Set `GITHUB_REPOSITORY_TOKEN` to a separate fine-grained token with
+4. Set `GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
    permissions for the target repository. The worker uses this token only to
    clone, push its branch and open the pull request.
-5. Set `TARGET_REPOSITORY_URL` to an HTTPS GitHub repository URL, such as
+5. Set `TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
    `https://github.com/owner/repository.git`.
 6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
    `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
@@ -69,7 +69,8 @@ the pickup label and rerunning the implementation.
 ## Run from Visual Studio Code
 
 Open the repository root in VS Code, copy `aiteam/.env.example` to
-`aiteam/.env`, and set the Jira and GitHub credentials and repository URL there.
+`aiteam/.env` for deployment settings, and configure Jira/GitHub credentials and
+repository URL in `aiteam/config/aiworker/appsettings.Development.json`.
 Install the C# extension, then select **AI Worker (.NET)** in Run and Debug and
 press F5. VS Code builds the worker first and loads `aiteam/.env`.
 
@@ -90,19 +91,19 @@ included in the Docker image.
 
 ## Configuration
 
-| Variable | Default | Description |
+| JSON property | Default | Description |
 | --- | --- | --- |
-| `JIRA_BASE_URL` | required | HTTPS Jira Cloud base URL |
-| `JIRA_EMAIL` | required | Jira account email |
-| `JIRA_API_TOKEN` | required | Jira API token |
-| `GH_TOKEN` | required | Fine-grained token with Copilot Requests permission |
-| `GITHUB_REPOSITORY_TOKEN` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
-| `TARGET_REPOSITORY_URL` | required | HTTPS URL of the GitHub repository to clone |
-| `JIRA_PROJECT_KEY` | `DFAI` | Project used by the default JQL |
-| `JIRA_STATUS_NAME` | `Selected for Development` | Status used by the default JQL |
-| `JIRA_JQL` | generated from project/status | Optional complete JQL override |
-| `JIRA_PICKUP_LABEL` | `ai-agent-picked` | Label used to avoid repeat pickup |
-| `JIRA_FAILURE_LABEL` | `ai-agent-failed` | Label added when processing fails |
-| `JIRA_IN_PROGRESS_STATUS` | `In Progress` | Status the issue is moved to when work starts |
-| `JIRA_IN_REVIEW_STATUS` | `In Review` | Status the issue is moved to after the pull request is created |
-| `POLL_INTERVAL_SECONDS` | `30` | Poll interval (minimum 5 seconds) |
+| `JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
+| `JiraEmail` | required | Jira account email |
+| `JiraApiToken` | required | Jira API token |
+| `GitHubToken` | required | Fine-grained token with Copilot Requests permission |
+| `GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
+| `TargetRepositoryUrl` | required | HTTPS URL of the GitHub repository to clone |
+| `JiraProjectKey` | `DFAI` | Project used by the default JQL |
+| `JiraStatusName` | `Selected for Development` | Status used by the default JQL |
+| `JiraJql` | generated from project/status | Optional complete JQL override |
+| `JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
+| `JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
+| `JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
+| `JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
+| `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |

@@ -16,14 +16,14 @@ internal sealed record AgentConfiguration(
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
 
-    public static AgentConfiguration Load(ManagerProject project)
+    public static AgentConfiguration Load(AgentSettings settings, ManagerProject project)
     {
-        var jiraBaseUrl = Required("JIRA_BASE_URL");
+        var jiraBaseUrl = Required(settings.JiraBaseUrl, nameof(settings.JiraBaseUrl));
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
             jiraUri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(jiraUri.UserInfo))
         {
-            throw new InvalidOperationException("JIRA_BASE_URL must be an https URL without embedded credentials.");
+            throw new InvalidOperationException("JiraBaseUrl must be an https URL without embedded credentials.");
         }
 
         var repositoryUrl = project.TargetRepositoryUrl.Trim();
@@ -44,13 +44,13 @@ internal sealed record AgentConfiguration(
         {
             throw new InvalidOperationException($"Manager project {project.Id}: jira_project_key must not be empty.");
         }
-        var jiraStatusName = Get("JIRA_STATUS_NAME", "Selected for Development");
-        var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-manager-planned");
-        var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-manager-failed");
-        var analyzedLabel = Get("JIRA_ANALYZED_LABEL", "ai-analyzed");
-        ValidateLabel(pickupLabel, "JIRA_PICKUP_LABEL");
-        ValidateLabel(failureLabel, "JIRA_FAILURE_LABEL");
-        ValidateLabel(analyzedLabel, "JIRA_ANALYZED_LABEL");
+        var jiraStatusName = Get(settings.JiraStatusName, "Selected for Development");
+        var pickupLabel = Get(settings.JiraPickupLabel, "ai-manager-planned");
+        var failureLabel = Get(settings.JiraFailureLabel, "ai-manager-failed");
+        var analyzedLabel = Get(settings.JiraAnalyzedLabel, "ai-analyzed");
+        ValidateLabel(pickupLabel, nameof(settings.JiraPickupLabel));
+        ValidateLabel(failureLabel, nameof(settings.JiraFailureLabel));
+        ValidateLabel(analyzedLabel, nameof(settings.JiraAnalyzedLabel));
 
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
@@ -58,47 +58,37 @@ internal sealed record AgentConfiguration(
             $"AND issuetype != Epic " +
             "ORDER BY priority DESC, created ASC";
 
-        var githubToken = Environment.GetEnvironmentVariable("GH_TOKEN");
-        if (string.IsNullOrWhiteSpace(githubToken))
-        {
-            githubToken = Required("GITHUB_TOKEN");
-        }
-        else
-        {
-            githubToken = githubToken.Trim();
-        }
+        var githubToken = Required(settings.GitHubToken, nameof(settings.GitHubToken));
 
-        var jqlOverride = Environment.GetEnvironmentVariable("JIRA_JQL");
+        var jqlOverride = settings.JiraJql;
         var jql = string.IsNullOrWhiteSpace(jqlOverride)
             ? defaultJql
             : ScopeToProject(jqlOverride.Trim(), jiraProjectKey);
 
         return new AgentConfiguration(
             jiraUri,
-            Required("JIRA_EMAIL"),
-            Required("JIRA_API_TOKEN"),
+            Required(settings.JiraEmail, nameof(settings.JiraEmail)),
+            Required(settings.JiraApiToken, nameof(settings.JiraApiToken)),
             githubToken,
-            Required("GITHUB_REPOSITORY_TOKEN"),
+            Required(settings.GitHubRepositoryToken, nameof(settings.GitHubRepositoryToken)),
             repositoryUri,
             AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,
             failureLabel,
-            Get("JIRA_IN_PROGRESS_STATUS", "In Progress"),
-            Get("JIRA_IN_REVIEW_STATUS", "In Review"),
-            LoadPollInterval())
+            "In Progress",
+            "In Review",
+            LoadPollInterval(settings))
         {
             AnalyzedLabel = analyzedLabel
         };
     }
 
-    public static TimeSpan LoadPollInterval()
+    public static TimeSpan LoadPollInterval(AgentSettings settings)
     {
-        var pollSeconds = int.TryParse(Get("POLL_INTERVAL_SECONDS", "30"), out var parsedSeconds)
-            ? parsedSeconds
-            : throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be an integer.");
+        var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {
-            throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be at least 5 seconds.");
+            throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
         }
 
         return TimeSpan.FromSeconds(pollSeconds);
@@ -112,18 +102,17 @@ internal sealed record AgentConfiguration(
         return $"project = \"{EscapeJql(projectKey)}\" AND ({filter}){orderBy}";
     }
 
-    private static string Required(string name)
+    private static string Required(string? value, string name)
     {
-        var value = Environment.GetEnvironmentVariable(name);
         return string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException($"Required environment variable {name} is not set.")
+            ? throw new InvalidOperationException($"Required JSON setting {name} is not set.")
             : value.Trim();
     }
 
-    private static string Get(string name, string defaultValue) =>
-        string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name))
+    private static string Get(string? value, string defaultValue) =>
+        string.IsNullOrWhiteSpace(value)
             ? defaultValue
-            : Environment.GetEnvironmentVariable(name)!.Trim();
+            : value.Trim();
 
     private static string EscapeJql(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)

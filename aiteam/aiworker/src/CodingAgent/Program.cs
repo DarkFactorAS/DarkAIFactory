@@ -6,14 +6,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
-var configuration = AgentConfiguration.Load();
-
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
+builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().LogToConsole(DFLogLevel.INFO);
 using var host = builder.Build();
-var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings;
+var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
+    ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
+var configuration = AgentConfiguration.Load(appSettings);
 DFLogger.LogOutput(DFLogLevel.INFO, "Startup", $"Starting {appSettings.AppName}");
 
 using var cancellation = new CancellationTokenSource();

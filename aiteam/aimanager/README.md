@@ -25,7 +25,7 @@ read-only at `/app/Config`; override `AIMANAGER_CONFIG_PATH` for another directo
 For local runs, configured JSON files are copied into the executable's `Config`
 directory. See [App configuration](../config/README.md) for Production,
 Development and DevelopmentDocker setup. Startup selects the executable directory
-as its working directory; Jira/GitHub settings remain in `.env`.
+as its working directory; Jira/GitHub settings are in this same JSON file.
 
 Populate the mappings after the first startup:
 
@@ -40,15 +40,15 @@ Mappings reload in ID order every polling cycle. Each Jira project maps to one
 HTTPS GitHub repository; multiple projects may share a repository. Empty mappings
 are logged and the manager waits. Invalid mappings or database read failures
 stop the manager. A Jira polling failure does not prevent polling other projects.
-The manager ignores environment `JIRA_PROJECT_KEY` and `TARGET_REPOSITORY_URL`;
-those settings remain available to aiworker.
+The manager reads project keys and repository URLs only from `manager_projects`;
+aiworker uses those options as JSON `JiraProjectKey` and `TargetRepositoryUrl`.
 
 ## Planning and recovery
 
 For each eligible ticket, the manager creates a temporary repository checkout,
 generates a plan without changing files and removes the checkout. It saves the
 plan in `manager_plans` **before** posting to Jira, marks it as posted after all
-comments succeed, then adds the configured analysis label (`JIRA_ANALYZED_LABEL`,
+comments succeed, then adds the configured analysis label (`JiraAnalyzedLabel`,
 default `ai-analyzed`) and the configured completion label
 (`ai-manager-planned` by default). Long plans are split into
 numbered Jira comments without truncation.
@@ -69,9 +69,9 @@ manager completion label in Jira.
 ## Run
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
-2. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, and `JIRA_API_TOKEN`.
-3. Set `GH_TOKEN` to a fine-grained token with **Copilot Requests** permission.
-4. Set `GITHUB_REPOSITORY_TOKEN` with **Contents: read** permission for all mapped
+2. In the selected appsettings JSON file, set `JiraBaseUrl`, `JiraEmail`, and `JiraApiToken`.
+3. Set `GitHubToken` to a fine-grained token with **Copilot Requests** permission.
+4. Set `GitHubRepositoryToken` with **Contents: read** permission for all mapped
    repositories and their submodules. The manager needs no push or pull-request
    permissions. Use a separate read-only token from aiworker when running both.
 5. Configure the database file above, and set `MARIADB_ROOT_PASSWORD`,
@@ -99,7 +99,7 @@ docker build -f aiteam/aimanager/Dockerfile \
   --secret id=nuget_token,env=NUGET_TOKEN .
 ```
 
-For local execution, provide the database configuration and environment variables,
+For local execution, provide the database and Jira/GitHub JSON configuration,
 then run `dotnet run --project aiteam/aimanager/src/ManagerAgent/ManagerAgent.csproj`.
 
 ## Tests
@@ -117,16 +117,16 @@ from Jira tickets.
 
 ## Configuration
 
-| Variable | Default | Description |
+| JSON property | Default | Description |
 | --- | --- | --- |
-| `JIRA_BASE_URL` | required | Shared HTTPS Jira instance |
-| `JIRA_EMAIL` | required | Jira account email |
-| `JIRA_API_TOKEN` | required | Jira API token |
-| `GH_TOKEN` | required | Token with Copilot Requests permission |
-| `GITHUB_REPOSITORY_TOKEN` | required | Read-only access to all mapped repositories |
-| `JIRA_STATUS_NAME` | `Selected for Development` | Eligible ticket status |
-| `JIRA_JQL` | generated | Optional filter/ordering, constrained to each mapped project |
-| `JIRA_PICKUP_LABEL` | `ai-manager-planned` | Completion label; Compose uses `MANAGER_JIRA_PICKUP_LABEL` |
-| `JIRA_FAILURE_LABEL` | `ai-manager-failed` | Failure label; Compose uses `MANAGER_JIRA_FAILURE_LABEL` |
-| `JIRA_ANALYZED_LABEL` | `ai-analyzed` | Label added after the plan is posted to Jira; set in `aiteam/.env` |
-| `POLL_INTERVAL_SECONDS` | `30` | Poll interval, minimum 5 seconds |
+| `JiraBaseUrl` | required | Shared HTTPS Jira instance |
+| `JiraEmail` | required | Jira account email |
+| `JiraApiToken` | required | Jira API token |
+| `GitHubToken` | required | Token with Copilot Requests permission |
+| `GitHubRepositoryToken` | required | Read-only access to all mapped repositories |
+| `JiraStatusName` | `Selected for Development` | Eligible ticket status |
+| `JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
+| `JiraPickupLabel` | `ai-manager-planned` | Completion label |
+| `JiraFailureLabel` | `ai-manager-failed` | Failure label |
+| `JiraAnalyzedLabel` | `ai-analyzed` | Label added after the plan is posted to Jira |
+| `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |

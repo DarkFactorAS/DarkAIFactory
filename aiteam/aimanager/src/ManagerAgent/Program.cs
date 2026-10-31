@@ -8,10 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
-var pollInterval = AgentConfiguration.LoadPollInterval();
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
+builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
     .SetupMySql()
@@ -21,6 +20,9 @@ builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<ManagerPlanRepository>();
 
 using var host = builder.Build();
+var settings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
+    ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
+var pollInterval = AgentConfiguration.LoadPollInterval(settings);
 using var databaseScope = host.Services.CreateScope();
 var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
 databasePatcher.WaitForConnection();
@@ -63,7 +65,7 @@ try
         foreach (var project in projects)
         {
             cancellation.Token.ThrowIfCancellationRequested();
-            var configuration = AgentConfiguration.Load(project);
+            var configuration = AgentConfiguration.Load(settings, project);
             using var jira = new JiraClient(configuration);
             var copilot = new CopilotRunner(configuration);
             Console.WriteLine(

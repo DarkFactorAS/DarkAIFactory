@@ -22,6 +22,14 @@ public sealed class AppConfigurationTests
                 """
                 {
                   "AppName": "ConfigValidation",
+                  "JiraBaseUrl": "https://example.atlassian.net",
+                  "JiraEmail": "bot@example.com",
+                  "JiraApiToken": "test-only",
+                  "GitHubToken": "test-only",
+                  "GitHubRepositoryToken": "test-only",
+                  "TargetRepositoryUrl": "https://github.com/owner/repo",
+                  "JiraPickupLabel": "custom-picked",
+                  "PollIntervalSeconds": 5,
                   "EnableLogging": true,
                   "DatabaseConnection": {
                     "Server": "localhost", "Port": 3306, "Database": "validation",
@@ -30,11 +38,15 @@ public sealed class AppConfigurationTests
                 }
                 """);
             Directory.SetCurrentDirectory(directory.FullName);
-            var helper = new ConfigurationHelper<AppSettings>(new TestEnvironment(environmentName));
+            var helper = new ConfigurationHelper<AgentSettings>(new TestEnvironment(environmentName));
 
             Assert.Equal("ConfigValidation", helper.Settings.AppName);
             Assert.Equal("localhost", helper.Settings.DatabaseConnection.Server);
             Assert.Equal(3306, helper.Settings.DatabaseConnection.Port);
+            var settings = Assert.IsType<AgentSettings>(helper.Settings);
+            var configuration = AgentConfiguration.Load(settings);
+            Assert.Equal("custom-picked", configuration.PickupLabel);
+            Assert.Equal(TimeSpan.FromSeconds(5), configuration.PollInterval);
         }
         finally
         {

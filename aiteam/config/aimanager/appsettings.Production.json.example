@@ -1,6 +1,17 @@
 {
   "AppName": "AiManager",
   "EnableLogging": true,
+  "JiraBaseUrl": "https://your-company.atlassian.net",
+  "JiraEmail": "your-jira-account@example.com",
+  "JiraApiToken": "",
+  "GitHubToken": "",
+  "GitHubRepositoryToken": "",
+  "JiraStatusName": "Selected for Development",
+  "JiraJql": "",
+  "JiraPickupLabel": "ai-manager-planned",
+  "JiraFailureLabel": "ai-manager-failed",
+  "JiraAnalyzedLabel": "ai-analyzed",
+  "PollIntervalSeconds": 30,
   "DatabaseConnection": {
     "Server": "aiteam_database",
     "Port": 3306,
