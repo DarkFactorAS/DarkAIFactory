@@ -11,10 +11,11 @@ internal sealed class JiraClient : IDisposable
     private readonly AgentConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
-    public JiraClient(AgentConfiguration configuration)
+    public JiraClient(AgentConfiguration configuration, HttpMessageHandler? handler = null)
     {
         _configuration = configuration;
-        _httpClient = new HttpClient { BaseAddress = configuration.JiraBaseUrl };
+        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient.BaseAddress = configuration.JiraBaseUrl;
         var credentials = Convert.ToBase64String(
             Encoding.UTF8.GetBytes($"{configuration.JiraEmail}:{configuration.JiraApiToken}"));
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
