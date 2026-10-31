@@ -8,6 +8,9 @@ using System.Runtime.InteropServices;
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
+Console.WriteLine(
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().LogToConsole(DFLogLevel.INFO);
 using var host = builder.Build();

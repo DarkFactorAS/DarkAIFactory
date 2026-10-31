@@ -8,6 +8,9 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
+Console.WriteLine(
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
