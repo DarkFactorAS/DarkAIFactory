@@ -84,6 +84,24 @@ Docker builds do not copy runtime configuration into the image. Compose mounts
 separately, mount its config directory at `<application directory>/Config`.
 Use `DOTNET_ENVIRONMENT=DevelopmentDocker` for that environment.
 
+## Database administration
+
+Compose includes Adminer, following GameServer's setup. Start it with the
+database from the repository root:
+
+```sh
+docker compose --env-file aiteam/.env -f aiteam/docker-compose.yml up -d adminer
+```
+
+Open `http://localhost:8180` (or the `ADMINER_PORT` configured in `.env`).
+Adminer is bound only to localhost and waits for the database health check.
+Select MySQL and use server `aiteam_database`, with the database name, username
+and password configured by `MARIADB_DATABASE`, `MARIADB_USER` and
+`MARIADB_PASSWORD`. The server is preselected; credentials are not passed to
+Adminer. Create the external MariaDB volume before first startup as described
+in the Compose file. For remote deployments, use an SSH tunnel rather than
+exposing Adminer publicly.
+
 All app restores require the private DarkFactorAS feed, using `NUGET_USERNAME`
 and `NUGET_TOKEN`. Worker and manager Docker builds accept BuildKit secrets
 `nuget_username` and `nuget_token`; Compose and CI supply them.

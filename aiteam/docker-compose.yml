@@ -40,6 +40,19 @@ services:
     cap_drop:
       - ALL
 
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      aiteam_database:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: aiteam_database
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8180}:8080"
+    security_opt:
+      - no-new-privileges:true
+
   aiteam_database:
     image: mariadb:11
     restart: unless-stopped
