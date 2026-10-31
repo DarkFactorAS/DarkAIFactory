@@ -26,7 +26,7 @@ services:
     cap_drop:
       - ALL
 
-  mariadb:
+  aiteam_database:
     image: mariadb:11
     restart: unless-stopped
     environment:
@@ -35,7 +35,7 @@ services:
       MARIADB_USER: ${MARIADB_USER:-aiteam}
       MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD}
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - aiteam_mariadb_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -46,6 +46,7 @@ services:
       - no-new-privileges:true
 
 volumes:
-  mariadb_data:
+  # docker volume create aiteam_mariadb_data
+  aiteam_mariadb_data:
     external: true
     name: ${MARIADB_VOLUME_NAME:-aiteam_mariadb_data}

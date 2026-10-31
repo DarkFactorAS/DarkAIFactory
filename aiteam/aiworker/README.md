@@ -31,7 +31,7 @@ skips epics. Set `JIRA_JQL` to use a different query.
    ```
 
    (use the value of `MARIADB_VOLUME_NAME` if you changed it). Port 3306 is not
-   published; other services reach the database at host `mariadb`.
+   published; other services reach the database at host `aiteam_database`.
 8. From the `aiteam` directory, start the worker with:
 
    ```sh
