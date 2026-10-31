@@ -24,3 +24,27 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-aiteam}
+      MARIADB_USER: ${MARIADB_USER:-aiteam}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mariadb_data:
+    external: true
+    name: ${MARIADB_VOLUME_NAME:-aiteam_mariadb_data}
