@@ -21,7 +21,18 @@ skips epics. Set `JIRA_JQL` to use a different query.
    clone, push its branch and open the pull request.
 5. Set `TARGET_REPOSITORY_URL` to an HTTPS GitHub repository URL, such as
    `https://github.com/owner/repository.git`.
-6. From the `aiteam` directory, start the worker with:
+6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
+   `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
+7. The MariaDB data volume is external, so Compose does not create it. Create
+   it once before the first start:
+
+   ```sh
+   docker volume create aiteam_mariadb_data
+   ```
+
+   (use the value of `MARIADB_VOLUME_NAME` if you changed it). Port 3306 is not
+   published; other services reach the database at host `mariadb`.
+8. From the `aiteam` directory, start the worker with:
 
    ```sh
    docker compose --env-file .env -f docker-compose.yml up --build -d
