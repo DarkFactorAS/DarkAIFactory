@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-DevelopmentDocker}
       HOME: /tmp
     security_opt:
       - no-new-privileges:true
@@ -49,7 +49,7 @@ services:
     environment:
       ADMINER_DEFAULT_SERVER: aiteam_database
     ports:
-      - "127.0.0.1:${ADMINER_PORT:-8180}:8080"
+      - "127.0.0.1:${ADMINER_PORT:-8280}:8080"
     security_opt:
       - no-new-privileges:true
 

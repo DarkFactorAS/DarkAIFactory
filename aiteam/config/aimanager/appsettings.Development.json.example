@@ -22,6 +22,6 @@
     "Database": "aiteam",
     "Username": "aiteam",
     "Password": "",
-    "SslMode": "None"
+    "SslMode": "Preferred"
   }
 }
