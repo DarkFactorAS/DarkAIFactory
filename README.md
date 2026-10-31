@@ -28,3 +28,7 @@ Pushes to `main` and pull requests run the build defined in
 
 See the [AI worker README](aiteam/aiworker/README.md) for setup, configuration,
 and Docker Compose instructions.
+
+## aibuildpage
+
+A minimal web page project lives in [aiteam/aibuildpage](aiteam/aibuildpage/README.md).

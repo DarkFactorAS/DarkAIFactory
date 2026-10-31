@@ -25,3 +25,9 @@ jobs:
 
       - name: Build
         run: dotnet build aiteam/aiworker/src/CodingAgent/CodingAgent.csproj --no-restore -c Release
+
+      - name: Restore aibuildpage
+        run: dotnet restore aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj
+
+      - name: Build aibuildpage
+        run: dotnet build aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj --no-restore -c Release

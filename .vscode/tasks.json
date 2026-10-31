@@ -27,6 +27,30 @@
       ],
       "problemMatcher": "$msCompile",
       "group": "test"
+    },
+    {
+      "label": "build aibuildpage",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "run aibuildpage",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj"
+      ],
+      "problemMatcher": "$msCompile"
     }
   ]
 }
