@@ -8,21 +8,10 @@
       "preLaunchTask": "build aiworker",
       "program": "${workspaceFolder}/aiteam/aiworker/src/CodingAgent/bin/Debug/net10.0/CodingAgent.dll",
       "args": [],
-      "cwd": "${input:targetRepository}",
+      "cwd": "${workspaceFolder}",
       "envFile": "${workspaceFolder}/aiteam/.env",
-      "env": {
-        "WORKSPACE_PATH": "${input:targetRepository}"
-      },
       "console": "integratedTerminal",
       "stopAtEntry": false
-    }
-  ],
-  "inputs": [
-    {
-      "id": "targetRepository",
-      "type": "promptString",
-      "description": "Absolute path to the code repository the worker should modify",
-      "default": "${workspaceFolder}"
     }
   ]
 }

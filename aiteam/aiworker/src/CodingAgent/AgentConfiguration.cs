@@ -5,10 +5,11 @@ internal sealed record AgentConfiguration(
     string JiraEmail,
     string JiraApiToken,
     string GitHubToken,
+    string GitHubRepositoryToken,
+    Uri RepositoryUrl,
     string JiraJql,
     string PickupLabel,
     string FailureLabel,
-    string WorkspacePath,
     TimeSpan PollInterval)
 {
     public static AgentConfiguration Load()
@@ -19,6 +20,19 @@ internal sealed record AgentConfiguration(
             !string.IsNullOrEmpty(jiraUri.UserInfo))
         {
             throw new InvalidOperationException("JIRA_BASE_URL must be an https URL without embedded credentials.");
+        }
+
+        var repositoryUrl = Required("TARGET_REPOSITORY_URL");
+        if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
+            repositoryUri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(repositoryUri.UserInfo) ||
+            !string.IsNullOrEmpty(repositoryUri.Query) ||
+            !string.IsNullOrEmpty(repositoryUri.Fragment) ||
+            repositoryUri.AbsolutePath.Trim('/').Split('/').Length != 2)
+        {
+            throw new InvalidOperationException(
+                "TARGET_REPOSITORY_URL must be an https GitHub repository URL in the form https://github.com/owner/repository.");
         }
 
         var jiraProjectKey = Get("JIRA_PROJECT_KEY", "DFAI");
@@ -57,10 +71,11 @@ internal sealed record AgentConfiguration(
             Required("JIRA_EMAIL"),
             Required("JIRA_API_TOKEN"),
             githubToken,
+            Required("GITHUB_REPOSITORY_TOKEN"),
+            repositoryUri,
             AddPickupLabelExclusion(Get("JIRA_JQL", defaultJql), pickupLabel),
             pickupLabel,
             failureLabel,
-            Path.GetFullPath(Get("WORKSPACE_PATH", "/workspace/repository")),
             TimeSpan.FromSeconds(pollSeconds));
     }
 
