@@ -24,12 +24,12 @@ internal sealed class SettingsScope : IDisposable
         }
     }
 
-    public SettingsScope WithValidDefaults() => Set("JiraBaseUrl", "https://example.atlassian.net")
-        .Set("JiraEmail", "bot@example.com")
-        .Set("JiraApiToken", "jira-token")
-        .Set("AgentGitHubToken", "gh-token")
-        .Set("GitHubRepositoryToken", "repo-token")
-        .Set("TargetRepositoryUrl", "https://github.com/owner/repo");
+    public SettingsScope WithValidDefaults() => Set("Jira:JiraBaseUrl", "https://example.atlassian.net")
+        .Set("Jira:JiraEmail", "bot@example.com")
+        .Set("Jira:JiraApiToken", "jira-token")
+        .Set("GitHub:AgentGitHubToken", "gh-token")
+        .Set("GitHub:GitHubRepositoryToken", "repo-token")
+        .Set("GitHub:TargetRepositoryUrl", "https://github.com/owner/repo");
 
     public SettingsScope Set(string name, string? value)
     {

@@ -7,7 +7,7 @@ to Jira, then implements the task and pushes the changes to a new GitHub branch 
 posting the result.
 
 By default, it watches project `DFAI` in status `Selected for Development` and
-skips epics. Set `JiraJql` to use a different query.
+skips epics. Set `Jira.JiraJql` to use a different query.
 
 ## Run
 
@@ -17,14 +17,14 @@ Docker mounts `aiteam/config/aiworker` at `/app/Config`. The worker loads app
 settings but does not require a database connection.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
-2. In the selected appsettings JSON file, set `JiraBaseUrl`, `JiraEmail`, and `JiraApiToken`.
-3. Set `AgentGitHubToken` to a fine-grained GitHub personal access token with only the
+2. In the selected appsettings JSON file, set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
+3. Set `GitHub.AgentGitHubToken` to a fine-grained GitHub personal access token with only the
    **Copilot Requests** permission.
-4. Set `GitHubRepositoryToken` to a separate fine-grained token with
+4. Set `GitHub.GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
    permissions for the target repository. The worker uses this token only to
    clone, push its branch and open the pull request.
-5. Set `TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
+5. Set `GitHub.TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
    `https://github.com/owner/repository.git`.
 6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
    `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
@@ -93,17 +93,17 @@ included in the Docker image.
 
 | JSON property | Default | Description |
 | --- | --- | --- |
-| `JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
-| `JiraEmail` | required | Jira account email |
-| `JiraApiToken` | required | Jira API token |
-| `AgentGitHubToken` | required | Fine-grained token with Copilot Requests permission |
-| `GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
-| `TargetRepositoryUrl` | required | HTTPS URL of the GitHub repository to clone |
-| `JiraProjectKey` | `DFAI` | Project used by the default JQL |
-| `JiraStatusName` | `Selected for Development` | Status used by the default JQL |
-| `JiraJql` | generated from project/status | Optional complete JQL override |
-| `JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
-| `JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
-| `JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
-| `JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
+| `Jira.JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
+| `Jira.JiraEmail` | required | Jira account email |
+| `Jira.JiraApiToken` | required | Jira API token |
+| `GitHub.AgentGitHubToken` | required | Fine-grained token with Copilot Requests permission |
+| `GitHub.GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
+| `GitHub.TargetRepositoryUrl` | required | HTTPS URL of the GitHub repository to clone |
+| `Jira.JiraProjectKey` | `DFAI` | Project used by the default JQL |
+| `Jira.JiraStatusName` | `Selected for Development` | Status used by the default JQL |
+| `Jira.JiraJql` | generated from project/status | Optional complete JQL override |
+| `Jira.JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
+| `Jira.JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
+| `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
+| `Jira.JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
 | `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |

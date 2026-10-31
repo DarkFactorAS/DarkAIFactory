@@ -18,7 +18,7 @@ internal sealed record AgentConfiguration(
 
     public static AgentConfiguration Load(AgentSettings settings, ManagerProject project)
     {
-        var jiraBaseUrl = Required(settings.JiraBaseUrl, nameof(settings.JiraBaseUrl));
+        var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
             jiraUri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(jiraUri.UserInfo))
@@ -44,13 +44,13 @@ internal sealed record AgentConfiguration(
         {
             throw new InvalidOperationException($"Manager project {project.Id}: jira_project_key must not be empty.");
         }
-        var jiraStatusName = Get(settings.JiraStatusName, "Selected for Development");
-        var pickupLabel = Get(settings.JiraPickupLabel, "ai-manager-planned");
-        var failureLabel = Get(settings.JiraFailureLabel, "ai-manager-failed");
-        var analyzedLabel = Get(settings.JiraAnalyzedLabel, "ai-analyzed");
-        ValidateLabel(pickupLabel, nameof(settings.JiraPickupLabel));
-        ValidateLabel(failureLabel, nameof(settings.JiraFailureLabel));
-        ValidateLabel(analyzedLabel, nameof(settings.JiraAnalyzedLabel));
+        var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
+        var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-manager-planned");
+        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-manager-failed");
+        var analyzedLabel = Get(settings.Jira.JiraAnalyzedLabel, "ai-analyzed");
+        ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
+        ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
+        ValidateLabel(analyzedLabel, "Jira.JiraAnalyzedLabel");
 
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
@@ -58,19 +58,19 @@ internal sealed record AgentConfiguration(
             $"AND issuetype != Epic " +
             "ORDER BY priority DESC, created ASC";
 
-        var agentGitHubToken = Required(settings.AgentGitHubToken, nameof(settings.AgentGitHubToken));
+        var agentGitHubToken = Required(settings.GitHub.AgentGitHubToken, "GitHub.AgentGitHubToken");
 
-        var jqlOverride = settings.JiraJql;
+        var jqlOverride = settings.Jira.JiraJql;
         var jql = string.IsNullOrWhiteSpace(jqlOverride)
             ? defaultJql
             : ScopeToProject(jqlOverride.Trim(), jiraProjectKey);
 
         return new AgentConfiguration(
             jiraUri,
-            Required(settings.JiraEmail, nameof(settings.JiraEmail)),
-            Required(settings.JiraApiToken, nameof(settings.JiraApiToken)),
+            Required(settings.Jira.JiraEmail, "Jira.JiraEmail"),
+            Required(settings.Jira.JiraApiToken, "Jira.JiraApiToken"),
             agentGitHubToken,
-            Required(settings.GitHubRepositoryToken, nameof(settings.GitHubRepositoryToken)),
+            Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             repositoryUri,
             AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,

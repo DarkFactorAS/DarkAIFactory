@@ -22,16 +22,24 @@ public sealed class AppConfigurationTests
                 """
                 {
                   "AppName": "ManagerValidation",
-                  "JiraBaseUrl": "https://example.atlassian.net",
-                  "JiraEmail": "bot@example.com",
-                  "JiraApiToken": "test-only",
-                  "AgentGitHubToken": "test-only",
-                  "GitHubRepositoryToken": "test-only",
-                  "JiraAnalyzedLabel": "custom-analyzed",
+                  "Jira": {
+                    "JiraBaseUrl": "https://example.atlassian.net",
+                    "JiraEmail": "bot@example.com",
+                    "JiraApiToken": "test-only",
+                    "JiraAnalyzedLabel": "custom-analyzed"
+                  },
+                  "GitHub": {
+                    "AgentGitHubToken": "test-only",
+                    "GitHubRepositoryToken": "test-only"
+                  },
                   "PollIntervalSeconds": 5,
                   "DatabaseConnection": {
-                    "Server": "localhost", "Port": 3306, "Database": "validation",
-                    "Username": "validation", "Password": "", "SslMode": "None"
+                    "Server": "localhost",
+                    "Port": 3306,
+                    "Database": "validation",
+                    "Username": "validation",
+                    "Password": "",
+                    "SslMode": "None"
                   }
                 }
                 """);

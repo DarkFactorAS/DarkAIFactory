@@ -4,12 +4,16 @@ namespace CodingAgent;
 
 public sealed class AgentSettings : AppSettings
 {
+    public JiraSettings Jira { get; set; } = new();
+    public GitHubSettings GitHub { get; set; } = new();
+    public int PollIntervalSeconds { get; set; } = 30;
+}
+
+public sealed class JiraSettings
+{
     public string JiraBaseUrl { get; set; } = string.Empty;
     public string JiraEmail { get; set; } = string.Empty;
     public string JiraApiToken { get; set; } = string.Empty;
-    public string AgentGitHubToken { get; set; } = string.Empty;
-    public string GitHubRepositoryToken { get; set; } = string.Empty;
-    public string TargetRepositoryUrl { get; set; } = string.Empty;
     public string JiraProjectKey { get; set; } = "DFAI";
     public string JiraStatusName { get; set; } = "Selected for Development";
     public string JiraJql { get; set; } = string.Empty;
@@ -17,5 +21,11 @@ public sealed class AgentSettings : AppSettings
     public string JiraFailureLabel { get; set; } = "ai-agent-failed";
     public string JiraInProgressStatus { get; set; } = "In Progress";
     public string JiraInReviewStatus { get; set; } = "In Review";
-    public int PollIntervalSeconds { get; set; } = 30;
+}
+
+public sealed class GitHubSettings
+{
+    public string AgentGitHubToken { get; set; } = string.Empty;
+    public string GitHubRepositoryToken { get; set; } = string.Empty;
+    public string TargetRepositoryUrl { get; set; } = string.Empty;
 }

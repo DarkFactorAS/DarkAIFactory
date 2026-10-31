@@ -16,7 +16,7 @@ internal sealed record AgentConfiguration(
 {
     public static AgentConfiguration Load(AgentSettings settings)
     {
-        var jiraBaseUrl = Required(settings.JiraBaseUrl, nameof(settings.JiraBaseUrl));
+        var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
             jiraUri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(jiraUri.UserInfo))
@@ -24,7 +24,7 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("JiraBaseUrl must be an https URL without embedded credentials.");
         }
 
-        var repositoryUrl = Required(settings.TargetRepositoryUrl, nameof(settings.TargetRepositoryUrl));
+        var repositoryUrl = Required(settings.GitHub.TargetRepositoryUrl, "GitHub.TargetRepositoryUrl");
         if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
             repositoryUri.Scheme != Uri.UriSchemeHttps ||
             !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
@@ -37,12 +37,12 @@ internal sealed record AgentConfiguration(
                 "TargetRepositoryUrl must be an https GitHub repository URL in the form https://github.com/owner/repository.");
         }
 
-        var jiraProjectKey = Get(settings.JiraProjectKey, "DFAI");
-        var jiraStatusName = Get(settings.JiraStatusName, "Selected for Development");
-        var pickupLabel = Get(settings.JiraPickupLabel, "ai-agent-picked");
-        var failureLabel = Get(settings.JiraFailureLabel, "ai-agent-failed");
-        ValidateLabel(pickupLabel, nameof(settings.JiraPickupLabel));
-        ValidateLabel(failureLabel, nameof(settings.JiraFailureLabel));
+        var jiraProjectKey = Get(settings.Jira.JiraProjectKey, "DFAI");
+        var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
+        var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-agent-picked");
+        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
+        ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
+        ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
 
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
@@ -50,7 +50,7 @@ internal sealed record AgentConfiguration(
             $"AND issuetype != Epic " +
             "ORDER BY priority DESC, created ASC";
 
-        var agentGitHubToken = Required(settings.AgentGitHubToken, nameof(settings.AgentGitHubToken));
+        var agentGitHubToken = Required(settings.GitHub.AgentGitHubToken, "GitHub.AgentGitHubToken");
         var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {
@@ -59,16 +59,16 @@ internal sealed record AgentConfiguration(
 
         return new AgentConfiguration(
             jiraUri,
-            Required(settings.JiraEmail, nameof(settings.JiraEmail)),
-            Required(settings.JiraApiToken, nameof(settings.JiraApiToken)),
+            Required(settings.Jira.JiraEmail, "Jira.JiraEmail"),
+            Required(settings.Jira.JiraApiToken, "Jira.JiraApiToken"),
             agentGitHubToken,
-            Required(settings.GitHubRepositoryToken, nameof(settings.GitHubRepositoryToken)),
+            Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             repositoryUri,
-            AddPickupLabelExclusion(Get(settings.JiraJql, defaultJql), pickupLabel),
+            AddPickupLabelExclusion(Get(settings.Jira.JiraJql, defaultJql), pickupLabel),
             pickupLabel,
             failureLabel,
-            Get(settings.JiraInProgressStatus, "In Progress"),
-            Get(settings.JiraInReviewStatus, "In Review"),
+            Get(settings.Jira.JiraInProgressStatus, "In Progress"),
+            Get(settings.Jira.JiraInReviewStatus, "In Review"),
             TimeSpan.FromSeconds(pollSeconds));
     }
 

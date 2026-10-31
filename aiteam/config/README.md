@@ -7,7 +7,7 @@ as `ConfigurationHelper<AgentSettings>` for the agents and
 and polling settings now live in each agent's JSON file alongside app/database
 settings. Environment Jira/GitHub variables are no longer read or used as overrides.
 aimanager's project keys and repository URLs remain in the database; aiworker
-uses JSON `JiraProjectKey` and `TargetRepositoryUrl`.
+uses JSON `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
 
 Each app (`aiworker`, `aimanager`, `aibuildpage`) has a template for every
 supported environment. Copy the selected `appsettings.<environment>.json.example`
@@ -34,11 +34,29 @@ files; Git ignores them. The templates contain no credentials. aiworker loads
 app configuration but does not connect to the database or run migrations.
 aimanager and aibuildpage require a database and run their startup patchers.
 
-For each agent, also set `JiraBaseUrl`, `JiraEmail`, `JiraApiToken`,
-`AgentGitHubToken` (Copilot Requests) and `GitHubRepositoryToken` (repository access).
-Existing JSON files must rename `GitHubToken` to `AgentGitHubToken`, keeping
-the same value. `GitHubRepositoryToken` is unchanged.
-The manager's `JiraAnalyzedLabel` defaults to `ai-analyzed`.
+Each agent groups its settings under `Jira` and `GitHub`:
+
+```json
+{
+  "Jira": {
+    "JiraBaseUrl": "https://your-company.atlassian.net",
+    "JiraEmail": "your-jira-account@example.com",
+    "JiraApiToken": ""
+  },
+  "GitHub": {
+    "AgentGitHubToken": "",
+    "GitHubRepositoryToken": ""
+  }
+}
+```
+
+Set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
+`GitHub.AgentGitHubToken` (Copilot Requests) and `GitHub.GitHubRepositoryToken`
+(repository access). Move all existing `Jira*` fields into `Jira`, and move
+`AgentGitHubToken`, `GitHubRepositoryToken` and the worker's `TargetRepositoryUrl`
+into `GitHub`, keeping their values. Older `GitHubToken` fields must also be
+renamed to `AgentGitHubToken`. Flat fields are no longer read.
+The manager's `Jira.JiraAnalyzedLabel` defaults to `ai-analyzed`.
 `PollIntervalSeconds` is a JSON integer, with minimum 5. Optional omitted settings
 use the defaults in the templates. Required empty credentials fail validation.
 The manager and worker have separate JSON files, allowing different tokens and labels.
@@ -47,7 +65,7 @@ Do not copy agent credentials into aibuildpage, which does not use Jira/GitHub.
 `.env` now contains only deployment/build settings: MariaDB container credentials,
 volume/config paths, `DOTNET_ENVIRONMENT` and NuGet authentication. Move existing
 Jira/GitHub values into each agent's selected JSON file before removing them from
-`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `AgentGitHubToken`; there is
+`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `GitHub.AgentGitHubToken`; there is
 no runtime fallback to environment tokens. The runner supplies only this configured
 Copilot token to its child process; repository credentials stay with Git.
 

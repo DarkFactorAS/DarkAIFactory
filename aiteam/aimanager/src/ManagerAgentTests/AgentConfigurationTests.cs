@@ -28,31 +28,42 @@ public sealed class AgentConfigurationTests
     }
 
     [Theory]
-    [InlineData("JiraBaseUrl")]
-    [InlineData("JiraEmail")]
-    [InlineData("JiraApiToken")]
-    [InlineData("GitHubRepositoryToken")]
+    [InlineData("Jira:JiraBaseUrl")]
+    [InlineData("Jira:JiraEmail")]
+    [InlineData("Jira:JiraApiToken")]
+    [InlineData("GitHub:GitHubRepositoryToken")]
     public void Load_RequiresVariable(string name)
     {
         using var env = new SettingsScope().WithValidDefaults().Set(name, null);
 
         var exception = Assert.Throws<InvalidOperationException>(Load);
-        Assert.Contains(name, exception.Message);
+        Assert.Contains(name.Replace(':', '.'), exception.Message);
     }
 
     [Fact]
     public void Load_RequiresSomeAgentGitHubToken()
     {
-        using var env = new SettingsScope().WithValidDefaults().Set("AgentGitHubToken", null);
+        using var env = new SettingsScope().WithValidDefaults().Set("GitHub:AgentGitHubToken", null);
 
         Assert.Throws<InvalidOperationException>(Load);
+    }
+
+    [Fact]
+    public void Load_DoesNotUseLegacyFlatToken()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("GitHub:AgentGitHubToken", null)
+            .Set("AgentGitHubToken", "legacy-token");
+
+        var exception = Assert.Throws<InvalidOperationException>(Load);
+        Assert.Contains("GitHub.AgentGitHubToken", exception.Message);
     }
 
     [Fact]
     public void Load_TrimsAgentGitHubToken()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("AgentGitHubToken", " fallback ");
+            .Set("GitHub:AgentGitHubToken", " fallback ");
 
         Assert.Equal("fallback", Load().AgentGitHubToken);
     }
@@ -63,7 +74,7 @@ public sealed class AgentConfigurationTests
     [InlineData("not a url")]
     public void Load_RejectsInvalidJiraUrl(string url)
     {
-        using var env = new SettingsScope().WithValidDefaults().Set("JiraBaseUrl", url);
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraBaseUrl", url);
 
         Assert.Throws<InvalidOperationException>(Load);
     }
@@ -88,7 +99,7 @@ public sealed class AgentConfigurationTests
     public void Load_KeepsImplementationStatusesUnused()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraInProgressStatus", "Doing").Set("JiraInReviewStatus", "Code Review");
+            .Set("Jira:JiraInProgressStatus", "Doing").Set("Jira:JiraInReviewStatus", "Code Review");
 
         var config = Load();
 
@@ -132,9 +143,9 @@ public sealed class AgentConfigurationTests
     }
 
     [Theory]
-    [InlineData("JiraPickupLabel")]
-    [InlineData("JiraFailureLabel")]
-    [InlineData("JiraAnalyzedLabel")]
+    [InlineData("Jira:JiraPickupLabel")]
+    [InlineData("Jira:JiraFailureLabel")]
+    [InlineData("Jira:JiraAnalyzedLabel")]
     public void Load_RejectsLabelsWithWhitespace(string name)
     {
         using var env = new SettingsScope().WithValidDefaults().Set(name, "two words");
@@ -146,7 +157,7 @@ public sealed class AgentConfigurationTests
     public void Load_AcceptsAnalyzedLabelOverride()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraAnalyzedLabel", " custom-analyzed ");
+            .Set("Jira:JiraAnalyzedLabel", " custom-analyzed ");
 
         Assert.Equal("custom-analyzed", Load().AnalyzedLabel);
     }
@@ -155,7 +166,7 @@ public sealed class AgentConfigurationTests
     public void Load_EscapesDefaultJqlValues()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraStatusName", "C\\D");
+            .Set("Jira:JiraStatusName", "C\\D");
 
         var jql = AgentConfiguration.Load(SettingsScope.Current, DefaultProject with { JiraProjectKey = "A\"B" }).JiraJql;
 
@@ -167,7 +178,7 @@ public sealed class AgentConfigurationTests
     public void Load_InsertsPickupExclusionBeforeOrderBy()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraJql", "project = X order  by created DESC");
+            .Set("Jira:JiraJql", "project = X order  by created DESC");
 
         Assert.Equal(
             "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) order  by created DESC",
@@ -177,7 +188,7 @@ public sealed class AgentConfigurationTests
     [Fact]
     public void Load_AppendsPickupExclusionWithoutOrderBy()
     {
-        using var env = new SettingsScope().WithValidDefaults().Set("JiraJql", "project = X");
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
 
         Assert.Equal(
             "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
@@ -188,7 +199,7 @@ public sealed class AgentConfigurationTests
     public void Load_IgnoresOrderByInsideQuotedString()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraJql", "summary ~ \"x ORDER BY y\"");
+            .Set("Jira:JiraJql", "summary ~ \"x ORDER BY y\"");
 
         Assert.Equal(
             "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
@@ -199,8 +210,8 @@ public sealed class AgentConfigurationTests
     public void Load_UsesDatabaseMappingsInsteadOfEnvironment()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraProjectKey", "IGNORED")
-            .Set("TargetRepositoryUrl", null);
+            .Set("Jira:JiraProjectKey", "IGNORED")
+            .Set("GitHub:TargetRepositoryUrl", null);
 
         var first = AgentConfiguration.Load(SettingsScope.Current, new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
         var second = AgentConfiguration.Load(SettingsScope.Current, new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
@@ -215,7 +226,7 @@ public sealed class AgentConfigurationTests
     public void Load_ScopesOrQueryToMappedProject()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("JiraJql", "priority = High OR priority = Highest ORDER BY created");
+            .Set("Jira:JiraJql", "priority = High OR priority = Highest ORDER BY created");
 
         Assert.Equal(
             "project = \"DFAI\" AND (priority = High OR priority = Highest) " +
