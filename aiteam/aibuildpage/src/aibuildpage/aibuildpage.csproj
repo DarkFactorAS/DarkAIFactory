@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DarkFactor.Common.Lib" Version="1.6.6" />
+  </ItemGroup>
 </Project>

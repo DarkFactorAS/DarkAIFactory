@@ -27,6 +27,9 @@ jobs:
         run: dotnet build aiteam/aiworker/src/CodingAgent/CodingAgent.csproj --no-restore -c Release
 
       - name: Restore aibuildpage
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
         run: dotnet restore aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj
 
       - name: Build aibuildpage
