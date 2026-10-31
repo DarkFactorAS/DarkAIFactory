@@ -1,0 +1,27 @@
+name: Agent-CI-DotNet
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    name: Build CodingAgent (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore aiteam/aiworker/src/CodingAgent/CodingAgent.csproj
+
+      - name: Build
+        run: dotnet build aiteam/aiworker/src/CodingAgent/CodingAgent.csproj --no-restore -c Release

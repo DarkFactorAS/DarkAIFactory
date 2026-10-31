@@ -1,4 +1,4 @@
-name: CI
+name: Agent-CI-Docker
 
 permissions:
   contents: read
