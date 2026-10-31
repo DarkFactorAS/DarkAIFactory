@@ -1,8 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY src/CodingAgent/CodingAgent.csproj src/CodingAgent/
+COPY aiteam/aiworker/src/CodingAgent/CodingAgent.csproj src/CodingAgent/
 RUN dotnet restore src/CodingAgent/CodingAgent.csproj
-COPY src/CodingAgent/ src/CodingAgent/
+COPY aiteam/aiworker/src/CodingAgent/ src/CodingAgent/
 RUN dotnet publish src/CodingAgent/CodingAgent.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0
