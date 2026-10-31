@@ -13,7 +13,7 @@ internal sealed class CopilotRunner
 
     public async Task CheckAvailableAsync(CancellationToken cancellationToken)
     {
-        var startInfo = CreateStartInfo();
+        var startInfo = CreateStartInfo(Path.GetTempPath());
         startInfo.ArgumentList.Add("--version");
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
@@ -34,11 +34,12 @@ internal sealed class CopilotRunner
     }
 
     public async Task<string> RunAsync(
+        string workspacePath,
         string prompt,
         bool allowChanges,
         CancellationToken cancellationToken)
     {
-        var startInfo = CreateStartInfo();
+        var startInfo = CreateStartInfo(workspacePath);
         startInfo.ArgumentList.Add("--prompt");
         startInfo.ArgumentList.Add(prompt);
         startInfo.ArgumentList.Add("--silent");
@@ -82,12 +83,12 @@ internal sealed class CopilotRunner
             : throw new InvalidOperationException("Copilot CLI returned no response.");
     }
 
-    private ProcessStartInfo CreateStartInfo()
+    private ProcessStartInfo CreateStartInfo(string workspacePath)
     {
         var startInfo = new ProcessStartInfo
         {
             FileName = "copilot",
-            WorkingDirectory = _configuration.WorkspacePath,
+            WorkingDirectory = workspacePath,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -95,7 +96,9 @@ internal sealed class CopilotRunner
         };
         startInfo.Environment["NO_COLOR"] = "1";
         startInfo.Environment["TERM"] = "dumb";
-        foreach (var name in startInfo.Environment.Keys.Where(name => name.StartsWith("JIRA_", StringComparison.OrdinalIgnoreCase)).ToArray())
+        foreach (var name in startInfo.Environment.Keys.Where(name =>
+                     name.StartsWith("JIRA_", StringComparison.OrdinalIgnoreCase) ||
+                     name.Equals("GITHUB_REPOSITORY_TOKEN", StringComparison.OrdinalIgnoreCase)).ToArray())
         {
             startInfo.Environment.Remove(name);
         }

@@ -2,7 +2,6 @@ services:
   coding-agent:
     build:
       context: ./aiworker
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     restart: unless-stopped
     init: true
     environment:
@@ -15,13 +14,10 @@ services:
       JIRA_PICKUP_LABEL: ${JIRA_PICKUP_LABEL:-ai-agent-picked}
       JIRA_FAILURE_LABEL: ${JIRA_FAILURE_LABEL:-ai-agent-failed}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
+      TARGET_REPOSITORY_URL: ${TARGET_REPOSITORY_URL:?Set TARGET_REPOSITORY_URL to the GitHub repository URL}
       GH_TOKEN: ${GH_TOKEN:-}
+      GITHUB_REPOSITORY_TOKEN: ${GITHUB_REPOSITORY_TOKEN:-}
       HOME: /tmp
-      WORKSPACE_PATH: /workspace/repository
-    volumes:
-      - type: bind
-        source: ${TARGET_REPOSITORY_PATH:?Set TARGET_REPOSITORY_PATH to the target code repository}
-        target: /workspace/repository
     security_opt:
       - no-new-privileges:true
     cap_drop:

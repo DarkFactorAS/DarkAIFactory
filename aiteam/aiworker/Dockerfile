@@ -14,6 +14,5 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish/ .
-ENV WORKSPACE_PATH=/workspace/repository
 USER app
 ENTRYPOINT ["dotnet", "/app/CodingAgent.dll"]
