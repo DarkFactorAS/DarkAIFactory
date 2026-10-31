@@ -6,7 +6,11 @@ using DFCommonLib.Utils;
 
 const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>DarkFactor AI Team</title></head><body></body></html>";
 
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
+Console.WriteLine(
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
@@ -17,7 +21,8 @@ builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
 
 var app = builder.Build();
 
-var databasePatcher = DFServices.GetService<IStartupDatabasePatcher>();
+using var databaseScope = app.Services.CreateScope();
+var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
 databasePatcher.WaitForConnection();
 if (databasePatcher.RunPatcher())
 {

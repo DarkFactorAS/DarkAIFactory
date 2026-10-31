@@ -4,7 +4,7 @@ internal sealed record AgentConfiguration(
     Uri JiraBaseUrl,
     string JiraEmail,
     string JiraApiToken,
-    string GitHubToken,
+    string AgentGitHubToken,
     string GitHubRepositoryToken,
     Uri RepositoryUrl,
     string JiraJql,
@@ -14,17 +14,17 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
-    public static AgentConfiguration Load()
+    public static AgentConfiguration Load(AgentSettings settings)
     {
-        var jiraBaseUrl = Required("JIRA_BASE_URL");
+        var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
             jiraUri.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(jiraUri.UserInfo))
         {
-            throw new InvalidOperationException("JIRA_BASE_URL must be an https URL without embedded credentials.");
+            throw new InvalidOperationException("JiraBaseUrl must be an https URL without embedded credentials.");
         }
 
-        var repositoryUrl = Required("TARGET_REPOSITORY_URL");
+        var repositoryUrl = Required(settings.GitHub.TargetRepositoryUrl, "GitHub.TargetRepositoryUrl");
         if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
             repositoryUri.Scheme != Uri.UriSchemeHttps ||
             !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
@@ -34,15 +34,15 @@ internal sealed record AgentConfiguration(
             repositoryUri.AbsolutePath.Trim('/').Split('/').Length != 2)
         {
             throw new InvalidOperationException(
-                "TARGET_REPOSITORY_URL must be an https GitHub repository URL in the form https://github.com/owner/repository.");
+                "TargetRepositoryUrl must be an https GitHub repository URL in the form https://github.com/owner/repository.");
         }
 
-        var jiraProjectKey = Get("JIRA_PROJECT_KEY", "DFAI");
-        var jiraStatusName = Get("JIRA_STATUS_NAME", "Selected for Development");
-        var pickupLabel = Get("JIRA_PICKUP_LABEL", "ai-agent-picked");
-        var failureLabel = Get("JIRA_FAILURE_LABEL", "ai-agent-failed");
-        ValidateLabel(pickupLabel, "JIRA_PICKUP_LABEL");
-        ValidateLabel(failureLabel, "JIRA_FAILURE_LABEL");
+        var jiraProjectKey = Get(settings.Jira.JiraProjectKey, "DFAI");
+        var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
+        var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-agent-picked");
+        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
+        ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
+        ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
 
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
@@ -50,51 +50,39 @@ internal sealed record AgentConfiguration(
             $"AND issuetype != Epic " +
             "ORDER BY priority DESC, created ASC";
 
-        var githubToken = Environment.GetEnvironmentVariable("GH_TOKEN");
-        if (string.IsNullOrWhiteSpace(githubToken))
-        {
-            githubToken = Required("GITHUB_TOKEN");
-        }
-        else
-        {
-            githubToken = githubToken.Trim();
-        }
-
-        var pollSeconds = int.TryParse(Get("POLL_INTERVAL_SECONDS", "30"), out var parsedSeconds)
-            ? parsedSeconds
-            : throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be an integer.");
+        var agentGitHubToken = Required(settings.GitHub.AgentGitHubToken, "GitHub.AgentGitHubToken");
+        var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {
-            throw new InvalidOperationException("POLL_INTERVAL_SECONDS must be at least 5 seconds.");
+            throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
         }
 
         return new AgentConfiguration(
             jiraUri,
-            Required("JIRA_EMAIL"),
-            Required("JIRA_API_TOKEN"),
-            githubToken,
-            Required("GITHUB_REPOSITORY_TOKEN"),
+            Required(settings.Jira.JiraEmail, "Jira.JiraEmail"),
+            Required(settings.Jira.JiraApiToken, "Jira.JiraApiToken"),
+            agentGitHubToken,
+            Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             repositoryUri,
-            AddPickupLabelExclusion(Get("JIRA_JQL", defaultJql), pickupLabel),
+            AddPickupLabelExclusion(Get(settings.Jira.JiraJql, defaultJql), pickupLabel),
             pickupLabel,
             failureLabel,
-            Get("JIRA_IN_PROGRESS_STATUS", "In Progress"),
-            Get("JIRA_IN_REVIEW_STATUS", "In Review"),
+            Get(settings.Jira.JiraInProgressStatus, "In Progress"),
+            Get(settings.Jira.JiraInReviewStatus, "In Review"),
             TimeSpan.FromSeconds(pollSeconds));
     }
 
-    private static string Required(string name)
+    private static string Required(string? value, string name)
     {
-        var value = Environment.GetEnvironmentVariable(name);
         return string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException($"Required environment variable {name} is not set.")
+            ? throw new InvalidOperationException($"Required JSON setting {name} is not set.")
             : value.Trim();
     }
 
-    private static string Get(string name, string defaultValue) =>
-        string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name))
+    private static string Get(string? value, string defaultValue) =>
+        string.IsNullOrWhiteSpace(value)
             ? defaultValue
-            : Environment.GetEnvironmentVariable(name)!.Trim();
+            : value.Trim();
 
     private static string EscapeJql(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)

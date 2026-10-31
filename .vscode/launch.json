@@ -8,7 +8,10 @@
       "preLaunchTask": "build aiworker",
       "program": "${workspaceFolder}/aiteam/aiworker/src/CodingAgent/bin/Debug/net10.0/CodingAgent.dll",
       "args": [],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/aiteam/aiworker/src/CodingAgent/bin/Debug/net10.0",
+      "env": {
+        "DOTNET_ENVIRONMENT": "Development"
+      },
       "envFile": "${workspaceFolder}/aiteam/.env",
       "console": "integratedTerminal",
       "stopAtEntry": false
