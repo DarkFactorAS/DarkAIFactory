@@ -12,6 +12,8 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal("ai-agent-picked", config.PickupLabel);
         Assert.Equal("ai-agent-failed", config.FailureLabel);
+        Assert.Equal("In Progress", config.InProgressStatus);
+        Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
         Assert.Equal("gh-token", config.GitHubToken);
         Assert.Equal(
@@ -75,6 +77,18 @@ public sealed class AgentConfigurationTests
         using var env = new EnvironmentScope().WithValidDefaults().Set("TARGET_REPOSITORY_URL", url);
 
         Assert.Throws<InvalidOperationException>(AgentConfiguration.Load);
+    }
+
+    [Fact]
+    public void Load_AcceptsStatusOverrides()
+    {
+        using var env = new EnvironmentScope().WithValidDefaults()
+            .Set("JIRA_IN_PROGRESS_STATUS", "Doing").Set("JIRA_IN_REVIEW_STATUS", "Code Review");
+
+        var config = AgentConfiguration.Load();
+
+        Assert.Equal("Doing", config.InProgressStatus);
+        Assert.Equal("Code Review", config.InReviewStatus);
     }
 
     [Fact]

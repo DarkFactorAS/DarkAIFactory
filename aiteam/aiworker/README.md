@@ -16,8 +16,9 @@ skips epics. Set `JIRA_JQL` to use a different query.
 3. Set `GH_TOKEN` to a fine-grained GitHub personal access token with only the
    **Copilot Requests** permission.
 4. Set `GITHUB_REPOSITORY_TOKEN` to a separate fine-grained token with
-   **Contents: read and write** permission for the target repository. The
-   worker uses this token only to clone and push its branch.
+   **Contents: read and write** and **Pull requests: read and write**
+   permissions for the target repository. The worker uses this token only to
+   clone, push its branch and open the pull request.
 5. Set `TARGET_REPOSITORY_URL` to an HTTPS GitHub repository URL, such as
    `https://github.com/owner/repository.git`.
 6. From the `aiteam` directory, start the worker with:
@@ -32,8 +33,12 @@ private temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
 and pushes a commit if the agent made changes. Successfully delivered workspaces
 are removed. Workspaces for failed or interrupted tasks are retained for
 recovery; their paths are written to the worker log, and Jira failure comments
-identify any branch that was already pushed. The worker does not create pull
-requests. Copilot cannot execute shell commands, so it cannot run tests; validate
+identify any branch that was already pushed. When work starts, the worker moves
+the issue to `In Progress` (a failure to do so is logged and commented, and work
+continues). After pushing, it opens a pull request against the repository's
+default branch, links it in the Jira result comment and moves the issue to
+`In Review`. If the agent made no changes, no pull request is created and the
+status is left unchanged. Copilot cannot execute shell commands, so it cannot run tests; validate
 the pushed branch separately. The worker follows repository Markdown
 instructions, including applicable `AGENTS.md` and Git workflow rules.
 
@@ -71,11 +76,13 @@ included in the Docker image.
 | `JIRA_EMAIL` | required | Jira account email |
 | `JIRA_API_TOKEN` | required | Jira API token |
 | `GH_TOKEN` | required | Fine-grained token with Copilot Requests permission |
-| `GITHUB_REPOSITORY_TOKEN` | required | Fine-grained token with Contents read/write access to the target repository |
+| `GITHUB_REPOSITORY_TOKEN` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
 | `TARGET_REPOSITORY_URL` | required | HTTPS URL of the GitHub repository to clone |
 | `JIRA_PROJECT_KEY` | `DFAI` | Project used by the default JQL |
 | `JIRA_STATUS_NAME` | `Selected for Development` | Status used by the default JQL |
 | `JIRA_JQL` | generated from project/status | Optional complete JQL override |
 | `JIRA_PICKUP_LABEL` | `ai-agent-picked` | Label used to avoid repeat pickup |
 | `JIRA_FAILURE_LABEL` | `ai-agent-failed` | Label added when processing fails |
+| `JIRA_IN_PROGRESS_STATUS` | `In Progress` | Status the issue is moved to when work starts |
+| `JIRA_IN_REVIEW_STATUS` | `In Review` | Status the issue is moved to after the pull request is created |
 | `POLL_INTERVAL_SECONDS` | `30` | Poll interval (minimum 5 seconds) |

@@ -77,6 +77,45 @@ internal sealed class JiraClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task TransitionToAsync(string issueKey, string statusName, CancellationToken cancellationToken)
+    {
+        var path = $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/transitions";
+        string? transitionId = null;
+        var available = new List<string>();
+        using (var response = await _httpClient.GetAsync(path, cancellationToken))
+        {
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (document.RootElement.TryGetProperty("transitions", out var transitions))
+            {
+                foreach (var transition in transitions.EnumerateArray())
+                {
+                    var name = ReadString(transition, "name");
+                    var target = transition.TryGetProperty("to", out var to) ? ReadString(to, "name") : string.Empty;
+                    available.Add(target.Length > 0 ? target : name);
+                    if (transitionId is null &&
+                        (string.Equals(target, statusName, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(name, statusName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        transitionId = ReadString(transition, "id");
+                    }
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(transitionId))
+        {
+            throw new InvalidOperationException(
+                $"Jira issue {issueKey} has no transition to \"{statusName}\". " +
+                $"Available transitions: {(available.Count == 0 ? "none" : string.Join(", ", available))}.");
+        }
+
+        var body = new { transition = new { id = transitionId } };
+        using var transitionResponse = await _httpClient.PostAsJsonAsync(path, body, cancellationToken);
+        transitionResponse.EnsureSuccessStatusCode();
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private static string ReadString(JsonElement parent, string propertyName) =>
