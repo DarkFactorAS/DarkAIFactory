@@ -9,6 +9,33 @@ posting the result.
 By default, it watches project `DFAI` in status `Selected for Development` and
 skips epics. Set `JIRA_JQL` to use a different query.
 
+## Database patcher
+
+Before checking Copilot availability or polling Jira, the manager waits for the
+database connection and runs `AiDatabasePatcher`, derived from
+`DarkFactor.Common.Lib`'s `StartupDatabasePatcher`, just like aibuildpage.
+It currently applies only the base patches. Patching failure is logged and
+stops the manager with exit code 1.
+
+Copy `aiteam/config/aimanager/appsettings.Production.json.example` to
+`aiteam/config/aimanager/appsettings.Production.json` and set
+`DatabaseConnection` to match the MariaDB credentials in `aiteam/.env`.
+The runtime configuration is ignored by Git. Compose mounts this directory
+read-only at `/app/Config`; override `AIMANAGER_CONFIG_PATH` for another directory.
+For local runs, the shared configuration helper reads
+`Config/appsettings.<DOTNET_ENVIRONMENT>.json` relative to the working directory
+(`Production` by default). Create that directory/file before running locally.
+
+Restore requires `NUGET_USERNAME` and `NUGET_TOKEN` for the private
+`DarkFactorAS` NuGet feed. Docker builds receive them through BuildKit secrets,
+not build arguments; set them in `aiteam/.env` for Compose. For a direct build:
+
+```sh
+docker build -f aiteam/aimanager/Dockerfile \
+  --secret id=nuget_username,env=NUGET_USERNAME \
+  --secret id=nuget_token,env=NUGET_TOKEN .
+```
+
 ## Run
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
@@ -74,7 +101,8 @@ The **build aimanager** task is also available from **Terminal > Run Build Task*
 
 Unit tests (xunit) live in `ManagerAgent.Tests.csproj` and the `*Tests.cs` files
 next to it. They cover configuration loading, the Jira client (with a stubbed
-HTTP handler) and prompt building. Run them with:
+HTTP handler), prompt building and base database patching success/failure.
+Run them with:
 
 ```sh
 dotnet test aiteam/aimanager/ManagerAgent.Tests.csproj

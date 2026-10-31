@@ -30,6 +30,14 @@ services:
     build:
       context: ..
       dockerfile: aiteam/aimanager/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      aiteam_database:
+        condition: service_healthy
+    volumes:
+      - ${AIMANAGER_CONFIG_PATH:-./config/aimanager}:/app/Config:ro
     restart: unless-stopped
     init: true
     environment:
@@ -77,3 +85,9 @@ volumes:
   aiteam_mariadb_data:
     external: true
     name: ${MARIADB_VOLUME_NAME:-aiteam_mariadb_data}
+
+secrets:
+  nuget_username:
+    environment: NUGET_USERNAME
+  nuget_token:
+    environment: NUGET_TOKEN

@@ -1,7 +1,37 @@
 using ManagerAgent;
+using ManagerAgent.Repository;
+using DFCommonLib.Config;
+using DFCommonLib.DataAccess;
+using DFCommonLib.Logger;
+using DFCommonLib.Utils;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
 var configuration = AgentConfiguration.Load();
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
+new DFServices(builder.Services)
+    .SetupLogger()
+    .SetupMySql()
+    .LogToConsole(DFLogLevel.INFO);
+builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
+
+using var host = builder.Build();
+using var databaseScope = host.Services.CreateScope();
+var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
+databasePatcher.WaitForConnection();
+if (databasePatcher.RunPatcher())
+{
+    DFLogger.LogOutput(DFLogLevel.INFO, "Startup", "Database patcher ran successfully");
+}
+else
+{
+    DFLogger.LogOutput(DFLogLevel.ERROR, "Startup", "Database patcher failed");
+    Environment.ExitCode = 1;
+    return;
+}
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
