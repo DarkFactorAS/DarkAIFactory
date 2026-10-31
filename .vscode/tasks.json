@@ -18,6 +18,19 @@
       }
     },
     {
+      "label": "build aibuildpage",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/aiteam/aibuildpage/src/AiBuildPage/AiBuildPage.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
       "label": "test aiworker",
       "type": "process",
       "command": "dotnet",
