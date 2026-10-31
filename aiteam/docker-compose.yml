@@ -1,7 +1,8 @@
 services:
   coding-agent:
     build:
-      context: ./aiworker
+      context: ..
+      dockerfile: aiteam/aiworker/Dockerfile
     restart: unless-stopped
     init: true
     environment:

@@ -39,7 +39,7 @@ skips epics. Set `JIRA_JQL` to use a different query.
    ```
 
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
-`aiteam/aiworker/`. For each issue, the worker clones the repository to an
+the repository root (the Dockerfile is `aiteam/aiworker/Dockerfile`, as used by CI). For each issue, the worker clones the repository to an
 private temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
 and pushes a commit if the agent made changes. Successfully delivered workspaces
 are removed. Workspaces for failed or interrupted tasks are retained for
