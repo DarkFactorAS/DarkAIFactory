@@ -16,7 +16,122 @@ public sealed class JiraClientTests
         jql,
         "picked",
         "failed",
+        "In Progress",
+        "In Review",
         TimeSpan.FromSeconds(30));
+
+    private sealed class SequenceHandler(params (HttpStatusCode Status, string Body)[] responses) : HttpMessageHandler
+    {
+        private int _next;
+
+        public List<(HttpRequestMessage Request, string? Body)> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+            Requests.Add((request, body));
+            var (status, responseBody) = responses[Math.Min(_next++, responses.Length - 1)];
+            return new HttpResponseMessage(status)
+            {
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private const string TransitionsJson = """
+        {"transitions":[
+          {"id":"11","name":"Start","to":{"name":"In Progress"}},
+          {"id":"21","name":"Send to review","to":{"name":"In Review"}}]}
+        """;
+
+    [Theory]
+    [InlineData("In Progress", "11")]
+    [InlineData("in review", "21")]
+    [InlineData("Start", "11")]
+    public async Task TransitionToAsync_PostsMatchingTransition(string status, string expectedId)
+    {
+        var handler = new SequenceHandler((HttpStatusCode.OK, TransitionsJson), (HttpStatusCode.NoContent, "{}"));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.TransitionToAsync("DFAI-3", status, CancellationToken.None);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[0].Request.Method);
+        var post = handler.Requests[1];
+        Assert.Equal(HttpMethod.Post, post.Request.Method);
+        Assert.Equal("/rest/api/3/issue/DFAI-3/transitions", post.Request.RequestUri!.AbsolutePath);
+        using var body = JsonDocument.Parse(post.Body!);
+        Assert.Equal(expectedId, body.RootElement.GetProperty("transition").GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_ThrowsWhenNoMatch()
+    {
+        var handler = new SequenceHandler((HttpStatusCode.OK, TransitionsJson));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.TransitionToAsync("DFAI-3", "Done", CancellationToken.None));
+
+        Assert.Contains("In Progress", exception.Message);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_PrefersDestinationOverMatchingName()
+    {
+        const string transitions = """
+            {"transitions":[
+              {"id":"wrong","name":"In Progress","to":{"name":"Other"}},
+              {"id":"right","name":"Start work","to":{"name":"In Progress"}}]}
+            """;
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, transitions),
+            (HttpStatusCode.NoContent, "{}"));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.TransitionToAsync("DFAI-3", "In Progress", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.Requests[1].Body!);
+        Assert.Equal("right", body.RootElement.GetProperty("transition").GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task TransitionToAsync_ThrowsOnHttpFailure()
+    {
+        using var client = new JiraClient(
+            CreateConfiguration(),
+            new SequenceHandler((HttpStatusCode.Forbidden, "{}")));
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.TransitionToAsync("DFAI-3", "In Progress", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreatePullRequestAsync_UsesDefaultBranchAndReturnsUrl()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"default_branch":"main"}"""),
+            (HttpStatusCode.Created, """{"html_url":"https://github.com/owner/repo/pull/7"}"""));
+
+        var url = await GitHubRepository.CreatePullRequestAsync(
+            CreateConfiguration() with { RepositoryUrl = new Uri("https://github.com/owner/repo.git") },
+            "ai-agent/DFAI-3-x",
+            "DFAI-3",
+            "Do thing",
+            CancellationToken.None,
+            handler);
+
+        Assert.Equal("https://github.com/owner/repo/pull/7", url);
+        Assert.Equal("/repos/owner/repo", handler.Requests[0].Request.RequestUri!.AbsolutePath);
+        Assert.Equal("/repos/owner/repo/pulls", handler.Requests[1].Request.RequestUri!.AbsolutePath);
+        using var body = JsonDocument.Parse(handler.Requests[1].Body!);
+        Assert.Equal("ai-agent/DFAI-3-x", body.RootElement.GetProperty("head").GetString());
+        Assert.Equal("main", body.RootElement.GetProperty("base").GetString());
+        Assert.Equal("DFAI-3: Do thing", body.RootElement.GetProperty("title").GetString());
+    }
 
     private sealed class StubHandler(HttpStatusCode status, string responseBody = "{}") : HttpMessageHandler
     {
@@ -41,7 +156,7 @@ public sealed class JiraClientTests
     public async Task FindWorkAsync_ParsesAdfDescription()
     {
         const string json = """
-        {"issues":[{"key":"DFAI-1","fields":{"summary":"Title","description":{"type":"doc","content":[
+        {"issues":[{"key":"DFAI-1","fields":{"summary":"Title","status":{"name":"Selected for Development"},"description":{"type":"doc","content":[
           {"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}]},
@@ -56,6 +171,8 @@ public sealed class JiraClientTests
         var issue = Assert.Single(issues);
         Assert.Equal("DFAI-1", issue.Key);
         Assert.Equal("Title", issue.Summary);
+        Assert.Equal("Selected for Development", issue.StatusName);
+        Assert.Contains("fields=summary,description,status", handler.Request!.RequestUri!.Query);
         var lines = issue.Description.Split(Environment.NewLine);
         Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x" }, lines);
     }

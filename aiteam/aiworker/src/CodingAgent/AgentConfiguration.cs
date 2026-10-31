@@ -10,6 +10,8 @@ internal sealed record AgentConfiguration(
     string JiraJql,
     string PickupLabel,
     string FailureLabel,
+    string InProgressStatus,
+    string InReviewStatus,
     TimeSpan PollInterval)
 {
     public static AgentConfiguration Load()
@@ -76,6 +78,8 @@ internal sealed record AgentConfiguration(
             AddPickupLabelExclusion(Get("JIRA_JQL", defaultJql), pickupLabel),
             pickupLabel,
             failureLabel,
+            Get("JIRA_IN_PROGRESS_STATUS", "In Progress"),
+            Get("JIRA_IN_REVIEW_STATUS", "In Review"),
             TimeSpan.FromSeconds(pollSeconds));
     }
 

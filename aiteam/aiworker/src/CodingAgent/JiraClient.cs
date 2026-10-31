@@ -27,7 +27,7 @@ internal sealed class JiraClient : IDisposable
     {
         var query =
             $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
-            "&fields=summary,description&maxResults=20";
+            "&fields=summary,description,status&maxResults=20";
         using var response = await _httpClient.GetAsync(
             $"/rest/api/3/search/jql?{query}",
             cancellationToken);
@@ -42,7 +42,8 @@ internal sealed class JiraClient : IDisposable
             issues.Add(new JiraIssue(
                 issue.GetProperty("key").GetString() ?? throw new InvalidDataException("A Jira result has no issue key."),
                 ReadString(fields, "summary"),
-                ReadAdfText(fields, "description")));
+                ReadAdfText(fields, "description"),
+                fields.TryGetProperty("status", out var status) ? ReadString(status, "name") : string.Empty));
         }
 
         return issues;
@@ -75,6 +76,52 @@ internal sealed class JiraClient : IDisposable
             body,
             cancellationToken);
         response.EnsureSuccessStatusCode();
+    }
+
+    public async Task TransitionToAsync(string issueKey, string statusName, CancellationToken cancellationToken)
+    {
+        var path = $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/transitions";
+        string? destinationTransitionId = null;
+        string? nameTransitionId = null;
+        var available = new List<string>();
+        using (var response = await _httpClient.GetAsync(path, cancellationToken))
+        {
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (document.RootElement.TryGetProperty("transitions", out var transitions))
+            {
+                foreach (var transition in transitions.EnumerateArray())
+                {
+                    var name = ReadString(transition, "name");
+                    var target = transition.TryGetProperty("to", out var to) ? ReadString(to, "name") : string.Empty;
+                    available.Add(target.Length > 0 ? target : name);
+                    if (string.IsNullOrEmpty(destinationTransitionId) &&
+                        string.Equals(target, statusName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        destinationTransitionId = ReadString(transition, "id");
+                    }
+
+                    if (string.IsNullOrEmpty(nameTransitionId) &&
+                        string.Equals(name, statusName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        nameTransitionId = ReadString(transition, "id");
+                    }
+                }
+            }
+        }
+
+        var transitionId = destinationTransitionId ?? nameTransitionId;
+        if (string.IsNullOrEmpty(transitionId))
+        {
+            throw new InvalidOperationException(
+                $"Jira issue {issueKey} has no transition to \"{statusName}\". " +
+                $"Available transitions: {(available.Count == 0 ? "none" : string.Join(", ", available))}.");
+        }
+
+        var body = new { transition = new { id = transitionId } };
+        using var transitionResponse = await _httpClient.PostAsJsonAsync(path, body, cancellationToken);
+        transitionResponse.EnsureSuccessStatusCode();
     }
 
     public void Dispose() => _httpClient.Dispose();
