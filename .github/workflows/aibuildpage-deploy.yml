@@ -1,0 +1,49 @@
+name: AI Build Page - Deploy
+
+permissions:
+  contents: read
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    types: [closed]
+    branches: ["master", "main"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: aibuildpage-deploy
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.event.pull_request.merged == true || inputs.environment == 'staging' || inputs.environment == 'production' || github.event_name == 'release'
+    name: Deploy to Staging
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: staging
+      external_port: ${{ fromJSON(vars.AIBUILDPAGE_STAGING_PORT) }}
+      project_path: aiteam/aibuildpage
+      project_name: aibuildpage
+    secrets: inherit
+
+  production:
+    if: github.event.pull_request.merged == true || inputs.environment == 'production' || github.event_name == 'release'
+    name: Deploy to Production
+    needs: [staging]
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: ${{ fromJSON(vars.AIBUILDPAGE_PRODUCTION_PORT) }}
+      project_path: aiteam/aibuildpage
+      project_name: aibuildpage
+    secrets: inherit

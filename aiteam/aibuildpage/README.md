@@ -6,6 +6,22 @@ Build: `dotnet build aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj`
 
 Run: `dotnet run --project aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj`
 
+## Docker and deployment
+
+Build from the repository root with `NUGET_USERNAME` and `NUGET_TOKEN` set:
+
+```sh
+docker build . --file aiteam/aibuildpage/Dockerfile --tag aibuildpage \
+  --secret id=nuget_username,env=NUGET_USERNAME \
+  --secret id=nuget_token,env=NUGET_TOKEN
+```
+
+The image listens on port 8080 and runs as the non-root `app` user. Runtime
+configuration is excluded from the image; mount the configured directory
+read-only at `/app/Config` and provide access to the configured database.
+See [deployment setup and Infrastructure blockers](../../README.md#deployment)
+before running the GitHub deployment workflow.
+
 ## Database patcher
 
 Configure Production, Development or DevelopmentDocker JSON files using
