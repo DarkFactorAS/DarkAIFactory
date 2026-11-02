@@ -18,7 +18,8 @@ docker build . --file aiteam/aibuildpage/Dockerfile --tag aibuildpage \
 
 The image listens on port 8080 and runs as the non-root `app` user. Runtime
 configuration is excluded from the image; mount the configured directory
-read-only at `/app/Config` and provide access to the configured database.
+read-only at `/app/Config` using the same `aiteam/config` directory as the other
+clients and dbmigration, and provide access to the configured database.
 See [deployment setup and Infrastructure blockers](../../README.md#deployment)
 before running the GitHub deployment workflow.
 

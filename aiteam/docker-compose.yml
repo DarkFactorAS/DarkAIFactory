@@ -10,7 +10,7 @@ services:
       aiteam_database:
         condition: service_healthy
     volumes:
-      - ${DBMIGRATION_CONFIG_PATH:-./config/dbmigration}:/app/Config:ro
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
     restart: "no"
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -30,7 +30,7 @@ services:
       dbmigration:
         condition: service_completed_successfully
     volumes:
-      - ${AIWORKER_CONFIG_PATH:-./config/aiworker}:/app/Config:ro
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
     restart: unless-stopped
     init: true
     environment:
@@ -52,7 +52,7 @@ services:
       dbmigration:
         condition: service_completed_successfully
     volumes:
-      - ${AIMANAGER_CONFIG_PATH:-./config/aimanager}:/app/Config:ro
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
     restart: unless-stopped
     init: true
     environment:

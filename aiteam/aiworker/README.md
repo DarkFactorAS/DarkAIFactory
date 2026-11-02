@@ -14,7 +14,7 @@ skips epics. Set `Jira.JiraJql` to use a different query.
 First configure the app's environment-specific JSON file as described in
 [App configuration](../config/README.md). Jira/GitHub settings come from the shared
 database `settings` table, with three client-specific rows. Docker mounts
-`aiteam/config/aiworker` at `/app/Config`. The worker now requires a database
+the shared `aiteam/config` directory at `/app/Config` (`AITEAM_CONFIG_PATH` overrides it). The worker now requires a database
 connection to an already migrated database. It never creates tables.
 Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
@@ -76,7 +76,7 @@ the pickup label and rerunning the implementation.
 
 Open the repository root in VS Code, copy `aiteam/.env.example` to
 `aiteam/.env` for deployment settings, configure the database connection in
-`aiteam/config/aiworker/appsettings.Development.json`, and populate Jira/GitHub
+`aiteam/config/appsettings.Development.json`, and populate Jira/GitHub
 credentials and repository URL in the database `settings` table.
 Install the C# extension, then select **AI Worker (.NET)** in Run and Debug and
 press F5. VS Code builds the worker first and loads `aiteam/.env`.

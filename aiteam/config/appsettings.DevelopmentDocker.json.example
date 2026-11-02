@@ -1,8 +1,9 @@
 {
-  "AppName": "DbMigration",
+  "AppName": "DarkAIFactory",
   "EnableLogging": true,
+  "PollIntervalSeconds": 30,
   "DatabaseConnection": {
-    "Server": "localhost",
+    "Server": "host.docker.internal",
     "Port": 3306,
     "Database": "aiteam",
     "Username": "aiteam",

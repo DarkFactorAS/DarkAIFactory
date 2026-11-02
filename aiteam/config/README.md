@@ -6,12 +6,13 @@ as `ConfigurationHelper<AgentSettings>` for the agents and
 `Config/appsettings.<environment>.json`. JSON contains app/database settings and
 the agents' `PollIntervalSeconds` (integer, minimum 5), not Jira/GitHub settings.
 All three clients load Jira/GitHub settings from the same MariaDB `settings`
-table at startup, using the same loader. Point their JSON database
-connections at the same database. Restart clients after changing settings.
+table at startup, using the same loader. All four programs use the same
+environment-specific JSON files directly in this `aiteam/config` directory.
+Restart clients after changing settings.
 There are no JSON or environment Jira/GitHub overrides or fallbacks.
 
-Each app (`aiworker`, `aimanager`, `aibuildpage`, `dbmigration`) has a template for every
-supported environment. Copy the selected `appsettings.<environment>.json.example`
+One shared template covers all four programs for each supported environment.
+Copy the selected `appsettings.<environment>.json.example`
 to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 
 - `appsettings.Production.json`: deployed database host `aiteam_database`.
@@ -20,15 +21,24 @@ to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 - `appsettings.DevelopmentDocker.json`: database host `host.docker.internal`
   and the port of the database running on your host.
 
-For example, to configure aimanager for local development:
+For example, to configure all programs for local development:
 
 ```sh
-cp aiteam/config/aimanager/appsettings.Development.json.example \
-   aiteam/config/aimanager/appsettings.Development.json
+cp aiteam/config/appsettings.Development.json.example \
+   aiteam/config/appsettings.Development.json
 ```
 
 Run this from the repository root, only if the destination does not already
-contain your configuration. The same naming convention applies to all three apps.
+contain your configuration. `AppName` is shared (`DarkAIFactory` in the templates).
+Both agents use the same `PollIntervalSeconds`; aibuildpage and dbmigration
+ignore this agent-only property.
+
+When upgrading from per-client directories, move one selected configuration for
+each environment directly into `aiteam/config` and reconcile any differing
+database values before removing old copies. The old directories are no longer
+read. Replace `AIWORKER_CONFIG_PATH`, `AIMANAGER_CONFIG_PATH` and
+`DBMIGRATION_CONFIG_PATH` in `.env` with one `AITEAM_CONFIG_PATH` if overriding
+the default `./config` mount.
 
 Set the actual database name, username and password. Do not commit these runtime
 files; Git ignores them. The templates contain no credentials. All three clients
@@ -61,8 +71,7 @@ initially empty and must be populated by an administrator.
 ### Migrating existing configuration
 
 1. Stop the agents and back up the database.
-2. Configure dbmigration and all clients' JSON `DatabaseConnection` values for
-   the same database.
+2. Configure the shared JSON `DatabaseConnection` for all programs.
 3. Run dbmigration to create/seed the tables. In Compose, run
    `docker compose --env-file aiteam/.env -f aiteam/docker-compose.yml run --build --rm dbmigration`
    from the repository root.
@@ -129,12 +138,12 @@ works regardless of the directory from which `dotnet run` is invoked.
 Local publishing therefore includes credentials: treat publish output as sensitive.
 
 Docker builds do not copy runtime configuration into the image. Compose mounts
-`config/aiworker`, `config/aimanager` and `config/dbmigration` read-only at
-`/app/Config`, controlled by `AIWORKER_CONFIG_PATH`, `AIMANAGER_CONFIG_PATH` and
-`DBMIGRATION_CONFIG_PATH`. Both agents depend on successful completion of the
+the same `config` directory read-only at `/app/Config` for all services,
+controlled by `AITEAM_CONFIG_PATH` (default `./config`).
+Both agents depend on successful completion of the
 one-shot dbmigration service, which waits for MariaDB's health check.
 When deploying aibuildpage
-separately, mount its config directory at `<application directory>/Config`.
+separately, mount this same shared directory at `<application directory>/Config`.
 Use `DOTNET_ENVIRONMENT=DevelopmentDocker` for that environment.
 
 ## Database administration

@@ -18,11 +18,11 @@ The standalone [dbmigration](../dbmigration/README.md) executable creates:
 
 The manager does not create tables or run migrations. Run dbmigration first;
 missing tables or database read failures stop startup.
-Copy `aiteam/config/aimanager/appsettings.Production.json.example`
-to `aiteam/config/aimanager/appsettings.Production.json` and set
+Copy `aiteam/config/appsettings.Production.json.example`
+to `aiteam/config/appsettings.Production.json` and set
 `DatabaseConnection` to match MariaDB credentials in `aiteam/.env`.
 The runtime configuration is ignored by Git. Compose mounts this directory
-read-only at `/app/Config`; override `AIMANAGER_CONFIG_PATH` for another directory.
+read-only at `/app/Config` for all services; override `AITEAM_CONFIG_PATH` for another directory.
 For local runs, configured JSON files are copied into the executable's `Config`
 directory. See [App configuration](../config/README.md) for Production,
 Development and DevelopmentDocker setup. Startup selects the executable directory

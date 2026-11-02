@@ -6,9 +6,9 @@ tables or applies migrations.
 
 ## Configuration and local execution
 
-Copy the appropriate template from `../config/dbmigration/` to the same filename
+Copy the appropriate template from the shared `../config/` directory to the same filename
 without `.example`, preserving any existing runtime config. Set
-`DatabaseConnection` to the same database used by the clients.
+`DatabaseConnection` once for all clients and dbmigration.
 See [App configuration](../config/README.md) for environments and credentials.
 
 From the repository root:
@@ -52,7 +52,7 @@ with older clients that still perform startup migrations.
 
 ## Docker and Compose
 
-Configure `aiteam/config/dbmigration/appsettings.Production.json` (or the selected
+Configure `aiteam/config/appsettings.Production.json` (or the selected
 environment) before running:
 
 ```sh
@@ -62,7 +62,7 @@ docker compose --env-file aiteam/.env -f aiteam/docker-compose.yml run --build -
 Populate the empty credential settings after the initial migration, then start
 the agents. Normal Compose startup also runs the one-shot `dbmigration` service
 after MariaDB is healthy; both agents wait for its successful completion.
-`DBMIGRATION_CONFIG_PATH` overrides the read-only `/app/Config` mount.
+`AITEAM_CONFIG_PATH` overrides the shared read-only `/app/Config` mount for all services.
 For upgrades, explicitly rerun the command above before restarting clients.
 
 The Docker build uses the same private NuGet feed and BuildKit secrets as the
