@@ -34,7 +34,6 @@ jobs:
       external_port: 0
       project_path: aiteam/aiworker
       project_name: CodingAgent
-      config_settings: skipdbcheck
     secrets: inherit
 
   production:
@@ -47,5 +46,4 @@ jobs:
       external_port: 0
       project_path: aiteam/aiworker
       project_name: CodingAgent
-      config_settings: skipdbcheck
     secrets: inherit

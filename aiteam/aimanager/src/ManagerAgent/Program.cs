@@ -1,4 +1,5 @@
 using ManagerAgent;
+using AiTeam.Configuration;
 using ManagerAgent.Repository;
 using DFCommonLib.Config;
 using DFCommonLib.DataAccess;
@@ -21,11 +22,12 @@ new DFServices(builder.Services)
 builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<ManagerPlanRepository>();
+builder.Services.AddScoped<IntegrationSettingsRepository>();
 
 using var host = builder.Build();
-var settings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
+var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
-var pollInterval = AgentConfiguration.LoadPollInterval(settings);
+var pollInterval = AgentConfiguration.LoadPollInterval(appSettings.PollIntervalSeconds);
 using var databaseScope = host.Services.CreateScope();
 var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
 databasePatcher.WaitForConnection();
@@ -37,6 +39,8 @@ if (!databasePatcher.RunPatcher())
 }
 
 DFLogger.LogOutput(DFLogLevel.INFO, "Startup", "Database patcher ran successfully");
+var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
+    .Load("aimanager", appSettings.PollIntervalSeconds);
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>

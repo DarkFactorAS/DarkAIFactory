@@ -6,6 +6,7 @@ RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
     --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
     dotnet restore src/CodingAgent/CodingAgent.csproj
 COPY aiteam/aiworker/src/CodingAgent/ src/CodingAgent/
+COPY aiteam/shared/ /shared/
 RUN dotnet publish src/CodingAgent/CodingAgent.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0

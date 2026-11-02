@@ -25,7 +25,10 @@ public sealed class AiDatabasePatcherTests
         {
             expectedCalls.AddRange([
                 "patch:StartupDatabasePatcher:2", "successful",
-                "patch:StartupDatabasePatcher:3", "successful"]);
+                "patch:StartupDatabasePatcher:3", "successful",
+                "init:IntegrationSettings",
+                "patch:IntegrationSettings:1", "successful",
+                "patch:IntegrationSettings:2", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -41,6 +44,10 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("`jira_key` VARCHAR(255) NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("`plan` LONGTEXT NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("UNIQUE KEY `uq_manager_plans_jira_key`", dbPatcher.Sql[2]);
+            Assert.Contains("CREATE TABLE `settings`", dbPatcher.Sql[3]);
+            Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[3]);
+            Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[3]);
+            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[4]);
         }
     }
 

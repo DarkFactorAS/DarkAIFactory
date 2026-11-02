@@ -6,6 +6,9 @@ services:
       secrets:
         - nuget_username
         - nuget_token
+    depends_on:
+      aiteam_database:
+        condition: service_healthy
     volumes:
       - ${AIWORKER_CONFIG_PATH:-./config/aiworker}:/app/Config:ro
     restart: unless-stopped

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using AiTeam.Configuration;
 
 namespace ManagerAgent.Tests;
 
@@ -12,11 +13,11 @@ internal sealed class SettingsScope : IDisposable
 
     public SettingsScope() => _current = this;
 
-    public static AgentSettings Current
+    public static IntegrationSettings Current
     {
         get
         {
-            var settings = new AgentSettings();
+            var settings = new IntegrationSettings();
             new ConfigurationBuilder().AddInMemoryCollection(
                 (_current ?? throw new InvalidOperationException("No test settings scope."))._values)
                 .Build().Bind(settings);
@@ -25,6 +26,7 @@ internal sealed class SettingsScope : IDisposable
     }
 
     public SettingsScope WithValidDefaults() => Set("Jira:JiraBaseUrl", "https://example.atlassian.net")
+        .Set("Jira:JiraPickupLabel", "ai-manager-planned")
         .Set("Jira:JiraEmail", "bot@example.com")
         .Set("Jira:JiraApiToken", "jira-token")
         .Set("GitHub:AgentGitHubToken", "gh-token")

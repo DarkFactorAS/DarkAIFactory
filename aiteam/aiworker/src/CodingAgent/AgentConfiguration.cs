@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace CodingAgent;
 
 internal sealed record AgentConfiguration(
@@ -14,7 +16,7 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
-    public static AgentConfiguration Load(AgentSettings settings)
+    public static AgentConfiguration Load(IntegrationSettings settings)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -75,7 +77,7 @@ internal sealed record AgentConfiguration(
     private static string Required(string? value, string name)
     {
         return string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException($"Required JSON setting {name} is not set.")
+            ? throw new InvalidOperationException($"Required database setting {name} is not set.")
             : value.Trim();
     }
 

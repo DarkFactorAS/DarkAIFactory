@@ -1,4 +1,5 @@
 using DFCommonLib.DataAccess;
+using AiTeam.Configuration;
 
 namespace aibuildpage.Repository;
 
@@ -10,6 +11,6 @@ public class AiDatabasePatcher : StartupDatabasePatcher
 
     public override bool RunPatcher()
     {
-        return base.RunPatcher();
+        return base.RunPatcher() && IntegrationSettingsPatcher.Run(_dbPatcher);
     }
 }

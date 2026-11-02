@@ -1,4 +1,5 @@
 using DFCommonLib.DataAccess;
+using AiTeam.Configuration;
 
 namespace ManagerAgent.Repository;
 
@@ -45,6 +46,6 @@ public class AiDatabasePatcher : StartupDatabasePatcher
                     REFERENCES `manager_projects` (`id`)
             )
             """);
-        return _dbPatcher.Successful();
+        return _dbPatcher.Successful() && IntegrationSettingsPatcher.Run(_dbPatcher);
     }
 }

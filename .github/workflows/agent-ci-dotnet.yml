@@ -24,10 +24,13 @@ jobs:
         env:
           NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet restore aiteam/aiworker/src/CodingAgent/CodingAgent.csproj
+        run: dotnet restore aiteam/aiworker/CodingAgent.Tests.csproj
 
       - name: Build
         run: dotnet build aiteam/aiworker/src/CodingAgent/CodingAgent.csproj --no-restore -c Release
+
+      - name: Unit tests
+        run: dotnet test aiteam/aiworker/CodingAgent.Tests.csproj --no-restore -c Release
 
       - name: Restore aibuildpage
         env:

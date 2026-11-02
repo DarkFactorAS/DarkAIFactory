@@ -31,8 +31,16 @@ the executable directory as its working directory.
 
 On startup the app runs `AiDatabasePatcher` (`src/aibuildpage/Repository/AiDatabasePatcher.cs`), which
 derives from `StartupDatabasePatcher` in `DarkFactor.Common.Lib`, like `BotDatabasePatcher` in the
-GameServer project. `RunPatcher` currently only runs the base class. The app waits for the database
-connection and exits with code 1 if patching fails.
+GameServer project. It also runs the shared `IntegrationSettings` migrations to
+create and seed `settings`. The app waits for the database connection and exits
+with code 1 if patching fails.
+
+After patching, the app loads all shared Jira/GitHub values and its own
+`Jira.JiraPickupLabel`, `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`
+rows through the same loader as both agents. Missing rows fail startup.
+Settings are available server-side via DI, never returned by the blank page.
+The app currently makes no Jira/GitHub calls; its token can remain empty.
+See the configuration guide for migrating existing credentials into the database.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured

@@ -25,7 +25,8 @@ read-only at `/app/Config`; override `AIMANAGER_CONFIG_PATH` for another directo
 For local runs, configured JSON files are copied into the executable's `Config`
 directory. See [App configuration](../config/README.md) for Production,
 Development and DevelopmentDocker setup. Startup selects the executable directory
-as its working directory; Jira/GitHub settings are in this same JSON file.
+as its working directory. Jira/GitHub settings load from the shared `settings`
+table, with three client-specific rows; see the configuration guide for migration.
 
 Populate the mappings after the first startup:
 
@@ -44,7 +45,7 @@ Polling logs announce each distinct project mapping only once per process,
 including newly added or changed mappings. The empty-project waiting message
 is also printed only once. Polling continues every cycle and errors are still reported.
 The manager reads project keys and repository URLs only from `manager_projects`;
-aiworker uses those options as JSON `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
+aiworker uses shared database settings `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
 
 ## Planning and recovery
 
@@ -60,7 +61,7 @@ A saved plan is reused on retries, so a Jira or label failure does not trigger
 another agent run. If posting fails partway through a multi-comment plan, retry
 may duplicate comments already posted. Database and Jira writes are not a
 single transaction. Failures are logged and reported to Jira with
-`ai-manager-failed`; incomplete tickets are retried next cycle. Plans already
+the shared failure label (`ai-agent-failed` by default); incomplete tickets are retried next cycle. Plans already
 posted to Jira are not posted again when only the analysis or completion label
 needs retrying. The analysis label is added even with a custom completion label.
 
@@ -72,9 +73,9 @@ manager completion label in Jira.
 ## Run
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
-2. In the selected appsettings JSON file, set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
-3. Set `GitHub.AgentGitHubToken` to a fine-grained token with **Copilot Requests** permission.
-4. Set `GitHub.GitHubRepositoryToken` with **Contents: read** permission for all mapped
+2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
+3. Set shared `GitHub.AgentGitHubToken` to a fine-grained token with **Copilot Requests** permission.
+4. Set the `aimanager` row `GitHub.GitHubRepositoryToken` with **Contents: read** permission for all mapped
    repositories and their submodules. The manager needs no push or pull-request
    permissions. Use a separate read-only token from aiworker when running both.
 5. Configure the database file above, and set `MARIADB_ROOT_PASSWORD`,
@@ -91,7 +92,9 @@ manager completion label in Jira.
    docker compose --env-file .env up --build -d manager-agent
    ```
 
-Compose also starts MariaDB. Populate `manager_projects` after startup.
+Compose also starts MariaDB. On first startup, migrations seed empty settings;
+populate them and restart as described in the configuration guide. Populate
+`manager_projects` after startup.
 The Docker build context is the repository root. The private `DarkFactorAS`
 NuGet feed requires `NUGET_USERNAME` and `NUGET_TOKEN`; Docker receives these
 through BuildKit secrets, not build arguments:
@@ -102,7 +105,7 @@ docker build -f aiteam/aimanager/Dockerfile \
   --secret id=nuget_token,env=NUGET_TOKEN .
 ```
 
-For local execution, provide the database and Jira/GitHub JSON configuration,
+For local execution, configure the database connection in JSON and Jira/GitHub settings in the database,
 then run `dotnet run --project aiteam/aimanager/src/ManagerAgent/ManagerAgent.csproj`.
 
 ## Tests
@@ -120,7 +123,10 @@ from Jira tickets.
 
 ## Configuration
 
-| JSON property | Default | Description |
+All Jira/GitHub entries below are database setting names; only
+`PollIntervalSeconds` remains in JSON.
+
+| Setting | Default | Description |
 | --- | --- | --- |
 | `Jira.JiraBaseUrl` | required | Shared HTTPS Jira instance |
 | `Jira.JiraEmail` | required | Jira account email |
@@ -130,6 +136,6 @@ from Jira tickets.
 | `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket status |
 | `Jira.JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
 | `Jira.JiraPickupLabel` | `ai-manager-planned` | Completion label |
-| `Jira.JiraFailureLabel` | `ai-manager-failed` | Failure label |
+| `Jira.JiraFailureLabel` | `ai-agent-failed` | Shared failure label |
 | `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Label added after the plan is posted to Jira |
 | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |

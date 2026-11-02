@@ -3,11 +3,12 @@
 All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
 as `ConfigurationHelper<AgentSettings>` for the agents and
 `ConfigurationHelper<AppSettings>` for aibuildpage, reading
-`Config/appsettings.<environment>.json`. Jira/GitHub credentials, labels, queries
-and polling settings now live in each agent's JSON file alongside app/database
-settings. Environment Jira/GitHub variables are no longer read or used as overrides.
-aimanager's project keys and repository URLs remain in the database; aiworker
-uses JSON `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
+`Config/appsettings.<environment>.json`. JSON contains app/database settings and
+the agents' `PollIntervalSeconds` (integer, minimum 5), not Jira/GitHub settings.
+All three clients load Jira/GitHub settings from the same MariaDB `settings`
+table at startup, using the same loader and migrations. Point their JSON database
+connections at the same database. Restart clients after changing settings.
+There are no JSON or environment Jira/GitHub overrides or fallbacks.
 
 Each app (`aiworker`, `aimanager`, `aibuildpage`) has a template for every
 supported environment. Copy the selected `appsettings.<environment>.json.example`
@@ -30,42 +31,80 @@ Run this from the repository root, only if the destination does not already
 contain your configuration. The same naming convention applies to all three apps.
 
 Set the actual database name, username and password. Do not commit these runtime
-files; Git ignores them. The templates contain no credentials. aiworker loads
-app configuration but does not connect to the database or run migrations.
-aimanager and aibuildpage require a database and run their startup patchers.
+files; Git ignores them. The templates contain no credentials. All three clients
+require a database connection and run startup migrations before loading settings.
 
-Each agent groups its settings under `Jira` and `GitHub`:
+## Shared Jira/GitHub settings
 
-```json
-{
-  "Jira": {
-    "JiraBaseUrl": "https://your-company.atlassian.net",
-    "JiraEmail": "your-jira-account@example.com",
-    "JiraApiToken": ""
-  },
-  "GitHub": {
-    "AgentGitHubToken": "",
-    "GitHubRepositoryToken": ""
-  }
-}
+The `settings` table has a composite primary key (`client`, `name`) and a `value`
+column. Names use the former JSON section/property notation, for example
+`Jira.JiraApiToken`. A database check constraint enforces the scopes:
+
+- `shared`: every Jira/GitHub setting except the three below. All clients read
+  these same rows, including `Jira.JiraFailureLabel` (now `ai-agent-failed` for
+  both agents) and `GitHub.AgentGitHubToken`.
+- `aimanager`, `aiworker`, `aibuildpage`: exactly `Jira.JiraPickupLabel`,
+  `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`.
+  Each client reads its own three rows; no fallback to another client or shared
+  row is allowed. Missing rows fail explicitly.
+
+Startup migrations use the separate `IntegrationSettings` migration history,
+so any client can create and seed this table without interfering with manager
+project/plan migrations. Defaults are inserted once; subsequent starts do not
+overwrite configured values. Credentials and the worker repository URL are
+initially empty and must be populated by an administrator.
+
+### Migrating existing configuration
+
+1. Stop the agents and back up the database.
+2. Configure all clients' JSON `DatabaseConnection` values for the same database.
+3. Start aibuildpage once to create/seed `settings` (or start either agent to run
+   migrations; an agent with empty required credentials will stop on validation).
+4. Using Adminer or another trusted database tool, update the seeded rows.
+   Move the existing common Jira/GitHub values to `client = 'shared'`, choosing
+   one value where the old clients differed. Move only the three exceptions
+   to their respective client rows. Do not copy real tokens into SQL files,
+   source control, shell history or logs.
+5. Remove the old `Jira` and `GitHub` sections from runtime JSON and restart
+   the agents. Existing JSON values are ignored, never imported automatically.
+
+Example non-secret updates:
+
+```sql
+UPDATE settings SET value = 'https://your-company.atlassian.net'
+WHERE client = 'shared' AND name = 'Jira.JiraBaseUrl';
+UPDATE settings SET value = 'https://github.com/owner/repository.git'
+WHERE client = 'shared' AND name = 'GitHub.TargetRepositoryUrl';
+UPDATE settings SET value = 'ai-manager-planned'
+WHERE client = 'aimanager' AND name = 'Jira.JiraPickupLabel';
 ```
 
-Set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
-`GitHub.AgentGitHubToken` (Copilot Requests) and `GitHub.GitHubRepositoryToken`
-(repository access). Move all existing `Jira*` fields into `Jira`, and move
-`AgentGitHubToken`, `GitHubRepositoryToken` and the worker's `TargetRepositoryUrl`
-into `GitHub`, keeping their values. Older `GitHubToken` fields must also be
-renamed to `AgentGitHubToken`. Flat fields are no longer read.
-The manager's `Jira.JiraAnalyzedLabel` defaults to `ai-analyzed`.
-`PollIntervalSeconds` is a JSON integer, with minimum 5. Optional omitted settings
-use the defaults in the templates. Required empty credentials fail validation.
-The manager and worker have separate JSON files, allowing different tokens and labels.
-Do not copy agent credentials into aibuildpage, which does not use Jira/GitHub.
+Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
+`Jira.JiraProjectKey` (`DFAI`), `Jira.JiraStatusName` (`Selected for Development`),
+`Jira.JiraJql` (empty for generated JQL), `Jira.JiraFailureLabel`
+(`ai-agent-failed`), `Jira.JiraInProgressStatus` (`In Progress`),
+`Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
+Requests) and `GitHub.TargetRepositoryUrl`.
+
+The manager still uses `manager_projects` for project/repository selection;
+shared `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl` are the worker's
+defaults, not replacements for those mappings.
+
+Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
+`ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.
+The manager needs a read-only repository token; the worker needs Contents and
+Pull requests read/write. aibuildpage loads the same settings server-side but
+currently performs no Jira/GitHub operations, so its repository token may remain
+empty. Its page never exposes settings or credentials.
+
+Treat the database, backups and administration access as secret-bearing:
+tokens are stored as text. Use restricted database access and TLS for remote
+connections. No credentials are seeded, logged or returned by the web app.
 
 `.env` now contains only deployment/build settings: MariaDB container credentials,
 volume/config paths, `DOTNET_ENVIRONMENT` and NuGet authentication. Move existing
-Jira/GitHub values into each agent's selected JSON file before removing them from
-`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `GitHub.AgentGitHubToken`; there is
+Jira/GitHub values into the database before removing them from
+`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to shared `GitHub.AgentGitHubToken`; there is
 no runtime fallback to environment tokens. The runner supplies only this configured
 Copilot token to its child process; repository credentials stay with Git.
 

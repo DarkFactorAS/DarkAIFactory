@@ -1,4 +1,5 @@
 using aibuildpage.Repository;
+using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.DataAccess;
 using DFCommonLib.Logger;
@@ -18,6 +19,12 @@ new DFServices(builder.Services)
     .LogToConsole(DFLogLevel.INFO);
 
 builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
+builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddSingleton(services =>
+{
+    using var scope = services.CreateScope();
+    return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aibuildpage");
+});
 
 var app = builder.Build();
 
@@ -34,6 +41,9 @@ else
     Environment.Exit(1);
     return;
 }
+
+// Load credentials server-side only; never expose them in page responses.
+_ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/", () => Results.Content(Html, "text/html"));
 

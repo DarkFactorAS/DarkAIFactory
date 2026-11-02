@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using AiTeam.Configuration;
 
 namespace CodingAgent.Tests;
 
@@ -12,11 +13,11 @@ internal sealed class SettingsScope : IDisposable
 
     public SettingsScope() => _current = this;
 
-    public static AgentSettings Current
+    public static IntegrationSettings Current
     {
         get
         {
-            var settings = new AgentSettings();
+            var settings = new IntegrationSettings();
             new ConfigurationBuilder().AddInMemoryCollection(
                 (_current ?? throw new InvalidOperationException("No test settings scope."))._values)
                 .Build().Bind(settings);

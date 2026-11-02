@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace ManagerAgent;
 
 internal sealed record AgentConfiguration(
@@ -16,7 +18,7 @@ internal sealed record AgentConfiguration(
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
 
-    public static AgentConfiguration Load(AgentSettings settings, ManagerProject project)
+    public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject project)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -46,7 +48,7 @@ internal sealed record AgentConfiguration(
         }
         var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
         var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-manager-planned");
-        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-manager-failed");
+        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
         var analyzedLabel = Get(settings.Jira.JiraAnalyzedLabel, "ai-analyzed");
         ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
         ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
@@ -75,17 +77,16 @@ internal sealed record AgentConfiguration(
             AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,
             failureLabel,
-            "In Progress",
-            "In Review",
-            LoadPollInterval(settings))
+            Get(settings.Jira.JiraInProgressStatus, "In Progress"),
+            Get(settings.Jira.JiraInReviewStatus, "In Review"),
+            LoadPollInterval(settings.PollIntervalSeconds))
         {
             AnalyzedLabel = analyzedLabel
         };
     }
 
-    public static TimeSpan LoadPollInterval(AgentSettings settings)
+    public static TimeSpan LoadPollInterval(int pollSeconds)
     {
-        var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {
             throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
@@ -108,7 +109,7 @@ internal sealed record AgentConfiguration(
     private static string Required(string? value, string name)
     {
         return string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException($"Required JSON setting {name} is not set.")
+            ? throw new InvalidOperationException($"Required database setting {name} is not set.")
             : value.Trim();
     }
 

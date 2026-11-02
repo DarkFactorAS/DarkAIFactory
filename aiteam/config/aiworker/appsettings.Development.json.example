@@ -1,23 +1,6 @@
 {
   "AppName": "AiWorker",
   "EnableLogging": true,
-  "Jira": {
-    "JiraBaseUrl": "https://your-company.atlassian.net",
-    "JiraEmail": "your-jira-account@example.com",
-    "JiraApiToken": "",
-    "JiraProjectKey": "DFAI",
-    "JiraStatusName": "Selected for Development",
-    "JiraJql": "",
-    "JiraPickupLabel": "ai-agent-picked",
-    "JiraFailureLabel": "ai-agent-failed",
-    "JiraInProgressStatus": "In Progress",
-    "JiraInReviewStatus": "In Review"
-  },
-  "GitHub": {
-    "AgentGitHubToken": "",
-    "GitHubRepositoryToken": "",
-    "TargetRepositoryUrl": "https://github.com/your-owner/your-repository.git"
-  },
   "PollIntervalSeconds": 30,
   "DatabaseConnection": {
     "Server": "localhost",
