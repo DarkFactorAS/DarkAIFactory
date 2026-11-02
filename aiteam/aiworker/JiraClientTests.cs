@@ -244,6 +244,20 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task AssignAsync_SendsAccountId()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.AssignAsync("DFAI-3", "abc123", CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Put, handler.Request!.Method);
+        Assert.Equal("/rest/api/3/issue/DFAI-3/assignee", handler.Request.RequestUri!.AbsolutePath);
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Equal("abc123", body.RootElement.GetProperty("accountId").GetString());
+    }
+
+    [Fact]
     public async Task AddCommentAsync_SendsAdfBody()
     {
         var handler = new StubHandler(HttpStatusCode.Created);

@@ -54,6 +54,17 @@ public static class IntegrationSettingsPatcher
                 ('aibuildpage', 'GitHub.GitHubRepositoryToken', '')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 3,
+            """
+            INSERT INTO `settings` (`client`, `name`, `value`) VALUES
+                ('shared', 'Jira.JiraAssigneeAccountId', '')
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
+            """);
         return patcher.Successful();
     }
 }

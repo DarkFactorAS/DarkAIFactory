@@ -14,7 +14,8 @@ internal sealed record AgentConfiguration(
     string FailureLabel,
     string InProgressStatus,
     string InReviewStatus,
-    TimeSpan PollInterval)
+    TimeSpan PollInterval,
+    string AssigneeAccountId = "")
 {
     public static AgentConfiguration Load(IntegrationSettings settings)
     {
@@ -71,7 +72,8 @@ internal sealed record AgentConfiguration(
             failureLabel,
             Get(settings.Jira.JiraInProgressStatus, "In Progress"),
             Get(settings.Jira.JiraInReviewStatus, "In Review"),
-            TimeSpan.FromSeconds(pollSeconds));
+            TimeSpan.FromSeconds(pollSeconds),
+            Get(settings.Jira.JiraAssigneeAccountId, string.Empty));
     }
 
     private static string Required(string? value, string name)
