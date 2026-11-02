@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace ManagerAgent.Tests;
 
 [Collection("Environment")]

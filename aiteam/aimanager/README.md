@@ -45,8 +45,9 @@ stop the manager. A Jira polling failure does not prevent polling other projects
 Polling logs announce each distinct project mapping only once per process,
 including newly added or changed mappings. The empty-project waiting message
 is also printed only once. Polling continues every cycle and errors are still reported.
-The manager reads project keys and repository URLs only from `manager_projects`;
-aiworker uses shared database settings `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
+Both agents read project keys and repository URLs from `manager_projects`.
+The worker reloads the same mappings each polling cycle; only when the table is
+empty does it use shared `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
 
 ## Planning and recovery
 

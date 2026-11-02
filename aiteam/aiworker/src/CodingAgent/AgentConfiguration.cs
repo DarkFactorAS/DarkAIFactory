@@ -1,4 +1,5 @@
 using AiTeam.Configuration;
+using static AiTeam.Configuration.JiraQuery;
 
 namespace CodingAgent;
 
@@ -17,8 +18,9 @@ internal sealed record AgentConfiguration(
     TimeSpan PollInterval)
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
+    public long? ManagerProjectId { get; init; }
 
-    public static AgentConfiguration Load(IntegrationSettings settings)
+    public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject? project = null)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -28,7 +30,8 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("JiraBaseUrl must be an https URL without embedded credentials.");
         }
 
-        var repositoryUrl = Required(settings.GitHub.TargetRepositoryUrl, "GitHub.TargetRepositoryUrl");
+        var repositoryUrl = Required(project?.TargetRepositoryUrl ?? settings.GitHub.TargetRepositoryUrl,
+            project is null ? "GitHub.TargetRepositoryUrl" : $"Manager project {project.Id}: target_repository_url");
         if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
             repositoryUri.Scheme != Uri.UriSchemeHttps ||
             !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
@@ -41,7 +44,9 @@ internal sealed record AgentConfiguration(
                 "TargetRepositoryUrl must be an https GitHub repository URL in the form https://github.com/owner/repository.");
         }
 
-        var jiraProjectKey = Get(settings.Jira.JiraProjectKey, "DFAI");
+        var jiraProjectKey = project is null
+            ? Get(settings.Jira.JiraProjectKey, "DFAI")
+            : Required(project.JiraProjectKey, $"Manager project {project.Id}: jira_project_key");
         var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
         var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-agent-picked");
         var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
@@ -67,6 +72,12 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
         }
 
+        var jql = Get(settings.Jira.JiraJql, defaultJql);
+        if (project is not null && !string.IsNullOrWhiteSpace(settings.Jira.JiraJql))
+        {
+            jql = ScopeToProject(jql, jiraProjectKey);
+        }
+
         return new AgentConfiguration(
             jiraUri,
             Required(settings.Jira.JiraEmail, "Jira.JiraEmail"),
@@ -74,14 +85,15 @@ internal sealed record AgentConfiguration(
             agentGitHubToken,
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             repositoryUri,
-            AddPickupLabelExclusion(Get(settings.Jira.JiraJql, defaultJql), pickupLabel),
+            AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,
             failureLabel,
             Get(settings.Jira.JiraInProgressStatus, "In Progress"),
             Get(settings.Jira.JiraInReviewStatus, "In Review"),
             TimeSpan.FromSeconds(pollSeconds))
         {
-            AnalyzedLabel = analyzedLabel
+            AnalyzedLabel = analyzedLabel,
+            ManagerProjectId = project?.Id
         };
     }
 
@@ -96,72 +108,6 @@ internal sealed record AgentConfiguration(
         string.IsNullOrWhiteSpace(value)
             ? defaultValue
             : value.Trim();
-
-    private static string EscapeJql(string value) =>
-        value.Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("\"", "\\\"", StringComparison.Ordinal);
-
-    private static string AddPickupLabelExclusion(string jql, string pickupLabel)
-    {
-        var orderByIndex = FindOrderByIndex(jql);
-        var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
-        var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
-
-        return $"{filter} AND (labels is EMPTY OR labels not in (\"{EscapeJql(pickupLabel)}\")){orderBy}";
-    }
-
-    private static int FindOrderByIndex(string jql)
-    {
-        var inString = false;
-        for (var index = 0; index < jql.Length; index++)
-        {
-            if (inString)
-            {
-                if (jql[index] == '\\')
-                {
-                    index++;
-                }
-                else if (jql[index] == '"')
-                {
-                    inString = false;
-                }
-
-                continue;
-            }
-
-            if (jql[index] == '"')
-            {
-                inString = true;
-                continue;
-            }
-
-            if (index > 0 && !char.IsWhiteSpace(jql[index - 1]))
-            {
-                continue;
-            }
-
-            if (string.Compare(jql, index, "ORDER", 0, 5, StringComparison.OrdinalIgnoreCase) != 0 ||
-                index + 5 >= jql.Length ||
-                !char.IsWhiteSpace(jql[index + 5]))
-            {
-                continue;
-            }
-
-            var byIndex = index + 5;
-            while (byIndex < jql.Length && char.IsWhiteSpace(jql[byIndex]))
-            {
-                byIndex++;
-            }
-
-            if (string.Compare(jql, byIndex, "BY", 0, 2, StringComparison.OrdinalIgnoreCase) == 0 &&
-                (byIndex + 2 == jql.Length || char.IsWhiteSpace(jql[byIndex + 2])))
-            {
-                return index;
-            }
-        }
-
-        return -1;
-    }
 
     private static void ValidateLabel(string label, string variableName)
     {

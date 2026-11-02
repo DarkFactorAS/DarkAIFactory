@@ -1,6 +1,6 @@
 using DFCommonLib.DataAccess;
 
-namespace ManagerAgent.Repository;
+namespace AiTeam.Configuration;
 
 internal sealed class ManagerProjectRepository(IDbConnectionFactory connectionFactory)
 {

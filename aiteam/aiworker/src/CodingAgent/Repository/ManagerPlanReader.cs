@@ -9,11 +9,16 @@ namespace CodingAgent.Repository;
 /// </summary>
 internal sealed class ManagerPlanReader(IDbConnectionFactory connectionFactory)
 {
-    public string? Find(string jiraKey)
+    public string? Find(string jiraKey, long? projectId)
     {
         using var command = connectionFactory.CreateCommand(
-            "SELECT plan FROM manager_plans WHERE jira_key = @jira_key");
+            "SELECT plan FROM manager_plans WHERE jira_key = @jira_key" +
+            (projectId.HasValue ? " AND manager_project_id = @project_id" : string.Empty));
         command.AddParameter("@jira_key", jiraKey);
+        if (projectId.HasValue)
+        {
+            command.AddParameter("@project_id", projectId.Value);
+        }
         using var reader = command.ExecuteReader();
         return reader.Read() ? reader.GetString(0) : null;
     }

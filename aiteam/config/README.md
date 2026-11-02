@@ -101,9 +101,12 @@ Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
 Requests) and `GitHub.TargetRepositoryUrl`.
 
-The manager still uses `manager_projects` for project/repository selection;
-shared `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl` are the worker's
-defaults, not replacements for those mappings.
+Both agents use `manager_projects` for project/repository selection, reloading
+mappings each polling cycle. Shared `Jira.JiraProjectKey` and
+`GitHub.TargetRepositoryUrl` are only worker fallbacks when that table is empty.
+No fallback occurs for invalid mappings or database read failures. The worker's
+repository token must have Contents and Pull requests read/write permission
+for every mapped repository.
 
 Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
 `ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.

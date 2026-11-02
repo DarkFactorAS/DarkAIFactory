@@ -9,7 +9,17 @@ exists for the issue (for example in a manager-less deployment with a custom
 JQL), the worker asks GitHub Copilot CLI to prepare an internal plan locally
 without posting it to Jira.
 
-By default, it watches project `DFAI` in status `Selected for Development`,
+It reads the same `manager_projects` mappings as the manager, reloading them in
+ID order each polling cycle. Every project is queried separately and its tasks
+are cloned, pushed and submitted as pull requests in that project's repository.
+Custom JQL is constrained to each mapped project, including OR queries.
+Invalid mappings or database failures stop the worker rather than silently
+routing work to the default repository; a Jira polling failure for one project
+does not block other projects. The worker's repository token needs access to
+all mapped repositories and their submodules.
+
+When `manager_projects` is empty, it falls back to the shared project/repository
+settings. By default, that mode watches project `DFAI` in status `Selected for Development`,
 skips epics, and only picks up issues that carry the manager's analysis label
 (`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). The manager stores the plan
 in `manager_plans` before adding that label, so a gated issue always has a
@@ -32,10 +42,11 @@ Run [dbmigration](../dbmigration/README.md) before starting the worker.
    **Copilot Requests** permission.
 4. Set the `aiworker` row `GitHub.GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
-   permissions for the target repository. The worker uses this token only to
+   permissions for all mapped repositories. The worker uses this token only to
    clone, push its branch and open the pull request.
-5. Set shared `GitHub.TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
-   `https://github.com/owner/repository.git`.
+5. Populate `manager_projects` as described in the [manager guide](../aimanager/README.md).
+   For single-repository mode with no mappings, set shared `GitHub.TargetRepositoryUrl`
+   to an HTTPS GitHub repository URL, such as `https://github.com/owner/repository.git`.
 6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
    `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
 7. The MariaDB data volume is external, so Compose does not create it. Create
@@ -116,10 +127,10 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraApiToken` | required | Jira API token |
 | `GitHub.AgentGitHubToken` | required | Fine-grained token with Copilot Requests permission |
 | `GitHub.GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
-| `GitHub.TargetRepositoryUrl` | required | HTTPS URL of the GitHub repository to clone |
-| `Jira.JiraProjectKey` | `DFAI` | Project used by the default JQL |
+| `GitHub.TargetRepositoryUrl` | required without mappings | Fallback HTTPS repository URL when `manager_projects` is empty |
+| `Jira.JiraProjectKey` | `DFAI` | Fallback project when `manager_projects` is empty |
 | `Jira.JiraStatusName` | `Selected for Development` | Status used by the default JQL |
-| `Jira.JiraJql` | generated from project/status | Optional complete JQL override |
+| `Jira.JiraJql` | generated from project/status | Optional JQL override, scoped to each mapped project |
 | `Jira.JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
 | `Jira.JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
 | `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |

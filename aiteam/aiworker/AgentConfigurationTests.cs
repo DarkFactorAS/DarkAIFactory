@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace CodingAgent.Tests;
 
 [Collection("Environment")]
@@ -24,6 +26,62 @@ public sealed class AgentConfigurationTests
             "AND labels in (\"ai-analyzed\") " +
             "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY priority DESC, created ASC",
             config.JiraJql);
+    }
+
+    [Fact]
+    public void Load_UsesEachManagerProjectMapping()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("GitHub:TargetRepositoryUrl", null)
+            .Set("Jira:JiraProjectKey", "IGNORED");
+        var first = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
+        var second = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
+
+        Assert.Equal(1, first.ManagerProjectId);
+        Assert.Equal("https://github.com/owner/first", first.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"FIRST\" AND ", first.JiraJql);
+        Assert.Equal(2, second.ManagerProjectId);
+        Assert.Equal("https://github.com/owner/second", second.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"SECOND\" AND ", second.JiraJql);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void Load_RejectsEmptyMappedProject(string key)
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, key, "https://github.com/owner/repo")));
+    }
+
+    [Fact]
+    public void Load_DoesNotFallBackFromInvalidMapping()
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://gitlab.com/owner/repo")));
+    }
+
+    [Theory]
+    [InlineData("priority = High OR priority = Highest", "project = \"FIRST\" AND (priority = High OR priority = Highest)")]
+    [InlineData("summary ~ 'x ORDER BY y' ORDER BY created", "project = \"FIRST\" AND (summary ~ 'x ORDER BY y')")]
+    [InlineData("ORDER BY created", "project = \"FIRST\"")]
+    public void Load_ScopesCustomQueriesToMappedProject(string jql, string expectedPrefix)
+    {
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", jql);
+        var config = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
+
+        Assert.StartsWith(expectedPrefix + " AND (labels is EMPTY", config.JiraJql);
+        if (jql.Contains("ORDER BY created", StringComparison.Ordinal))
+        {
+            Assert.EndsWith(" ORDER BY created", config.JiraJql);
+        }
     }
 
     [Theory]
