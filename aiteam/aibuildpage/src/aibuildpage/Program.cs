@@ -28,6 +28,10 @@ builder.Services.AddSingleton(services =>
 
 var app = builder.Build();
 
+var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
+Console.WriteLine(
+    $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
+    $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
 using var databaseScope = app.Services.CreateScope();
 var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
 databasePatcher.WaitForConnection();

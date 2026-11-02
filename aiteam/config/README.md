@@ -112,6 +112,9 @@ The selected environment is `DOTNET_ENVIRONMENT` for the console apps; the web
 app also honors ASP.NET Core environment selection. Production is the default.
 All three apps print the selected environment and `Config/appsettings.<environment>.json`
 filename before loading app configuration, including when the file is missing.
+After loading configuration, all three apps print the database name, host and
+port before resolving database services and waiting for the connection.
+Database credentials are not included in this message.
 VS Code's AI Worker launch selects Development. Configure the JSON file first.
 
 Projects copy configured JSON files into `Config/` in build and publish output.

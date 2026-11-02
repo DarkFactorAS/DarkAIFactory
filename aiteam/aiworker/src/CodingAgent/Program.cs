@@ -21,6 +21,9 @@ builder.Services.AddScoped<IntegrationSettingsRepository>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
+Console.WriteLine(
+    $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
+    $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
 using var databaseScope = host.Services.CreateScope();
 var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
 databasePatcher.WaitForConnection();
