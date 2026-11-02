@@ -27,6 +27,7 @@ public sealed class IntegrationSettingsTests
             Assert.Equal("shared-failed", settings.Jira.JiraFailureLabel);
             Assert.Equal("Doing", settings.Jira.JiraInProgressStatus);
             Assert.Equal("Review", settings.Jira.JiraInReviewStatus);
+            Assert.Equal("shared-assignee", settings.Jira.JiraAssigneeAccountId);
             Assert.Equal("shared-copilot-token", settings.GitHub.AgentGitHubToken);
             Assert.Equal("https://github.com/owner/repo", settings.GitHub.TargetRepositoryUrl);
             Assert.Equal($"{client}-picked", settings.Jira.JiraPickupLabel);
@@ -87,7 +88,8 @@ public sealed class IntegrationSettingsTests
             [("shared", "Jira.JiraInProgressStatus")] = "Doing",
             [("shared", "Jira.JiraInReviewStatus")] = "Review",
             [("shared", "GitHub.AgentGitHubToken")] = "shared-copilot-token",
-            [("shared", "GitHub.TargetRepositoryUrl")] = "https://github.com/owner/repo"
+            [("shared", "GitHub.TargetRepositoryUrl")] = "https://github.com/owner/repo",
+            [("shared", "Jira.JiraAssigneeAccountId")] = "shared-assignee"
         };
         foreach (var client in Clients)
         {
