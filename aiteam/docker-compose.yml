@@ -95,7 +95,7 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - 8206:3306
+      - "127.0.0.1:8206:3306"
 
 volumes:
   # docker volume create aiteam_mariadb_data
