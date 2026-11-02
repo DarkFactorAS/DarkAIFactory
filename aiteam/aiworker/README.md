@@ -90,7 +90,12 @@ identify any branch that was already pushed. When work starts, the worker moves
 the issue to `In Progress` (a failure to do so is logged and commented, and work
 continues). After pushing, it opens a pull request against the repository's
 default branch, links it in the Jira result comment and moves the issue to
-`In Review`. If the agent made no changes, no pull request is created and the
+`In Review`. Every result comment identifies whether the implementation used
+the manager's stored plan or local worker planning. Manager-sourced results
+include the exact requirements fingerprint and source Jira update timestamp,
+so reviewers can trace the delegated plan version. Audit metadata and delivery
+details are retained even when long implementation output is truncated.
+If the agent made no changes, no pull request is created and the
 status is left unchanged. Copilot cannot execute shell commands, so it cannot run tests; validate
 the pushed branch separately. The worker follows repository Markdown
 instructions, including applicable `AGENTS.md` and Git workflow rules.

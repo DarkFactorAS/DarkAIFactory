@@ -183,6 +183,23 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task AddCommentAsync_PreservesManagerPlanAuditMetadataInJiraAdf()
+    {
+        var handler = new StubHandler(HttpStatusCode.Created);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+        var plan = new AiTeam.Configuration.ManagerPlan("Plan", true, new string('A', 64), "2026-11-02T12:00:00Z");
+
+        await client.AddCommentAsync("TASK-1",
+            PromptBuilder.BuildResultComment("Implemented", "PR: https://github.com/owner/repo/pull/1", plan),
+            CancellationToken.None);
+
+        Assert.Contains("Plan source: manager plan from", handler.RequestBody!);
+        Assert.Contains(plan.RequirementsHash!, handler.RequestBody!);
+        Assert.Contains(plan.SourceUpdated!, handler.RequestBody!);
+        Assert.Contains("https://github.com/owner/repo/pull/1", handler.RequestBody!);
+    }
+
+    [Fact]
     public async Task FindWorkAsync_ParsesAdfDescription()
     {
         const string json = """
