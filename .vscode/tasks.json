@@ -2,6 +2,41 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "build dbmigration",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/aiteam/dbmigration/src/dbmigration/dbmigration.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "run dbmigration",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/aiteam/dbmigration/src/dbmigration/dbmigration.csproj"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test dbmigration",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/aiteam/dbmigration/tests/dbmigration.Tests/dbmigration.Tests.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
       "label": "build aiworker",
       "type": "process",
       "command": "dotnet",

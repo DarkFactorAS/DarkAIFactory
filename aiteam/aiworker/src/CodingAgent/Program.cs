@@ -1,8 +1,6 @@
 using CodingAgent;
-using CodingAgent.Repository;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
-using DFCommonLib.DataAccess;
 using DFCommonLib.Logger;
 using DFCommonLib.Utils;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +14,6 @@ Console.WriteLine(
     $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
-builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
 builder.Services.AddScoped<IntegrationSettingsRepository>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
@@ -25,16 +22,6 @@ Console.WriteLine(
     $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
     $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
 using var databaseScope = host.Services.CreateScope();
-var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
-databasePatcher.WaitForConnection();
-if (!databasePatcher.RunPatcher())
-{
-    DFLogger.LogOutput(DFLogLevel.ERROR, "Startup", "Database patcher failed");
-    Environment.ExitCode = 1;
-    return;
-}
-
-DFLogger.LogOutput(DFLogLevel.INFO, "Startup", "Database patcher ran successfully");
 var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aiworker", appSettings.PollIntervalSeconds);
 var configuration = AgentConfiguration.Load(settings);

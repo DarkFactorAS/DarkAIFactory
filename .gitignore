@@ -4,3 +4,4 @@
 aiteam/config/aimanager/appsettings.*.json
 aiteam/config/aiworker/appsettings.*.json
 aiteam/config/aibuildpage/appsettings.*.json
+aiteam/config/dbmigration/appsettings.*.json

@@ -2,15 +2,15 @@
 
 All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
 as `ConfigurationHelper<AgentSettings>` for the agents and
-`ConfigurationHelper<AppSettings>` for aibuildpage, reading
+`ConfigurationHelper<AppSettings>` for aibuildpage and dbmigration, reading
 `Config/appsettings.<environment>.json`. JSON contains app/database settings and
 the agents' `PollIntervalSeconds` (integer, minimum 5), not Jira/GitHub settings.
 All three clients load Jira/GitHub settings from the same MariaDB `settings`
-table at startup, using the same loader and migrations. Point their JSON database
+table at startup, using the same loader. Point their JSON database
 connections at the same database. Restart clients after changing settings.
 There are no JSON or environment Jira/GitHub overrides or fallbacks.
 
-Each app (`aiworker`, `aimanager`, `aibuildpage`) has a template for every
+Each app (`aiworker`, `aimanager`, `aibuildpage`, `dbmigration`) has a template for every
 supported environment. Copy the selected `appsettings.<environment>.json.example`
 to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 
@@ -32,7 +32,8 @@ contain your configuration. The same naming convention applies to all three apps
 
 Set the actual database name, username and password. Do not commit these runtime
 files; Git ignores them. The templates contain no credentials. All three clients
-require a database connection and run startup migrations before loading settings.
+require an already migrated database and never create tables at startup.
+Run [dbmigration](../dbmigration/README.md) before starting any client.
 
 ## Shared Jira/GitHub settings
 
@@ -48,18 +49,23 @@ column. Names use the former JSON section/property notation, for example
   Each client reads its own three rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
 
-Startup migrations use the separate `IntegrationSettings` migration history,
-so any client can create and seed this table without interfering with manager
-project/plan migrations. Defaults are inserted once; subsequent starts do not
+The standalone `dbmigration` executable owns all table creation. It retains
+`StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, and
+`IntegrationSettings` IDs 1-2 for settings and seed data. Existing migration
+history remains valid; dbmigration upgrades the `version` primary key to
+(`system`, `patchId`) so IDs from different systems do not collide.
+Defaults are inserted once; subsequent migrations do not
 overwrite configured values. Credentials and the worker repository URL are
 initially empty and must be populated by an administrator.
 
 ### Migrating existing configuration
 
 1. Stop the agents and back up the database.
-2. Configure all clients' JSON `DatabaseConnection` values for the same database.
-3. Start aibuildpage once to create/seed `settings` (or start either agent to run
-   migrations; an agent with empty required credentials will stop on validation).
+2. Configure dbmigration and all clients' JSON `DatabaseConnection` values for
+   the same database.
+3. Run dbmigration to create/seed the tables. In Compose, run
+   `docker compose --env-file aiteam/.env -f aiteam/docker-compose.yml run --build --rm dbmigration`
+   from the repository root.
 4. Using Adminer or another trusted database tool, update the seeded rows.
    Move the existing common Jira/GitHub values to `client = 'shared'`, choosing
    one value where the old clients differed. Move only the three exceptions
@@ -110,10 +116,10 @@ Copilot token to its child process; repository credentials stay with Git.
 
 The selected environment is `DOTNET_ENVIRONMENT` for the console apps; the web
 app also honors ASP.NET Core environment selection. Production is the default.
-All three apps print the selected environment and `Config/appsettings.<environment>.json`
+All four apps print the selected environment and `Config/appsettings.<environment>.json`
 filename before loading app configuration, including when the file is missing.
-After loading configuration, all three apps print the database name, host and
-port before resolving database services and waiting for the connection.
+After loading configuration, all four apps print the database name, host and
+port before resolving database services and connecting.
 Database credentials are not included in this message.
 VS Code's AI Worker launch selects Development. Configure the JSON file first.
 
@@ -123,8 +129,11 @@ works regardless of the directory from which `dotnet run` is invoked.
 Local publishing therefore includes credentials: treat publish output as sensitive.
 
 Docker builds do not copy runtime configuration into the image. Compose mounts
-`config/aiworker` and `config/aimanager` read-only at `/app/Config`, controlled by
-`AIWORKER_CONFIG_PATH` and `AIMANAGER_CONFIG_PATH`. When deploying aibuildpage
+`config/aiworker`, `config/aimanager` and `config/dbmigration` read-only at
+`/app/Config`, controlled by `AIWORKER_CONFIG_PATH`, `AIMANAGER_CONFIG_PATH` and
+`DBMIGRATION_CONFIG_PATH`. Both agents depend on successful completion of the
+one-shot dbmigration service, which waits for MariaDB's health check.
+When deploying aibuildpage
 separately, mount its config directory at `<application directory>/Config`.
 Use `DOTNET_ENVIRONMENT=DevelopmentDocker` for that environment.
 

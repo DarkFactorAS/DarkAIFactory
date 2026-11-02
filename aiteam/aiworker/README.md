@@ -15,7 +15,8 @@ First configure the app's environment-specific JSON file as described in
 [App configuration](../config/README.md). Jira/GitHub settings come from the shared
 database `settings` table, with three client-specific rows. Docker mounts
 `aiteam/config/aiworker` at `/app/Config`. The worker now requires a database
-connection and runs startup migrations before loading settings.
+connection to an already migrated database. It never creates tables.
+Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
@@ -46,8 +47,10 @@ connection and runs startup migrations before loading settings.
 
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
 the repository root (the Dockerfile is `aiteam/aiworker/Dockerfile`, as used by CI).
-On first startup, migrations seed empty settings; populate them and restart as
-described in the configuration guide. For each issue, the worker clones the repository to an
+Compose runs dbmigration successfully before starting the worker.
+For initial setup, run the migration service separately and populate its seeded
+settings before starting the worker, as described in the configuration guide.
+For each issue, the worker clones the repository to an
 private temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
 and pushes a commit if the agent made changes. Successfully delivered workspaces
 are removed. Workspaces for failed or interrupted tasks are retained for

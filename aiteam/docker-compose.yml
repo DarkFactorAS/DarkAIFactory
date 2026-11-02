@@ -1,4 +1,24 @@
 services:
+  dbmigration:
+    build:
+      context: ..
+      dockerfile: aiteam/dbmigration/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      aiteam_database:
+        condition: service_healthy
+    volumes:
+      - ${DBMIGRATION_CONFIG_PATH:-./config/dbmigration}:/app/Config:ro
+    restart: "no"
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   coding-agent:
     build:
       context: ..
@@ -7,8 +27,8 @@ services:
         - nuget_username
         - nuget_token
     depends_on:
-      aiteam_database:
-        condition: service_healthy
+      dbmigration:
+        condition: service_completed_successfully
     volumes:
       - ${AIWORKER_CONFIG_PATH:-./config/aiworker}:/app/Config:ro
     restart: unless-stopped
@@ -29,8 +49,8 @@ services:
         - nuget_username
         - nuget_token
     depends_on:
-      aiteam_database:
-        condition: service_healthy
+      dbmigration:
+        condition: service_completed_successfully
     volumes:
       - ${AIMANAGER_CONFIG_PATH:-./config/aimanager}:/app/Config:ro
     restart: unless-stopped

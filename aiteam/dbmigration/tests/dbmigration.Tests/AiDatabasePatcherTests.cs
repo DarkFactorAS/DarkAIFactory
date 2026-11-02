@@ -1,7 +1,7 @@
 using DFCommonLib.DataAccess;
-using ManagerAgent.Repository;
+using dbmigration.Repository;
 
-namespace ManagerAgent.Tests;
+namespace dbmigration.Tests;
 
 public sealed class AiDatabasePatcherTests
 {
@@ -44,7 +44,7 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("`jira_key` VARCHAR(255) NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("`plan` LONGTEXT NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("UNIQUE KEY `uq_manager_plans_jira_key`", dbPatcher.Sql[2]);
-            Assert.Contains("CREATE TABLE `settings`", dbPatcher.Sql[3]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[3]);
             Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[3]);
             Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[3]);
             Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[4]);
@@ -69,8 +69,20 @@ public sealed class AiDatabasePatcherTests
         Assert.Equal(3, dbPatcher.Sql.Count);
     }
 
+    [Theory]
+    [InlineData(1, 4)]
+    [InlineData(2, 5)]
+    public void RunPatcher_ReportsSettingsPatchFailure(int patchId, int expectedPatchCount)
+    {
+        var dbPatcher = new StubDbPatcher(true, failingSettingsPatch: patchId);
+
+        Assert.False(new AiDatabasePatcher(dbPatcher).RunPatcher());
+        Assert.Equal(expectedPatchCount, dbPatcher.Sql.Count);
+    }
+
     private sealed class StubDbPatcher(
-        bool successful, bool failProjectPatch = false, bool failPlanPatch = false) : IDBPatcher
+        bool successful, bool failProjectPatch = false, bool failPlanPatch = false,
+        int failingSettingsPatch = 0) : IDBPatcher
     {
         private bool _successful = successful;
         public List<string> Calls { get; } = [];
@@ -91,7 +103,9 @@ public sealed class AiDatabasePatcherTests
         {
             Calls.Add($"patch:{system}:{patchId}");
             Sql.Add(sql);
-            if ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch))
+            if ((system == "StartupDatabasePatcher" &&
+                 ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch))) ||
+                (system == "IntegrationSettings" && patchId == failingSettingsPatch))
             {
                 _successful = false;
             }

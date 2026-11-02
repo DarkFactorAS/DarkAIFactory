@@ -22,20 +22,18 @@ read-only at `/app/Config` and provide access to the configured database.
 See [deployment setup and Infrastructure blockers](../../README.md#deployment)
 before running the GitHub deployment workflow.
 
-## Database patcher
+## Database
 
 Configure Production, Development or DevelopmentDocker JSON files using
 [App configuration](../config/README.md). Files are copied into build/publish
 output and loaded from the executable's `Config` directory. Startup selects
 the executable directory as its working directory.
 
-On startup the app runs `AiDatabasePatcher` (`src/aibuildpage/Repository/AiDatabasePatcher.cs`), which
-derives from `StartupDatabasePatcher` in `DarkFactor.Common.Lib`, like `BotDatabasePatcher` in the
-GameServer project. It also runs the shared `IntegrationSettings` migrations to
-create and seed `settings`. The app waits for the database connection and exits
-with code 1 if patching fails.
+The app does not create tables or run migrations. Run the standalone
+[dbmigration](../dbmigration/README.md) executable against the same database
+before starting this app, including in separate deployments.
 
-After patching, the app loads all shared Jira/GitHub values and its own
+On startup, the app loads all shared Jira/GitHub values and its own
 `Jira.JiraPickupLabel`, `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`
 rows through the same loader as both agents. Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.

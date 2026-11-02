@@ -1,6 +1,6 @@
 using DFCommonLib.DataAccess;
 
-namespace AiTeam.Configuration;
+namespace dbmigration.Repository;
 
 public static class IntegrationSettingsPatcher
 {
@@ -10,7 +10,7 @@ public static class IntegrationSettingsPatcher
         patcher.Init(system);
         patcher.Patch(system, 1,
             """
-            CREATE TABLE `settings` (
+            CREATE TABLE IF NOT EXISTS `settings` (
                 `client` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
                 `name` VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
                 `value` TEXT NOT NULL,
@@ -52,6 +52,7 @@ public static class IntegrationSettingsPatcher
                 ('aibuildpage', 'Jira.JiraPickupLabel', 'ai-build-picked'),
                 ('aibuildpage', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aibuildpage', 'GitHub.GitHubRepositoryToken', '')
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);
         return patcher.Successful();
     }

@@ -8,7 +8,7 @@ Copilot shell and write tools are always disabled.
 
 ## Database
 
-On startup `AiDatabasePatcher` runs the shared `StartupDatabasePatcher` and creates:
+The standalone [dbmigration](../dbmigration/README.md) executable creates:
 
 - `manager_projects`: auto-increment `BIGINT` primary key `id`, unique
   `jira_project_key`, and `target_repository_url`.
@@ -16,8 +16,9 @@ On startup `AiDatabasePatcher` runs the shared `StartupDatabasePatcher` and crea
   foreign key, unique `jira_key`, full `plan` (`LONGTEXT`), `posted_to_jira`
   flag and `created` timestamp.
 
-The manager waits for a database connection and stops with exit code 1 if
-patching fails. Copy `aiteam/config/aimanager/appsettings.Production.json.example`
+The manager does not create tables or run migrations. Run dbmigration first;
+missing tables or database read failures stop startup.
+Copy `aiteam/config/aimanager/appsettings.Production.json.example`
 to `aiteam/config/aimanager/appsettings.Production.json` and set
 `DatabaseConnection` to match MariaDB credentials in `aiteam/.env`.
 The runtime configuration is ignored by Git. Compose mounts this directory
@@ -28,7 +29,7 @@ Development and DevelopmentDocker setup. Startup selects the executable director
 as its working directory. Jira/GitHub settings load from the shared `settings`
 table, with three client-specific rows; see the configuration guide for migration.
 
-Populate the mappings after the first startup:
+Populate the mappings after running dbmigration:
 
 ```sql
 INSERT INTO manager_projects (jira_project_key, target_repository_url)
@@ -92,9 +93,9 @@ manager completion label in Jira.
    docker compose --env-file .env up --build -d manager-agent
    ```
 
-Compose also starts MariaDB. On first startup, migrations seed empty settings;
-populate them and restart as described in the configuration guide. Populate
-`manager_projects` after startup.
+Compose starts MariaDB and runs dbmigration before starting the manager.
+For initial setup, run the migration service separately, populate settings and
+`manager_projects`, then start the manager as described in the configuration guide.
 The Docker build context is the repository root. The private `DarkFactorAS`
 NuGet feed requires `NUGET_USERNAME` and `NUGET_TOKEN`; Docker receives these
 through BuildKit secrets, not build arguments:
@@ -105,7 +106,7 @@ docker build -f aiteam/aimanager/Dockerfile \
   --secret id=nuget_token,env=NUGET_TOKEN .
 ```
 
-For local execution, configure the database connection in JSON and Jira/GitHub settings in the database,
+For local execution, run dbmigration first, configure the database connection in JSON and Jira/GitHub settings in the database,
 then run `dotnet run --project aiteam/aimanager/src/ManagerAgent/ManagerAgent.csproj`.
 
 ## Tests

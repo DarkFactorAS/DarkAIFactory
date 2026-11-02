@@ -1,7 +1,6 @@
 using DFCommonLib.DataAccess;
-using AiTeam.Configuration;
 
-namespace ManagerAgent.Repository;
+namespace dbmigration.Repository;
 
 public class AiDatabasePatcher : StartupDatabasePatcher
 {

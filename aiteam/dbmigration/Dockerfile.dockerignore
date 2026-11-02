@@ -1,0 +1,7 @@
+**/.git
+**/.env
+**/.vs
+**/bin
+**/obj
+**/UserSettings
+**/config/*/appsettings.*.json

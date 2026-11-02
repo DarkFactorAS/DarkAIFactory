@@ -9,8 +9,10 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   GitHub Copilot CLI to implement them in a target repository, and opens pull
   requests. See [the AI worker README](aiteam/aiworker/README.md) for setup,
   configuration, and tests.
-- **aibuildpage** — a minimal ASP.NET Core application with a startup database
-  patcher. See [the aibuildpage README](aiteam/aibuildpage/README.md).
+- **aibuildpage** — a minimal ASP.NET Core application.
+  See [the aibuildpage README](aiteam/aibuildpage/README.md).
+- **dbmigration** — a one-shot executable that creates and upgrades the shared
+  database before clients start. See [the migration README](aiteam/dbmigration/README.md).
 
 ## Agent skills
 
@@ -31,7 +33,7 @@ git submodule update --init --recursive
 
 Pushes to `main` and pull requests run the worker and manager .NET and Docker
 workflows in [.github/workflows](.github/workflows). The worker .NET workflow
-also builds aibuildpage. Docker CI uses the shared
+also builds aibuildpage and builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
 ## Deployment
@@ -67,6 +69,9 @@ are serialized per app.
 The agents pass `external_port: 0` because they have no HTTP listener; the
 Infrastructure workflow nevertheless publishes an unused ephemeral port.
 All three clients require the same configured database for Jira/GitHub settings.
+Run dbmigration against that database before deploying any client. Compose
+handles this ordering for the agents; separate deployment workflows must run
+the migration executable as a prerequisite. Clients no longer create tables.
 
 ### Deployment blockers
 
