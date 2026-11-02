@@ -45,6 +45,17 @@ public class AiDatabasePatcher : StartupDatabasePatcher
                     REFERENCES `manager_projects` (`id`)
             )
             """);
+        if (!_dbPatcher.Successful())
+        {
+            return false;
+        }
+
+        _dbPatcher.Patch("StartupDatabasePatcher", 4,
+            """
+            ALTER TABLE `manager_plans`
+                ADD COLUMN IF NOT EXISTS `requirements_hash` CHAR(64) NULL,
+                ADD COLUMN IF NOT EXISTS `source_updated` VARCHAR(64) NULL
+            """);
         return _dbPatcher.Successful() && IntegrationSettingsPatcher.Run(_dbPatcher);
     }
 }

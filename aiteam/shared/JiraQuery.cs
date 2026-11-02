@@ -25,6 +25,14 @@ internal static class JiraQuery
         return $"{filter} AND (labels is EMPTY OR labels not in (\"{EscapeJql(pickupLabel)}\")){orderBy}";
     }
 
+    public static string RequireLabel(string jql, string label)
+    {
+        var orderByIndex = FindOrderByIndex(jql);
+        var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
+        var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
+        return $"{filter} AND labels in (\"{EscapeJql(label)}\"){orderBy}";
+    }
+
     private static int FindOrderByIndex(string jql)
     {
         char? stringQuote = null;

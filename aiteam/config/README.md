@@ -60,7 +60,8 @@ column. Names use the former JSON section/property notation, for example
   row is allowed. Missing rows fail explicitly.
 
 The standalone `dbmigration` executable owns all table creation. It retains
-`StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, and
+`StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, adds
+ID 4 for plan freshness metadata, and retains
 `IntegrationSettings` IDs 1-2 for settings and seed data. Existing migration
 history remains valid; dbmigration upgrades the `version` primary key to
 (`system`, `patchId`) so IDs from different systems do not collide.
@@ -111,7 +112,11 @@ for every mapped repository.
 Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
 `ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.
 The manager needs a read-only repository token; the worker needs Contents and
-Pull requests read/write. aibuildpage loads the same settings server-side but
+Pull requests read/write. Manager and worker analysis labels must match for
+handoff. The manager also reads the worker pickup label to avoid replanning
+claimed issues. After a failed planning attempt, clear the shared failure label
+only after resolving the error to resume automatic planning.
+aibuildpage loads the same settings server-side but
 currently performs no Jira/GitHub operations, so its repository token may remain
 empty. Its page never exposes settings or credentials.
 

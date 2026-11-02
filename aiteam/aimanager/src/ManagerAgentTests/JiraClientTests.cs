@@ -129,6 +129,50 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task GetIssueAsync_RefreshesRequirementsAndHandoffState()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK,
+            """
+            {"key":"TASK-1","fields":{"summary":"Changed title","description":{"type":"doc","content":[
+              {"type":"paragraph","content":[{"type":"text","text":"Changed requirements"}]}]},
+              "status":{"name":"Selected for Development"},"updated":"2026-11-02T13:00:00Z",
+              "labels":["ai-analyzed","ai-manager-planned"]}}
+            """);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("TASK-1", CancellationToken.None);
+
+        Assert.Equal("Changed title", issue.Summary);
+        Assert.Equal("Changed requirements", issue.Description);
+        Assert.Equal("2026-11-02T13:00:00Z", issue.UpdatedAt);
+        Assert.Equal(["ai-analyzed", "ai-manager-planned"], issue.Labels);
+        Assert.Equal("/rest/api/3/issue/TASK-1", handler.Request!.RequestUri!.AbsolutePath);
+        Assert.Contains("updated,labels", handler.Request.RequestUri.Query);
+    }
+
+    [Fact]
+    public async Task RemoveLabelAsync_InvalidatesOnlyTheRequestedHandoffLabel()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.RemoveLabelAsync("TASK-1", "ai-analyzed", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        var update = Assert.Single(body.RootElement.GetProperty("update").GetProperty("labels").EnumerateArray());
+        Assert.Equal("ai-analyzed", update.GetProperty("remove").GetString());
+        Assert.Equal(HttpMethod.Put, handler.Request!.Method);
+    }
+
+    [Fact]
+    public async Task GetIssueAsync_DoesNotHideHttpErrors()
+    {
+        using var client = new JiraClient(CreateConfiguration(), new StubHandler(HttpStatusCode.Forbidden));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetIssueAsync("TASK-1", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task FindWorkAsync_ParsesAdfDescription()
     {
         const string json = """

@@ -4,7 +4,16 @@ This Dockerized worker polls Jira for eligible tasks, clones the configured
 GitHub repository and its submodules into a private temporary workspace, looks
 up the implementation plan the manager agent stored in the shared
 `manager_plans` table, then implements the task using that plan and pushes the
-changes to a new GitHub branch before posting the result. If no manager plan
+changes to a new GitHub branch before posting the result. The worker refreshes
+Jira before claiming and checks that the stored plan is posted and its title,
+description and repository fingerprint matches current requirements.
+Stale, legacy (unversioned), or unpublished plans are skipped until the manager
+refreshes them, even with custom JQL. Database read errors fail explicitly,
+never triggering local replanning. Requirements are checked again immediately
+before implementation; changes after pickup use the existing failure/recovery
+path rather than implementing an outdated plan.
+
+If no manager plan
 exists for the issue (for example in a manager-less deployment with a custom
 JQL), the worker asks GitHub Copilot CLI to prepare an internal plan locally
 without posting it to Jira.
@@ -12,7 +21,8 @@ without posting it to Jira.
 It reads the same `manager_projects` mappings as the manager, reloading them in
 ID order each polling cycle. Every project is queried separately and its tasks
 are cloned, pushed and submitted as pull requests in that project's repository.
-Custom JQL is constrained to each mapped project, including OR queries.
+Custom JQL is constrained to each mapped project, including OR queries, and
+still requires the manager's analyzed label and a current posted plan.
 Invalid mappings or database failures stop the worker rather than silently
 routing work to the default repository; a Jira polling failure for one project
 does not block other projects. The worker's repository token needs access to
@@ -23,9 +33,11 @@ settings. By default, that mode watches project `DFAI` in status `Selected for D
 skips epics, and only picks up issues that carry the manager's analysis label
 (`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). The manager stores the plan
 in `manager_plans` before adding that label, so a gated issue always has a
-stored plan. Set `Jira.JiraJql` to use a different query; an override replaces
+stored plan; a missing plan is logged and skipped, not replanned locally.
+In single-repository mode without mappings, set `Jira.JiraJql` to use a different query; an override replaces
 the analyzed-label gate (the worker's own pickup-label exclusion is always
 appended), which allows running the worker without a manager.
+Manager and worker `Jira.JiraAnalyzedLabel` values must match.
 
 ## Run
 
@@ -130,9 +142,10 @@ All Jira/GitHub entries below are database setting names; only
 | `GitHub.TargetRepositoryUrl` | required without mappings | Fallback HTTPS repository URL when `manager_projects` is empty |
 | `Jira.JiraProjectKey` | `DFAI` | Fallback project when `manager_projects` is empty |
 | `Jira.JiraStatusName` | `Selected for Development` | Status used by the default JQL |
-| `Jira.JiraJql` | generated from project/status | Optional JQL override, scoped to each mapped project |
+| `Jira.JiraJql` | generated from project/status | Optional JQL override; mapped projects retain the manager-plan gate |
 | `Jira.JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
 | `Jira.JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
+| `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Manager handoff label required by the default query |
 | `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
 | `Jira.JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
 | `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |

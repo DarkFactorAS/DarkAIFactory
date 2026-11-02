@@ -85,12 +85,36 @@ try
                 continue;
             }
 
-            foreach (var issue in issues)
+            foreach (var candidate in issues)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
+                JiraIssue issue;
+                try
+                {
+                    issue = await jira.GetIssueAsync(candidate.Key, cancellation.Token);
+                }
+                catch (Exception exception) when (
+                    !cancellation.IsCancellationRequested &&
+                    exception is HttpRequestException or OperationCanceledException)
+                {
+                    Console.Error.WriteLine($"Could not refresh {candidate.Key} before claiming: {exception.Message}. Retrying next cycle.");
+                    continue;
+                }
+                if (issue.Labels.Contains(configuration.PickupLabel) ||
+                    !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
                 var managerPlan = scope.ServiceProvider.GetRequiredService<ManagerPlanReader>()
                     .Find(issue.Key, configuration.ManagerProjectId);
-                if (managerPlan is null && string.IsNullOrWhiteSpace(settings.Jira.JiraJql))
+                if (managerPlan is not null &&
+                    !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                {
+                    Console.Error.WriteLine($"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
+                    continue;
+                }
+                if (configuration.RequiresManagerPlan &&
+                    (managerPlan is null || !issue.Labels.Contains(configuration.AnalyzedLabel)))
                 {
                     Console.Error.WriteLine(
                         $"Skipping {issue.Key}: no manager plan exists for the selected project. Verify the manager handoff labels and mapping.");
@@ -144,7 +168,7 @@ try
                         if (managerPlan is not null)
                         {
                             Console.WriteLine($"Using the manager's stored plan for {issue.Key}.");
-                            plan = managerPlan;
+                            plan = managerPlan.Plan;
                         }
                         else
                         {
@@ -156,6 +180,12 @@ try
                                 cancellation.Token);
                         }
 
+                        var beforeImplementation = await jira.GetIssueAsync(issue.Key, cancellation.Token);
+                        if (ManagerPlan.Fingerprint(beforeImplementation.Summary, beforeImplementation.Description, configuration.RepositoryUrl) !=
+                            ManagerPlan.Fingerprint(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                        {
+                            throw new InvalidOperationException("The Jira requirements changed after pickup. Refresh the manager plan before retrying implementation.");
+                        }
                         var result = await copilot.RunAsync(
                             workspacePath,
                             PromptBuilder.BuildImplementationPrompt(issue, plan),

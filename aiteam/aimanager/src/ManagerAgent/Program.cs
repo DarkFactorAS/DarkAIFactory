@@ -32,6 +32,12 @@ var pollInterval = AgentConfiguration.LoadPollInterval(appSettings.PollIntervalS
 using var databaseScope = host.Services.CreateScope();
 var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aimanager", appSettings.PollIntervalSeconds);
+var workerSettings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
+    .Load("aiworker", appSettings.PollIntervalSeconds);
+if (!string.Equals(settings.Jira.JiraAnalyzedLabel.Trim(), workerSettings.Jira.JiraAnalyzedLabel.Trim(), StringComparison.Ordinal))
+{
+    throw new InvalidOperationException("Manager and worker analyzed labels must match for the plan handoff.");
+}
 
 using var cancellation = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -66,7 +72,7 @@ try
         foreach (var project in projects)
         {
             cancellation.Token.ThrowIfCancellationRequested();
-            var configuration = AgentConfiguration.Load(settings, project);
+            var configuration = AgentConfiguration.Load(settings, project, workerSettings.Jira.JiraPickupLabel);
             using var jira = new JiraClient(configuration);
             var copilot = new CopilotRunner(configuration);
             if (loggedProjects.Add(project))
@@ -88,48 +94,26 @@ try
                 continue;
             }
 
+            var planner = new ManagerPlanner(configuration, plans, jira, async (issue, token) =>
+            {
+                await copilot.CheckAvailableAsync(token);
+                var workspacePath = GitHubRepository.CreateWorkspacePath();
+                try
+                {
+                    await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token);
+                    return await copilot.RunAsync(workspacePath, PromptBuilder.BuildPlanPrompt(issue), token);
+                }
+                finally
+                {
+                    GitHubRepository.DeleteWorkspace(workspacePath);
+                }
+            });
             foreach (var issue in issues)
             {
                 cancellation.Token.ThrowIfCancellationRequested();
                 try
                 {
-                    var storedPlan = plans.Find(issue.Key);
-                    if (storedPlan is null)
-                    {
-                        await copilot.CheckAvailableAsync(cancellation.Token);
-                        var workspacePath = GitHubRepository.CreateWorkspacePath();
-                        string plan;
-                        try
-                        {
-                            await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, cancellation.Token);
-                            plan = await copilot.RunAsync(
-                                workspacePath, PromptBuilder.BuildPlanPrompt(issue), cancellation.Token);
-                        }
-                        finally
-                        {
-                            GitHubRepository.DeleteWorkspace(workspacePath);
-                        }
-
-                        plans.Save(project.Id, issue.Key, plan);
-                        storedPlan = new ManagerPlan(plan, false);
-                    }
-
-                    if (!storedPlan.PostedToJira)
-                    {
-                        foreach (var comment in PromptBuilder.BuildPlanComments(storedPlan.Plan))
-                        {
-                            await jira.AddCommentAsync(issue.Key, comment, cancellation.Token);
-                        }
-
-                        plans.MarkPostedToJira(issue.Key);
-                    }
-
-                    await jira.AddLabelAsync(issue.Key, configuration.AnalyzedLabel, cancellation.Token);
-                    if (!string.Equals(configuration.PickupLabel, configuration.AnalyzedLabel, StringComparison.Ordinal))
-                    {
-                        await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
-                    }
-                    Console.WriteLine($"Plan for {issue.Key} stored in Jira and manager_plans.");
+                    await planner.PlanAsync(project.Id, issue, cancellation.Token);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {

@@ -19,6 +19,7 @@ internal sealed record AgentConfiguration(
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
     public long? ManagerProjectId { get; init; }
+    public bool RequiresManagerPlan { get; init; } = true;
 
     public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject? project = null)
     {
@@ -57,7 +58,7 @@ internal sealed record AgentConfiguration(
 
         // The default query only picks up issues the manager has already planned
         // (the manager stores the plan before adding the analyzed label).
-        // A JiraJql override replaces this gate for manager-less deployments.
+        // A JiraJql override replaces this gate only when there are no project mappings.
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
             $"AND status = \"{EscapeJql(jiraStatusName)}\" " +
@@ -76,6 +77,7 @@ internal sealed record AgentConfiguration(
         if (project is not null && !string.IsNullOrWhiteSpace(settings.Jira.JiraJql))
         {
             jql = ScopeToProject(jql, jiraProjectKey);
+            jql = RequireLabel(jql, analyzedLabel);
         }
 
         return new AgentConfiguration(
@@ -93,7 +95,8 @@ internal sealed record AgentConfiguration(
             TimeSpan.FromSeconds(pollSeconds))
         {
             AnalyzedLabel = analyzedLabel,
-            ManagerProjectId = project?.Id
+            ManagerProjectId = project?.Id,
+            RequiresManagerPlan = project is not null || string.IsNullOrWhiteSpace(settings.Jira.JiraJql)
         };
     }
 

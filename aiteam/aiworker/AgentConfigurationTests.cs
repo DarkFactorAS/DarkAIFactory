@@ -17,6 +17,7 @@ public sealed class AgentConfigurationTests
         Assert.Equal("ai-agent-picked", config.PickupLabel);
         Assert.Equal("ai-agent-failed", config.FailureLabel);
         Assert.Equal("ai-analyzed", config.AnalyzedLabel);
+        Assert.True(config.RequiresManagerPlan);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
@@ -77,7 +78,8 @@ public sealed class AgentConfigurationTests
         var config = AgentConfiguration.Load(SettingsScope.Current,
             new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
 
-        Assert.StartsWith(expectedPrefix + " AND (labels is EMPTY", config.JiraJql);
+        Assert.StartsWith(expectedPrefix + " AND labels in (\"ai-analyzed\") AND (labels is EMPTY", config.JiraJql);
+        Assert.True(config.RequiresManagerPlan);
         if (jql.Contains("ORDER BY created", StringComparison.Ordinal))
         {
             Assert.EndsWith(" ORDER BY created", config.JiraJql);
@@ -240,6 +242,7 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
 
         Assert.DoesNotContain("ai-analyzed", Load().JiraJql);
+        Assert.False(Load().RequiresManagerPlan);
     }
 
     [Fact]

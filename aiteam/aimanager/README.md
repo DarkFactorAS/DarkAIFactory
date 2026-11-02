@@ -14,7 +14,7 @@ The standalone [dbmigration](../dbmigration/README.md) executable creates:
   `jira_project_key`, and `target_repository_url`.
 - `manager_plans`: auto-increment `BIGINT` primary key `id`, `manager_project_id`
   foreign key, unique `jira_key`, full `plan` (`LONGTEXT`), `posted_to_jira`
-  flag and `created` timestamp.
+  flag, `created` timestamp, `requirements_hash` and `source_updated` metadata.
 
 The manager does not create tables or run migrations. Run dbmigration first;
 missing tables or database read failures stop startup.
@@ -54,12 +54,27 @@ empty does it use shared `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
 For each eligible ticket, the manager creates a temporary repository checkout,
 generates a plan without changing files and removes the checkout. It saves the
 plan in `manager_plans` **before** posting to Jira, marks it as posted after all
-comments succeed, then adds the configured analysis label (`Jira.JiraAnalyzedLabel`,
-default `ai-analyzed`) and the configured completion label
-(`ai-manager-planned` by default). Long plans are split into
+comments succeed, then adds the configured completion label
+(`ai-manager-planned` by default) and finally the analysis/handoff label
+(`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). Long plans are split into
 numbered Jira comments without truncation.
 
-A saved plan is reused on retries, so a Jira or label failure does not trigger
+The manager continues scanning eligible, unclaimed issues even after they carry
+the completion label. It stores Jira's source `updated` timestamp and a SHA-256
+fingerprint of the title, description and mapped repository. Changed requirements
+or repository mappings automatically trigger replanning; unchanged plans are
+reused. Agent comments and labels change Jira's timestamp but not the fingerprint,
+so they do not cause unnecessary paid planning runs. Existing plans with no
+fingerprint are replanned once after migration.
+
+Before replacing a stale plan, the manager removes both handoff/completion labels.
+It refreshes the issue before planning and again before saving and publishing,
+discarding generated plans if requirements changed in the meantime. Issues
+claimed by the worker are excluded, including with custom JQL. Manager and worker
+analysis labels must match; the manager reads the worker's configured pickup
+label at startup.
+
+A current saved plan is reused on retries, so a Jira or label failure does not trigger
 another agent run. If posting fails partway through a multi-comment plan, retry
 may duplicate comments already posted. Database and Jira writes are not a
 single transaction. Failures are logged and reported to Jira with
@@ -76,9 +91,11 @@ tickets available for implementation. The analysis label is the handoff signal:
 aiworker's default query only picks up issues that carry it, and the worker then
 implements using the plan stored in `manager_plans`. Because the plan is saved
 before the label is added, the worker always finds a stored plan for gated
-issues. Ticket statuses remain unchanged.
-To deliberately replan a ticket, delete its `manager_plans` row and remove its
-manager completion label in Jira.
+issues. The worker also checks the fingerprint against fresh Jira requirements;
+stale or unpublished plans are never implemented. Ticket statuses remain unchanged.
+To deliberately replan an unclaimed ticket, remove its analysis and completion
+labels, delete its `manager_plans` row, and clear any failure label. Do not reset
+claimed or already pushed work; follow the worker's recovery instructions instead.
 
 ## Run
 
