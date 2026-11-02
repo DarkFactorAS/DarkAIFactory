@@ -137,14 +137,15 @@ try
                 }
                 catch (Exception exception)
                 {
-                    Console.Error.WriteLine($"Planning {issue.Key} failed: {exception.Message}. Retrying next cycle.");
+                    Console.Error.WriteLine($"Planning {issue.Key} failed: {exception.Message}. Pausing automatic retries with the failure label.");
                     try
                     {
                         await jira.AddLabelAsync(issue.Key, configuration.FailureLabel, cancellation.Token);
                         await jira.AddCommentAsync(
                             issue.Key,
                             $"The manager could not complete planning: {PromptBuilder.LimitForComment(exception.Message)}\n\n" +
-                            "No code was implemented. Any saved plan will be reused when planning is retried.",
+                            $"No code was implemented. Remove the `{configuration.FailureLabel}` label after resolving the failure to retry planning. " +
+                            "Any saved plan will be reused.",
                             cancellation.Token);
                     }
                     catch (Exception notificationException) when (!cancellation.IsCancellationRequested)

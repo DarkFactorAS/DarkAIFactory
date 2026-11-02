@@ -62,7 +62,11 @@ A saved plan is reused on retries, so a Jira or label failure does not trigger
 another agent run. If posting fails partway through a multi-comment plan, retry
 may duplicate comments already posted. Database and Jira writes are not a
 single transaction. Failures are logged and reported to Jira with
-the shared failure label (`ai-agent-failed` by default); incomplete tickets are retried next cycle. Plans already
+the shared failure label (`ai-agent-failed` by default). Failed tickets are excluded
+from polling, including custom JQL, to avoid unlimited paid planning attempts.
+Resolve the failure and remove the failure label to retry; any saved plan is
+reused without another Copilot run. If Jira cannot accept the failure label,
+the error is logged and polling can retry the ticket. Plans already
 posted to Jira are not posted again when only the analysis or completion label
 needs retrying. The analysis label is added even with a custom completion label.
 

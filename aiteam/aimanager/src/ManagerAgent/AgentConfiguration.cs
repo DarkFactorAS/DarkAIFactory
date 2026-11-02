@@ -74,7 +74,7 @@ internal sealed record AgentConfiguration(
             agentGitHubToken,
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             repositoryUri,
-            AddPickupLabelExclusion(jql, pickupLabel),
+            AddPickupLabelExclusion(AddPickupLabelExclusion(jql, failureLabel), pickupLabel),
             pickupLabel,
             failureLabel,
             Get(settings.Jira.JiraInProgressStatus, "In Progress"),
