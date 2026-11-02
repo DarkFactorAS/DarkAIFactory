@@ -1,8 +1,9 @@
 {
-  "AppName": "AiBuildPage",
+  "AppName": "DarkAIFactory",
   "EnableLogging": true,
+  "PollIntervalSeconds": 30,
   "DatabaseConnection": {
-    "Server": "localhost",
+    "Server": "aiteam_database",
     "Port": 3306,
     "Database": "aiteam",
     "Username": "aiteam",

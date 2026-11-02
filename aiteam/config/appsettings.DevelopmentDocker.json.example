@@ -1,6 +1,7 @@
 {
-  "AppName": "AiBuildPage",
+  "AppName": "DarkAIFactory",
   "EnableLogging": true,
+  "PollIntervalSeconds": 30,
   "DatabaseConnection": {
     "Server": "host.docker.internal",
     "Port": 3306,

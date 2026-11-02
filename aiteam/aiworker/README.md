@@ -12,19 +12,21 @@ skips epics. Set `Jira.JiraJql` to use a different query.
 ## Run
 
 First configure the app's environment-specific JSON file as described in
-[App configuration](../config/README.md). Jira/GitHub settings are JSON properties.
-Docker mounts `aiteam/config/aiworker` at `/app/Config`. The worker loads app
-settings but does not require a database connection.
+[App configuration](../config/README.md). Jira/GitHub settings come from the shared
+database `settings` table, with three client-specific rows. Docker mounts
+the shared `aiteam/config` directory at `/app/Config` (`AITEAM_CONFIG_PATH` overrides it). The worker now requires a database
+connection to an already migrated database. It never creates tables.
+Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
-2. In the selected appsettings JSON file, set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
-3. Set `GitHub.AgentGitHubToken` to a fine-grained GitHub personal access token with only the
+2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
+3. Set shared `GitHub.AgentGitHubToken` to a fine-grained GitHub personal access token with only the
    **Copilot Requests** permission.
-4. Set `GitHub.GitHubRepositoryToken` to a separate fine-grained token with
+4. Set the `aiworker` row `GitHub.GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
    permissions for the target repository. The worker uses this token only to
    clone, push its branch and open the pull request.
-5. Set `GitHub.TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
+5. Set shared `GitHub.TargetRepositoryUrl` to an HTTPS GitHub repository URL, such as
    `https://github.com/owner/repository.git`.
 6. Set `MARIADB_ROOT_PASSWORD` and `MARIADB_PASSWORD`. Optionally change
    `MARIADB_DATABASE`, `MARIADB_USER` and `MARIADB_VOLUME_NAME`.
@@ -44,7 +46,11 @@ settings but does not require a database connection.
    ```
 
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
-the repository root (the Dockerfile is `aiteam/aiworker/Dockerfile`, as used by CI). For each issue, the worker clones the repository to an
+the repository root (the Dockerfile is `aiteam/aiworker/Dockerfile`, as used by CI).
+Compose runs dbmigration successfully before starting the worker.
+For initial setup, run the migration service separately and populate its seeded
+settings before starting the worker, as described in the configuration guide.
+For each issue, the worker clones the repository to an
 private temporary workspace, creates a branch named `ai-agent/<issue>-<id>`,
 and pushes a commit if the agent made changes. Successfully delivered workspaces
 are removed. Workspaces for failed or interrupted tasks are retained for
@@ -69,8 +75,9 @@ the pickup label and rerunning the implementation.
 ## Run from Visual Studio Code
 
 Open the repository root in VS Code, copy `aiteam/.env.example` to
-`aiteam/.env` for deployment settings, and configure Jira/GitHub credentials and
-repository URL in `aiteam/config/aiworker/appsettings.Development.json`.
+`aiteam/.env` for deployment settings, configure the database connection in
+`aiteam/config/appsettings.Development.json`, and populate Jira/GitHub
+credentials and repository URL in the database `settings` table.
 Install the C# extension, then select **AI Worker (.NET)** in Run and Debug and
 press F5. VS Code builds the worker first and loads `aiteam/.env`.
 
@@ -91,7 +98,10 @@ included in the Docker image.
 
 ## Configuration
 
-| JSON property | Default | Description |
+All Jira/GitHub entries below are database setting names; only
+`PollIntervalSeconds` remains in JSON.
+
+| Setting | Default | Description |
 | --- | --- | --- |
 | `Jira.JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
 | `Jira.JiraEmail` | required | Jira account email |

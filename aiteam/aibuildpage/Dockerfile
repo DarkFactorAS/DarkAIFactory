@@ -6,6 +6,7 @@ RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
     --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
     dotnet restore src/aibuildpage/aibuildpage.csproj
 COPY aiteam/aibuildpage/src/aibuildpage/ src/aibuildpage/
+COPY aiteam/shared/ /shared/
 RUN dotnet publish src/aibuildpage/aibuildpage.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

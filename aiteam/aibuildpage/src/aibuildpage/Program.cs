@@ -1,6 +1,5 @@
-using aibuildpage.Repository;
+using AiTeam.Configuration;
 using DFCommonLib.Config;
-using DFCommonLib.DataAccess;
 using DFCommonLib.Logger;
 using DFCommonLib.Utils;
 
@@ -17,23 +16,22 @@ new DFServices(builder.Services)
     .SetupMySql()
     .LogToConsole(DFLogLevel.INFO);
 
-builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
+builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddSingleton(services =>
+{
+    using var scope = services.CreateScope();
+    return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aibuildpage");
+});
 
 var app = builder.Build();
 
-using var databaseScope = app.Services.CreateScope();
-var databasePatcher = databaseScope.ServiceProvider.GetRequiredService<IStartupDatabasePatcher>();
-databasePatcher.WaitForConnection();
-if (databasePatcher.RunPatcher())
-{
-    DFLogger.LogOutput(DFLogLevel.INFO, "Startup", "Database patcher ran successfully");
-}
-else
-{
-    DFLogger.LogOutput(DFLogLevel.ERROR, "Startup", "Database patcher failed");
-    Environment.Exit(1);
-    return;
-}
+var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
+Console.WriteLine(
+    $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
+    $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
+
+// Load credentials server-side only; never expose them in page responses.
+_ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/", () => Results.Content(Html, "text/html"));
 

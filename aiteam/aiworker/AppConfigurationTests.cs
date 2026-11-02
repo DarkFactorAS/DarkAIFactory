@@ -52,10 +52,9 @@ public sealed class AppConfigurationTests
             Assert.Equal("localhost", helper.Settings.DatabaseConnection.Server);
             Assert.Equal(3306, helper.Settings.DatabaseConnection.Port);
             var settings = Assert.IsType<AgentSettings>(helper.Settings);
-            var configuration = AgentConfiguration.Load(settings);
-            Assert.Equal("test-only", configuration.AgentGitHubToken);
-            Assert.Equal("custom-picked", configuration.PickupLabel);
-            Assert.Equal(TimeSpan.FromSeconds(5), configuration.PollInterval);
+            Assert.Equal(5, settings.PollIntervalSeconds);
+            Assert.Null(typeof(AgentSettings).GetProperty("Jira"));
+            Assert.Null(typeof(AgentSettings).GetProperty("GitHub"));
         }
         finally
         {

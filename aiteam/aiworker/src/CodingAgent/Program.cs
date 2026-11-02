@@ -1,4 +1,5 @@
 using CodingAgent;
+using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
 using DFCommonLib.Utils;
@@ -12,11 +13,18 @@ Console.WriteLine(
     $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
     $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
-new DFServices(builder.Services).SetupLogger().LogToConsole(DFLogLevel.INFO);
+new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
+builder.Services.AddScoped<IntegrationSettingsRepository>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
-var configuration = AgentConfiguration.Load(appSettings);
+Console.WriteLine(
+    $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
+    $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
+using var databaseScope = host.Services.CreateScope();
+var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
+    .Load("aiworker", appSettings.PollIntervalSeconds);
+var configuration = AgentConfiguration.Load(settings);
 DFLogger.LogOutput(DFLogLevel.INFO, "Startup", $"Starting {appSettings.AppName}");
 
 using var cancellation = new CancellationTokenSource();

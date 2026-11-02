@@ -4,4 +4,4 @@
 **/bin
 **/obj
 **/UserSettings
-**/config/*/appsettings.*.json
+**/config/**/appsettings.*.json

@@ -1,6 +1,6 @@
 using DFCommonLib.DataAccess;
 
-namespace ManagerAgent.Repository;
+namespace dbmigration.Repository;
 
 public class AiDatabasePatcher : StartupDatabasePatcher
 {
@@ -45,6 +45,6 @@ public class AiDatabasePatcher : StartupDatabasePatcher
                     REFERENCES `manager_projects` (`id`)
             )
             """);
-        return _dbPatcher.Successful();
+        return _dbPatcher.Successful() && IntegrationSettingsPatcher.Run(_dbPatcher);
     }
 }

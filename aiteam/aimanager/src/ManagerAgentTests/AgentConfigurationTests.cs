@@ -15,7 +15,7 @@ public sealed class AgentConfigurationTests
         var config = Load();
 
         Assert.Equal("ai-manager-planned", config.PickupLabel);
-        Assert.Equal("ai-manager-failed", config.FailureLabel);
+        Assert.Equal("ai-agent-failed", config.FailureLabel);
         Assert.Equal("ai-analyzed", config.AnalyzedLabel);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
@@ -96,15 +96,15 @@ public sealed class AgentConfigurationTests
     }
 
     [Fact]
-    public void Load_KeepsImplementationStatusesUnused()
+    public void Load_ReadsSharedStatusesEvenThoughManagerDoesNotTransitionIssues()
     {
         using var env = new SettingsScope().WithValidDefaults()
             .Set("Jira:JiraInProgressStatus", "Doing").Set("Jira:JiraInReviewStatus", "Code Review");
 
         var config = Load();
 
-        Assert.Equal("In Progress", config.InProgressStatus);
-        Assert.Equal("In Review", config.InReviewStatus);
+        Assert.Equal("Doing", config.InProgressStatus);
+        Assert.Equal("Code Review", config.InReviewStatus);
     }
 
     [Fact]

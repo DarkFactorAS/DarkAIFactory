@@ -2,15 +2,17 @@
 
 All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
 as `ConfigurationHelper<AgentSettings>` for the agents and
-`ConfigurationHelper<AppSettings>` for aibuildpage, reading
-`Config/appsettings.<environment>.json`. Jira/GitHub credentials, labels, queries
-and polling settings now live in each agent's JSON file alongside app/database
-settings. Environment Jira/GitHub variables are no longer read or used as overrides.
-aimanager's project keys and repository URLs remain in the database; aiworker
-uses JSON `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl`.
+`ConfigurationHelper<AppSettings>` for aibuildpage and dbmigration, reading
+`Config/appsettings.<environment>.json`. JSON contains app/database settings and
+the agents' `PollIntervalSeconds` (integer, minimum 5), not Jira/GitHub settings.
+All three clients load Jira/GitHub settings from the same MariaDB `settings`
+table at startup, using the same loader. All four programs use the same
+environment-specific JSON files directly in this `aiteam/config` directory.
+Restart clients after changing settings.
+There are no JSON or environment Jira/GitHub overrides or fallbacks.
 
-Each app (`aiworker`, `aimanager`, `aibuildpage`) has a template for every
-supported environment. Copy the selected `appsettings.<environment>.json.example`
+One shared template covers all four programs for each supported environment.
+Copy the selected `appsettings.<environment>.json.example`
 to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 
 - `appsettings.Production.json`: deployed database host `aiteam_database`.
@@ -19,60 +21,115 @@ to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 - `appsettings.DevelopmentDocker.json`: database host `host.docker.internal`
   and the port of the database running on your host.
 
-For example, to configure aimanager for local development:
+For example, to configure all programs for local development:
 
 ```sh
-cp aiteam/config/aimanager/appsettings.Development.json.example \
-   aiteam/config/aimanager/appsettings.Development.json
+cp aiteam/config/appsettings.Development.json.example \
+   aiteam/config/appsettings.Development.json
 ```
 
 Run this from the repository root, only if the destination does not already
-contain your configuration. The same naming convention applies to all three apps.
+contain your configuration. `AppName` is shared (`DarkAIFactory` in the templates).
+Both agents use the same `PollIntervalSeconds`; aibuildpage and dbmigration
+ignore this agent-only property.
+
+When upgrading from per-client directories, move one selected configuration for
+each environment directly into `aiteam/config` and reconcile any differing
+database values before removing old copies. The old directories are no longer
+read. Replace `AIWORKER_CONFIG_PATH`, `AIMANAGER_CONFIG_PATH` and
+`DBMIGRATION_CONFIG_PATH` in `.env` with one `AITEAM_CONFIG_PATH` if overriding
+the default `./config` mount.
 
 Set the actual database name, username and password. Do not commit these runtime
-files; Git ignores them. The templates contain no credentials. aiworker loads
-app configuration but does not connect to the database or run migrations.
-aimanager and aibuildpage require a database and run their startup patchers.
+files; Git ignores them. The templates contain no credentials. All three clients
+require an already migrated database and never create tables at startup.
+Run [dbmigration](../dbmigration/README.md) before starting any client.
 
-Each agent groups its settings under `Jira` and `GitHub`:
+## Shared Jira/GitHub settings
 
-```json
-{
-  "Jira": {
-    "JiraBaseUrl": "https://your-company.atlassian.net",
-    "JiraEmail": "your-jira-account@example.com",
-    "JiraApiToken": ""
-  },
-  "GitHub": {
-    "AgentGitHubToken": "",
-    "GitHubRepositoryToken": ""
-  }
-}
+The `settings` table has a composite primary key (`client`, `name`) and a `value`
+column. Names use the former JSON section/property notation, for example
+`Jira.JiraApiToken`. A database check constraint enforces the scopes:
+
+- `shared`: every Jira/GitHub setting except the three below. All clients read
+  these same rows, including `Jira.JiraFailureLabel` (now `ai-agent-failed` for
+  both agents) and `GitHub.AgentGitHubToken`.
+- `aimanager`, `aiworker`, `aibuildpage`: exactly `Jira.JiraPickupLabel`,
+  `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`.
+  Each client reads its own three rows; no fallback to another client or shared
+  row is allowed. Missing rows fail explicitly.
+
+The standalone `dbmigration` executable owns all table creation. It retains
+`StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, and
+`IntegrationSettings` IDs 1-2 for settings and seed data. Existing migration
+history remains valid; dbmigration upgrades the `version` primary key to
+(`system`, `patchId`) so IDs from different systems do not collide.
+Defaults are inserted once; subsequent migrations do not
+overwrite configured values. Credentials and the worker repository URL are
+initially empty and must be populated by an administrator.
+
+### Migrating existing configuration
+
+1. Stop the agents and back up the database.
+2. Configure the shared JSON `DatabaseConnection` for all programs.
+3. Run dbmigration to create/seed the tables. In Compose, run
+   `docker compose --env-file aiteam/.env -f aiteam/docker-compose.yml run --build --rm dbmigration`
+   from the repository root.
+4. Using Adminer or another trusted database tool, update the seeded rows.
+   Move the existing common Jira/GitHub values to `client = 'shared'`, choosing
+   one value where the old clients differed. Move only the three exceptions
+   to their respective client rows. Do not copy real tokens into SQL files,
+   source control, shell history or logs.
+5. Remove the old `Jira` and `GitHub` sections from runtime JSON and restart
+   the agents. Existing JSON values are ignored, never imported automatically.
+
+Example non-secret updates:
+
+```sql
+UPDATE settings SET value = 'https://your-company.atlassian.net'
+WHERE client = 'shared' AND name = 'Jira.JiraBaseUrl';
+UPDATE settings SET value = 'https://github.com/owner/repository.git'
+WHERE client = 'shared' AND name = 'GitHub.TargetRepositoryUrl';
+UPDATE settings SET value = 'ai-manager-planned'
+WHERE client = 'aimanager' AND name = 'Jira.JiraPickupLabel';
 ```
 
-Set `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
-`GitHub.AgentGitHubToken` (Copilot Requests) and `GitHub.GitHubRepositoryToken`
-(repository access). Move all existing `Jira*` fields into `Jira`, and move
-`AgentGitHubToken`, `GitHubRepositoryToken` and the worker's `TargetRepositoryUrl`
-into `GitHub`, keeping their values. Older `GitHubToken` fields must also be
-renamed to `AgentGitHubToken`. Flat fields are no longer read.
-The manager's `Jira.JiraAnalyzedLabel` defaults to `ai-analyzed`.
-`PollIntervalSeconds` is a JSON integer, with minimum 5. Optional omitted settings
-use the defaults in the templates. Required empty credentials fail validation.
-The manager and worker have separate JSON files, allowing different tokens and labels.
-Do not copy agent credentials into aibuildpage, which does not use Jira/GitHub.
+Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
+`Jira.JiraProjectKey` (`DFAI`), `Jira.JiraStatusName` (`Selected for Development`),
+`Jira.JiraJql` (empty for generated JQL), `Jira.JiraFailureLabel`
+(`ai-agent-failed`), `Jira.JiraInProgressStatus` (`In Progress`),
+`Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
+Requests) and `GitHub.TargetRepositoryUrl`.
+
+The manager still uses `manager_projects` for project/repository selection;
+shared `Jira.JiraProjectKey` and `GitHub.TargetRepositoryUrl` are the worker's
+defaults, not replacements for those mappings.
+
+Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
+`ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.
+The manager needs a read-only repository token; the worker needs Contents and
+Pull requests read/write. aibuildpage loads the same settings server-side but
+currently performs no Jira/GitHub operations, so its repository token may remain
+empty. Its page never exposes settings or credentials.
+
+Treat the database, backups and administration access as secret-bearing:
+tokens are stored as text. Use restricted database access and TLS for remote
+connections. No credentials are seeded, logged or returned by the web app.
 
 `.env` now contains only deployment/build settings: MariaDB container credentials,
 volume/config paths, `DOTNET_ENVIRONMENT` and NuGet authentication. Move existing
-Jira/GitHub values into each agent's selected JSON file before removing them from
-`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to JSON `GitHub.AgentGitHubToken`; there is
+Jira/GitHub values into the database before removing them from
+`.env`. A legacy `GH_TOKEN` or `GITHUB_TOKEN` maps to shared `GitHub.AgentGitHubToken`; there is
 no runtime fallback to environment tokens. The runner supplies only this configured
 Copilot token to its child process; repository credentials stay with Git.
 
 The selected environment is `DOTNET_ENVIRONMENT` for the console apps; the web
 app also honors ASP.NET Core environment selection. Production is the default.
-All three apps print the selected environment and `Config/appsettings.<environment>.json`
+All four apps print the selected environment and `Config/appsettings.<environment>.json`
 filename before loading app configuration, including when the file is missing.
+After loading configuration, all four apps print the database name, host and
+port before resolving database services and connecting.
+Database credentials are not included in this message.
 VS Code's AI Worker launch selects Development. Configure the JSON file first.
 
 Projects copy configured JSON files into `Config/` in build and publish output.
@@ -81,9 +138,12 @@ works regardless of the directory from which `dotnet run` is invoked.
 Local publishing therefore includes credentials: treat publish output as sensitive.
 
 Docker builds do not copy runtime configuration into the image. Compose mounts
-`config/aiworker` and `config/aimanager` read-only at `/app/Config`, controlled by
-`AIWORKER_CONFIG_PATH` and `AIMANAGER_CONFIG_PATH`. When deploying aibuildpage
-separately, mount its config directory at `<application directory>/Config`.
+the same `config` directory read-only at `/app/Config` for all services,
+controlled by `AITEAM_CONFIG_PATH` (default `./config`).
+Both agents depend on successful completion of the
+one-shot dbmigration service, which waits for MariaDB's health check.
+When deploying aibuildpage
+separately, mount this same shared directory at `<application directory>/Config`.
 Use `DOTNET_ENVIRONMENT=DevelopmentDocker` for that environment.
 
 ## Database administration

@@ -9,8 +9,10 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   GitHub Copilot CLI to implement them in a target repository, and opens pull
   requests. See [the AI worker README](aiteam/aiworker/README.md) for setup,
   configuration, and tests.
-- **aibuildpage** — a minimal ASP.NET Core application with a startup database
-  patcher. See [the aibuildpage README](aiteam/aibuildpage/README.md).
+- **aibuildpage** — a minimal ASP.NET Core application.
+  See [the aibuildpage README](aiteam/aibuildpage/README.md).
+- **dbmigration** — a one-shot executable that creates and upgrades the shared
+  database before clients start. See [the migration README](aiteam/dbmigration/README.md).
 
 ## Agent skills
 
@@ -31,7 +33,7 @@ git submodule update --init --recursive
 
 Pushes to `main` and pull requests run the worker and manager .NET and Docker
 workflows in [.github/workflows](.github/workflows). The worker .NET workflow
-also builds aibuildpage. Docker CI uses the shared
+also builds aibuildpage and builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
 ## Deployment
@@ -56,7 +58,7 @@ are serialized per app.
 - GitHub environments named `staging` and `production`, with any desired
   approval rules.
 - Secrets `NUGET_USERNAME` and `NUGET_TOKEN`.
-- Manager and build-page database settings: variables `DATABASE_SERVER`,
+- Database settings for all three clients: variables `DATABASE_SERVER`,
   `DATABASE_PORT`, `DATABASE_NAME`, and secrets `DATABASE_USERNAME`,
   `DATABASE_PASSWORD`, available to each environment.
 - Repository variables `AIBUILDPAGE_STAGING_PORT` and
@@ -66,7 +68,10 @@ are serialized per app.
 
 The agents pass `external_port: 0` because they have no HTTP listener; the
 Infrastructure workflow nevertheless publishes an unused ephemeral port.
-The worker uses `skipdbcheck` because it does not connect to the database.
+All three clients require the same configured database for Jira/GitHub settings.
+Run dbmigration against that database before deploying any client. Compose
+handles this ordering for the agents; separate deployment workflows must run
+the migration executable as a prerequisite. Clients no longer create tables.
 
 ### Deployment blockers
 
@@ -75,20 +80,20 @@ the existing Infrastructure workflow unchanged; compatibility must be addressed
 there before running them:
 
 - Infrastructure unconditionally substitutes database values in
-  `<project_path>/Config/appsettings.<environment>.json`, even with
-  `skipdbcheck`. This repository instead keeps ignored runtime JSON under
+  `<project_path>/Config/appsettings.<environment>.json`. This repository instead keeps ignored runtime JSON under
   [aiteam/config](aiteam/config), with `Production`, `Development`, and
   `DevelopmentDocker` filename casing. The expected staging/production files
   do not exist at the Infrastructure paths.
 - Images deliberately exclude runtime configuration. Infrastructure must
-  support read-only configuration mounts rather than baking Jira/GitHub
-  credentials into images.
+  support read-only configuration mounts for database credentials rather than
+  baking Jira/GitHub credentials into images. Jira/GitHub credentials live in
+  the shared database, not in images.
 - Infrastructure sets only `ASPNETCORE_ENVIRONMENT` to lowercase `staging` or
   `production`. Agents select configuration using `DOTNET_ENVIRONMENT`, and
   the web app selects the exact ASP.NET Core environment filename. Environment
   selection and config filenames must be aligned for all three apps.
-- Infrastructure does not join the Compose database network. Manager and
-  build-page containers need network access to the configured MariaDB host;
+- Infrastructure does not join the Compose database network. All three
+  client containers need network access to the configured MariaDB host;
   `aiteam_database` is only resolvable on its Docker network.
 - Infrastructure starts detached containers without checking application
   readiness. Successful startup must be verified before promoting to production.

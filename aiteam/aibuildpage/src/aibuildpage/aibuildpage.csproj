@@ -6,7 +6,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../../shared/*.cs" Link="Configuration/%(Filename)%(Extension)" />
     <PackageReference Include="DarkFactor.Common.Lib" Version="1.6.6" />
-    <Content Include="../../../config/aibuildpage/appsettings.*.json" Link="Config/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../../config/appsettings.*.json" Link="Config/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

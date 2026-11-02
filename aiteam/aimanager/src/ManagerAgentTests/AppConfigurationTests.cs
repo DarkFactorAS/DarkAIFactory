@@ -46,13 +46,9 @@ public sealed class AppConfigurationTests
             Directory.SetCurrentDirectory(directory.FullName);
             var helper = new ConfigurationHelper<AgentSettings>(new TestEnvironment(environmentName));
             var settings = Assert.IsType<AgentSettings>(helper.Settings);
-            var configuration = AgentConfiguration.Load(settings,
-                new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
-
-            Assert.Equal("custom-analyzed", configuration.AnalyzedLabel);
-            Assert.Equal(TimeSpan.FromSeconds(5), configuration.PollInterval);
-            Assert.Equal("test-only", configuration.AgentGitHubToken);
-            Assert.StartsWith("project = \"FIRST\"", configuration.JiraJql);
+            Assert.Equal(5, settings.PollIntervalSeconds);
+            Assert.Null(typeof(AgentSettings).GetProperty("Jira"));
+            Assert.Null(typeof(AgentSettings).GetProperty("GitHub"));
             Assert.Equal("localhost", settings.DatabaseConnection.Server);
         }
         finally
