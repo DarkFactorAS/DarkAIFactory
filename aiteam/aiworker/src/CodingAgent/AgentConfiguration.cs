@@ -16,6 +16,8 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
+    public string AnalyzedLabel { get; init; } = "ai-analyzed";
+
     public static AgentConfiguration Load(IntegrationSettings settings)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
@@ -43,13 +45,19 @@ internal sealed record AgentConfiguration(
         var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
         var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-agent-picked");
         var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
+        var analyzedLabel = Get(settings.Jira.JiraAnalyzedLabel, "ai-analyzed");
         ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
         ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
+        ValidateLabel(analyzedLabel, "Jira.JiraAnalyzedLabel");
 
+        // The default query only picks up issues the manager has already planned
+        // (the manager stores the plan before adding the analyzed label).
+        // A JiraJql override replaces this gate for manager-less deployments.
         var defaultJql =
             $"project = \"{EscapeJql(jiraProjectKey)}\" " +
             $"AND status = \"{EscapeJql(jiraStatusName)}\" " +
             $"AND issuetype != Epic " +
+            $"AND labels in (\"{EscapeJql(analyzedLabel)}\") " +
             "ORDER BY priority DESC, created ASC";
 
         var agentGitHubToken = Required(settings.GitHub.AgentGitHubToken, "GitHub.AgentGitHubToken");
@@ -71,7 +79,10 @@ internal sealed record AgentConfiguration(
             failureLabel,
             Get(settings.Jira.JiraInProgressStatus, "In Progress"),
             Get(settings.Jira.JiraInReviewStatus, "In Review"),
-            TimeSpan.FromSeconds(pollSeconds));
+            TimeSpan.FromSeconds(pollSeconds))
+        {
+            AnalyzedLabel = analyzedLabel
+        };
     }
 
     private static string Required(string? value, string name)

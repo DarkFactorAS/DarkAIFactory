@@ -1,4 +1,5 @@
 using CodingAgent;
+using CodingAgent.Repository;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -15,6 +16,7 @@ Console.WriteLine(
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<ManagerPlanReader>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
@@ -73,6 +75,18 @@ try
             cancellation.Token.ThrowIfCancellationRequested();
             Console.WriteLine($"Claiming {issue.Key}: {issue.Summary}");
 
+            string? managerPlan = null;
+            try
+            {
+                using var planScope = host.Services.CreateScope();
+                managerPlan = planScope.ServiceProvider.GetRequiredService<ManagerPlanReader>().Find(issue.Key);
+            }
+            catch (Exception exception) when (!cancellation.IsCancellationRequested)
+            {
+                Console.Error.WriteLine(
+                    $"Could not read the manager plan for {issue.Key}: {exception.Message}. Falling back to local planning.");
+            }
+
             string? workspacePath = null;
             string? branchName = null;
             string? pushedBranchName = null;
@@ -115,11 +129,22 @@ try
                         issue.Key,
                         cancellation.Token);
                     branchName = createdBranchName;
-                    var plan = await copilot.RunAsync(
-                        workspacePath,
-                        PromptBuilder.BuildPlanPrompt(issue),
-                        allowChanges: false,
-                        cancellation.Token);
+                    string plan;
+                    if (managerPlan is not null)
+                    {
+                        Console.WriteLine($"Using the manager's stored plan for {issue.Key}.");
+                        plan = managerPlan;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"No manager plan found for {issue.Key}; generating a plan locally.");
+                        plan = await copilot.RunAsync(
+                            workspacePath,
+                            PromptBuilder.BuildPlanPrompt(issue),
+                            allowChanges: false,
+                            cancellation.Token);
+                    }
+
                     var result = await copilot.RunAsync(
                         workspacePath,
                         PromptBuilder.BuildImplementationPrompt(issue, plan),

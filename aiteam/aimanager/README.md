@@ -67,7 +67,11 @@ posted to Jira are not posted again when only the analysis or completion label
 needs retrying. The analysis label is added even with a custom completion label.
 
 Manager labels are distinct from aiworker's pickup labels, leaving planned
-tickets available for implementation. Ticket statuses remain unchanged.
+tickets available for implementation. The analysis label is the handoff signal:
+aiworker's default query only picks up issues that carry it, and the worker then
+implements using the plan stored in `manager_plans`. Because the plan is saved
+before the label is added, the worker always finds a stored plan for gated
+issues. Ticket statuses remain unchanged.
 To deliberately replan a ticket, delete its `manager_plans` row and remove its
 manager completion label in Jira.
 

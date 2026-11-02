@@ -1,13 +1,21 @@
 # Jira Coding Agent
 
 This Dockerized worker polls Jira for eligible tasks, clones the configured
-GitHub repository and its submodules into a private temporary workspace, asks
-GitHub Copilot CLI to prepare an internal implementation plan without posting it
-to Jira, then implements the task and pushes the changes to a new GitHub branch before
-posting the result.
+GitHub repository and its submodules into a private temporary workspace, looks
+up the implementation plan the manager agent stored in the shared
+`manager_plans` table, then implements the task using that plan and pushes the
+changes to a new GitHub branch before posting the result. If no manager plan
+exists for the issue (for example in a manager-less deployment with a custom
+JQL), the worker asks GitHub Copilot CLI to prepare an internal plan locally
+without posting it to Jira.
 
-By default, it watches project `DFAI` in status `Selected for Development` and
-skips epics. Set `Jira.JiraJql` to use a different query.
+By default, it watches project `DFAI` in status `Selected for Development`,
+skips epics, and only picks up issues that carry the manager's analysis label
+(`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). The manager stores the plan
+in `manager_plans` before adding that label, so a gated issue always has a
+stored plan. Set `Jira.JiraJql` to use a different query; an override replaces
+the analyzed-label gate (the worker's own pickup-label exclusion is always
+appended), which allows running the worker without a manager.
 
 ## Run
 

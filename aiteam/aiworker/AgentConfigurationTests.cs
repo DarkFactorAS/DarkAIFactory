@@ -14,12 +14,14 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal("ai-agent-picked", config.PickupLabel);
         Assert.Equal("ai-agent-failed", config.FailureLabel);
+        Assert.Equal("ai-analyzed", config.AnalyzedLabel);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
         Assert.Equal("gh-token", config.AgentGitHubToken);
         Assert.Equal(
             "project = \"DFAI\" AND status = \"Selected for Development\" AND issuetype != Epic " +
+            "AND labels in (\"ai-analyzed\") " +
             "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY priority DESC, created ASC",
             config.JiraJql);
     }
@@ -142,6 +144,7 @@ public sealed class AgentConfigurationTests
     [Theory]
     [InlineData("Jira:JiraPickupLabel")]
     [InlineData("Jira:JiraFailureLabel")]
+    [InlineData("Jira:JiraAnalyzedLabel")]
     public void Load_RejectsLabelsWithWhitespace(string name)
     {
         using var env = new SettingsScope().WithValidDefaults().Set(name, "two words");
@@ -159,6 +162,26 @@ public sealed class AgentConfigurationTests
 
         Assert.Contains("project = \"A\\\"B\"", jql);
         Assert.Contains("status = \"C\\\\D\"", jql);
+    }
+
+    [Fact]
+    public void Load_RequiresAnalyzedLabelInDefaultJql()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("Jira:JiraAnalyzedLabel", "planned\"x");
+
+        var config = Load();
+
+        Assert.Equal("planned\"x", config.AnalyzedLabel);
+        Assert.Contains("AND labels in (\"planned\\\"x\")", config.JiraJql);
+    }
+
+    [Fact]
+    public void Load_JqlOverrideSkipsAnalyzedLabelRequirement()
+    {
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
+
+        Assert.DoesNotContain("ai-analyzed", Load().JiraJql);
     }
 
     [Fact]
