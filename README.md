@@ -85,8 +85,9 @@ there before running them:
   `DevelopmentDocker` filename casing. The expected staging/production files
   do not exist at the Infrastructure paths.
 - Images deliberately exclude runtime configuration. Infrastructure must
-  support read-only configuration mounts for database credentials.
-  Jira/GitHub credentials live in the shared database, not in images.
+  support read-only configuration mounts for database credentials rather than
+  baking Jira/GitHub credentials into images. Jira/GitHub credentials live in
+  the shared database, not in images.
 - Infrastructure sets only `ASPNETCORE_ENVIRONMENT` to lowercase `staging` or
   `production`. Agents select configuration using `DOTNET_ENVIRONMENT`, and
   the web app selects the exact ASP.NET Core environment filename. Environment
