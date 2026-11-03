@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace ManagerAgent.Tests;
 
 [Collection("Environment")]
@@ -23,7 +25,8 @@ public sealed class AgentConfigurationTests
         Assert.Equal("gh-token", config.AgentGitHubToken);
         Assert.Equal(
             "project = \"DFAI\" AND status = \"Selected for Development\" AND issuetype != Epic " +
-            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY priority DESC, created ASC",
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) " +
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY priority DESC, created ASC",
             config.JiraJql);
     }
 
@@ -181,7 +184,7 @@ public sealed class AgentConfigurationTests
             .Set("Jira:JiraJql", "project = X order  by created DESC");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) order  by created DESC",
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) order  by created DESC",
             Load().JiraJql);
     }
 
@@ -192,7 +195,7 @@ public sealed class AgentConfigurationTests
             .Set("Jira:JiraJql", "ORDER BY created DESC");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created DESC",
+            "project = \"DFAI\" AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY created DESC",
             Load().JiraJql);
     }
 
@@ -202,7 +205,7 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
+            "project = \"DFAI\" AND (project = X) AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
             Load().JiraJql);
     }
 
@@ -213,7 +216,7 @@ public sealed class AgentConfigurationTests
             .Set("Jira:JiraJql", "summary ~ \"x ORDER BY y\"");
 
         Assert.Equal(
-            "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-manager-planned\"))",
+            "project = \"DFAI\" AND (summary ~ \"x ORDER BY y\") AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) AND (labels is EMPTY OR labels not in (\"ai-agent-picked\"))",
             Load().JiraJql);
     }
 
@@ -225,8 +228,40 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal(
             "project = \"DFAI\" AND (summary ~ 'x ORDER BY y') " +
-            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created",
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) " +
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY created",
             Load().JiraJql);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("summary ~ 'ORDER BY' OR priority = High ORDER BY created")]
+    public void Load_AlwaysExcludesFailedPlans(string jql)
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("Jira:JiraJql", jql)
+            .Set("Jira:JiraFailureLabel", "failed\"plan");
+
+        Assert.Contains("AND (labels is EMPTY OR labels not in (\"failed\\\"plan\"))", Load().JiraJql);
+    }
+
+    [Fact]
+    public void Load_ScansCompletedPlansForStalenessButExcludesClaimedWork()
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+        var config = AgentConfiguration.Load(SettingsScope.Current, DefaultProject, "custom-worker-picked");
+
+        Assert.Contains("labels not in (\"custom-worker-picked\")", config.JiraJql);
+        Assert.DoesNotContain("labels not in (\"ai-manager-planned\")", config.JiraJql);
+    }
+
+    [Fact]
+    public void Load_RejectsWorkerPickupThatCollidesWithManagerHandoff()
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            AgentConfiguration.Load(SettingsScope.Current, DefaultProject, "ai-analyzed"));
     }
 
     [Fact]
@@ -253,7 +288,8 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal(
             "project = \"DFAI\" AND (priority = High OR priority = Highest) " +
-            "AND (labels is EMPTY OR labels not in (\"ai-manager-planned\")) ORDER BY created",
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-failed\")) " +
+            "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY created",
             Load().JiraJql);
     }
 
@@ -283,7 +319,7 @@ public sealed class AgentConfigurationTests
         {
             var query = Uri.UnescapeDataString(request.RequestUri!.Query);
             Assert.Contains($"project = \"{projectKey}\"", query);
-            Assert.Contains("labels not in (\"ai-manager-planned\")", query);
+            Assert.Contains("labels not in (\"ai-agent-picked\")", query);
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"issues":[]}""")

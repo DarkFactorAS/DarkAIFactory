@@ -1,4 +1,5 @@
 using CodingAgent;
+using CodingAgent.Repository;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -15,6 +16,8 @@ Console.WriteLine(
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<ManagerPlanReader>();
+builder.Services.AddScoped<ManagerProjectRepository>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
@@ -24,7 +27,11 @@ Console.WriteLine(
 using var databaseScope = host.Services.CreateScope();
 var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aiworker", appSettings.PollIntervalSeconds);
-var configuration = AgentConfiguration.Load(settings);
+if (settings.PollIntervalSeconds < 5)
+{
+    throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
+}
+var pollInterval = TimeSpan.FromSeconds(settings.PollIntervalSeconds);
 DFLogger.LogOutput(DFLogLevel.INFO, "Startup", $"Starting {appSettings.AppName}");
 
 using var cancellation = new CancellationTokenSource();
@@ -41,199 +48,258 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
-using var jira = new JiraClient(configuration);
-var copilot = new CopilotRunner(configuration);
-await copilot.CheckAvailableAsync(cancellation.Token);
-
-Console.WriteLine(
-    $"Coding agent polling Jira for eligible work every {configuration.PollInterval.TotalSeconds:0} seconds. " +
-    $"Repository: {configuration.RepositoryUrl}");
+var loggedConfigurations = new HashSet<AgentConfiguration>();
 
 try
 {
     while (!cancellation.IsCancellationRequested)
     {
-        IReadOnlyList<JiraIssue> issues;
-        try
+        using var scope = host.Services.CreateScope();
+        var projects = scope.ServiceProvider.GetRequiredService<ManagerProjectRepository>().GetProjects();
+        AgentConfiguration[] configurations = projects.Count == 0
+            ? [AgentConfiguration.Load(settings)]
+            : projects.Select(project => AgentConfiguration.Load(settings, project)).ToArray();
+        foreach (var configuration in configurations)
         {
-            issues = await jira.FindWorkAsync(cancellation.Token);
-        }
-        catch (Exception exception) when (
-            !cancellation.IsCancellationRequested &&
-            (exception is HttpRequestException || exception is OperationCanceledException))
-        {
-            Console.Error.WriteLine(
-                $"Jira polling failed: {exception.Message}. Retrying in {configuration.PollInterval.TotalSeconds:0} seconds.");
-            await Task.Delay(configuration.PollInterval, cancellation.Token);
-            continue;
-        }
-
-        foreach (var issue in issues)
-        {
-            cancellation.Token.ThrowIfCancellationRequested();
-            Console.WriteLine($"Claiming {issue.Key}: {issue.Summary}");
-
-            string? workspacePath = null;
-            string? branchName = null;
-            string? pushedBranchName = null;
-            string? pullRequestUrl = null;
-            var inProgressTransitionAttempted = false;
-            var resultCommentPosted = false;
+            using var jira = new JiraClient(configuration);
+            var copilot = new CopilotRunner(configuration);
+            if (loggedConfigurations.Add(configuration))
+            {
+                await copilot.CheckAvailableAsync(cancellation.Token);
+                Console.WriteLine(
+                    $"Coding agent polling every {pollInterval.TotalSeconds:0} seconds. " +
+                    $"Manager project: {configuration.ManagerProjectId?.ToString() ?? "legacy single-repository mode"}. " +
+                    $"Repository: {configuration.RepositoryUrl}");
+            }
+            IReadOnlyList<JiraIssue> issues;
             try
             {
-                await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
-                if (!string.IsNullOrEmpty(configuration.AssigneeAccountId))
+                issues = await jira.FindWorkAsync(cancellation.Token);
+            }
+            catch (Exception exception) when (
+                !cancellation.IsCancellationRequested &&
+                (exception is HttpRequestException || exception is OperationCanceledException))
+            {
+                Console.Error.WriteLine(
+                    $"Jira polling failed for {configuration.RepositoryUrl}: {exception.Message}. Retrying next cycle.");
+                continue;
+            }
+
+            foreach (var candidate in issues)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                JiraIssue issue;
+                try
                 {
+                    issue = await jira.GetIssueAsync(candidate.Key, cancellation.Token);
+                }
+                catch (Exception exception) when (
+                    !cancellation.IsCancellationRequested &&
+                    exception is HttpRequestException or OperationCanceledException)
+                {
+                    Console.Error.WriteLine($"Could not refresh {candidate.Key} before claiming: {exception.Message}. Retrying next cycle.");
+                    continue;
+                }
+                if (issue.Labels.Contains(configuration.PickupLabel) ||
+                    !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var managerPlan = scope.ServiceProvider.GetRequiredService<ManagerPlanReader>()
+                    .Find(issue.Key, configuration.ManagerProjectId);
+                if (managerPlan is not null &&
+                    !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                {
+                    Console.Error.WriteLine($"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
+                    continue;
+                }
+                if (configuration.RequiresManagerPlan &&
+                    (managerPlan is null || !issue.Labels.Contains(configuration.AnalyzedLabel)))
+                {
+                    Console.Error.WriteLine(
+                        $"Skipping {issue.Key}: no manager plan exists for the selected project. Verify the manager handoff labels and mapping.");
+                    continue;
+                }
+                Console.WriteLine($"Claiming {issue.Key}: {issue.Summary}");
+
+                string? workspacePath = null;
+                string? branchName = null;
+                string? pushedBranchName = null;
+                string? pullRequestUrl = null;
+                var inProgressTransitionAttempted = false;
+                var resultCommentPosted = false;
+                try
+                {
+                    await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
+                    if (!string.IsNullOrEmpty(configuration.AssigneeAccountId))
+                    {
+                        try
+                        {
+                            await jira.AssignAsync(issue.Key, configuration.AssigneeAccountId, cancellation.Token);
+                        }
+                        catch (Exception exception) when (!cancellation.IsCancellationRequested)
+                        {
+                            Console.Error.WriteLine($"Could not assign {issue.Key}: {exception.Message}");
+                            try
+                            {
+                                await jira.AddCommentAsync(
+                                    issue.Key,
+                                    $"The coding agent could not assign this issue: {LimitForComment(exception.Message)}\n\nWork continues.",
+                                    cancellation.Token);
+                            }
+                            catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
+                            {
+                                Console.Error.WriteLine(
+                                    $"Could not post the assignment warning for {issue.Key}: {notificationException.Message}");
+                            }
+                        }
+                    }
+
                     try
                     {
-                        await jira.AssignAsync(issue.Key, configuration.AssigneeAccountId, cancellation.Token);
+                        inProgressTransitionAttempted = true;
+                        await jira.TransitionToAsync(issue.Key, configuration.InProgressStatus, cancellation.Token);
                     }
                     catch (Exception exception) when (!cancellation.IsCancellationRequested)
                     {
-                        Console.Error.WriteLine($"Could not assign {issue.Key}: {exception.Message}");
+                        Console.Error.WriteLine(
+                            $"Could not move {issue.Key} to {configuration.InProgressStatus}: {exception.Message}");
                         try
                         {
                             await jira.AddCommentAsync(
                                 issue.Key,
-                                $"The coding agent could not assign this issue: {LimitForComment(exception.Message)}\n\nWork continues.",
+                                $"The coding agent could not move this issue to \"{configuration.InProgressStatus}\": {LimitForComment(exception.Message)}\n\nWork continues.",
                                 cancellation.Token);
                         }
                         catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
                         {
                             Console.Error.WriteLine(
-                                $"Could not post the assignment warning for {issue.Key}: {notificationException.Message}");
+                                $"Could not post the transition warning for {issue.Key}: {notificationException.Message}");
                         }
                     }
-                }
 
-                try
-                {
-                    inProgressTransitionAttempted = true;
-                    await jira.TransitionToAsync(issue.Key, configuration.InProgressStatus, cancellation.Token);
-                }
-                catch (Exception exception) when (!cancellation.IsCancellationRequested)
-                {
-                    Console.Error.WriteLine(
-                        $"Could not move {issue.Key} to {configuration.InProgressStatus}: {exception.Message}");
+                    var delivered = false;
                     try
                     {
-                        await jira.AddCommentAsync(
-                            issue.Key,
-                            $"The coding agent could not move this issue to \"{configuration.InProgressStatus}\": {LimitForComment(exception.Message)}\n\nWork continues.",
-                            cancellation.Token);
-                    }
-                    catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
-                    {
-                        Console.Error.WriteLine(
-                            $"Could not post the transition warning for {issue.Key}: {notificationException.Message}");
-                    }
-                }
-
-                var delivered = false;
-                try
-                {
-                    workspacePath = GitHubRepository.CreateWorkspacePath();
-                    var createdBranchName = await GitHubRepository.CloneForIssueAsync(
-                        configuration,
-                        workspacePath,
-                        issue.Key,
-                        cancellation.Token);
-                    branchName = createdBranchName;
-                    var plan = await copilot.RunAsync(
-                        workspacePath,
-                        PromptBuilder.BuildPlanPrompt(issue),
-                        allowChanges: false,
-                        cancellation.Token);
-                    var result = await copilot.RunAsync(
-                        workspacePath,
-                        PromptBuilder.BuildImplementationPrompt(issue, plan),
-                        allowChanges: true,
-                        cancellation.Token);
-                    var pushResult = await GitHubRepository.CommitAndPushAsync(
-                        configuration,
-                        workspacePath,
-                        createdBranchName,
-                        issue.Key,
-                        issue.Summary,
-                        cancellation.Token);
-                    pushedBranchName = pushResult.PushedBranchName;
-                    var message = pushResult.Message;
-                    if (pushedBranchName is not null)
-                    {
-                        pullRequestUrl = await GitHubRepository.CreatePullRequestAsync(
+                        workspacePath = GitHubRepository.CreateWorkspacePath();
+                        var createdBranchName = await GitHubRepository.CloneForIssueAsync(
                             configuration,
-                            pushedBranchName,
+                            workspacePath,
+                            issue.Key,
+                            cancellation.Token);
+                        branchName = createdBranchName;
+                        string plan;
+                        if (managerPlan is not null)
+                        {
+                            Console.WriteLine($"Using the manager's stored plan for {issue.Key}.");
+                            plan = managerPlan.Plan;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"No manager plan found for {issue.Key}; generating a plan locally.");
+                            plan = await copilot.RunAsync(
+                                workspacePath,
+                                PromptBuilder.BuildPlanPrompt(issue),
+                                allowChanges: false,
+                                cancellation.Token);
+                        }
+
+                        var beforeImplementation = await jira.GetIssueAsync(issue.Key, cancellation.Token);
+                        if (ManagerPlan.Fingerprint(beforeImplementation.Summary, beforeImplementation.Description, configuration.RepositoryUrl) !=
+                            ManagerPlan.Fingerprint(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                        {
+                            throw new InvalidOperationException("The Jira requirements changed after pickup. Refresh the manager plan before retrying implementation.");
+                        }
+                        var result = await copilot.RunAsync(
+                            workspacePath,
+                            PromptBuilder.BuildImplementationPrompt(issue, plan),
+                            allowChanges: true,
+                            cancellation.Token);
+                        var pushResult = await GitHubRepository.CommitAndPushAsync(
+                            configuration,
+                            workspacePath,
+                            createdBranchName,
                             issue.Key,
                             issue.Summary,
                             cancellation.Token);
-                        message += $" Pull request: {pullRequestUrl}";
-                    }
-                    else
-                    {
-                        message += " No pull request was created and the issue status was left unchanged.";
-                    }
-
-                    await jira.AddCommentAsync(
-                        issue.Key,
-                        $"Implementation result (generated by the coding agent):\n\n{LimitForComment(result)}\n\n{message}",
-                        cancellation.Token);
-                    resultCommentPosted = true;
-                    if (pullRequestUrl is not null)
-                    {
-                        await jira.TransitionToAsync(issue.Key, configuration.InReviewStatus, cancellation.Token);
-                    }
-
-                    delivered = true;
-                    Console.WriteLine($"Completed {issue.Key}.");
-                }
-                finally
-                {
-                    if (workspacePath is not null && delivered)
-                    {
-                        try
+                        pushedBranchName = pushResult.PushedBranchName;
+                        var message = pushResult.Message;
+                        if (pushedBranchName is not null)
                         {
-                            GitHubRepository.DeleteWorkspace(workspacePath);
+                            pullRequestUrl = await GitHubRepository.CreatePullRequestAsync(
+                                configuration,
+                                pushedBranchName,
+                                issue.Key,
+                                issue.Summary,
+                                cancellation.Token);
+                            message += $" Pull request: {pullRequestUrl}";
                         }
-                        catch (Exception exception) when (
-                            exception is IOException or UnauthorizedAccessException)
+                        else
                         {
+                            message += " No pull request was created and the issue status was left unchanged.";
+                        }
+
+                        await jira.AddCommentAsync(
+                            issue.Key,
+                            PromptBuilder.BuildResultComment(result, message, managerPlan),
+                            cancellation.Token);
+                        resultCommentPosted = true;
+                        if (pullRequestUrl is not null)
+                        {
+                            await jira.TransitionToAsync(issue.Key, configuration.InReviewStatus, cancellation.Token);
+                        }
+
+                        delivered = true;
+                        Console.WriteLine($"Completed {issue.Key}.");
+                    }
+                    finally
+                    {
+                        if (workspacePath is not null && delivered)
+                        {
+                            try
+                            {
+                                GitHubRepository.DeleteWorkspace(workspacePath);
+                            }
+                            catch (Exception exception) when (
+                                exception is IOException or UnauthorizedAccessException)
+                            {
+                                Console.Error.WriteLine(
+                                    $"Could not remove temporary workspace for {issue.Key}: {exception.Message}");
+                            }
+                        }
+                        else if (workspacePath is not null)
+                        {
+                            var branchStatus = pushedBranchName is null
+                                ? branchName is null ? string.Empty : $" Local branch: {branchName}."
+                                : $" Pushed branch: {pushedBranchName}.";
                             Console.Error.WriteLine(
-                                $"Could not remove temporary workspace for {issue.Key}: {exception.Message}");
+                                $"Retained temporary workspace for {issue.Key} at {workspacePath}.{branchStatus}");
                         }
                     }
-                    else if (workspacePath is not null)
-                    {
-                        var branchStatus = pushedBranchName is null
-                            ? branchName is null ? string.Empty : $" Local branch: {branchName}."
-                            : $" Pushed branch: {pushedBranchName}.";
-                        Console.Error.WriteLine(
-                            $"Retained temporary workspace for {issue.Key} at {workspacePath}.{branchStatus}");
-                    }
                 }
-            }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                Console.Error.WriteLine($"Processing {issue.Key} failed: {exception.Message}");
-                await ReportFailureAsync(
-                    jira,
-                    configuration,
-                    issue,
-                    exception,
-                    pushedBranchName,
-                    branchName,
-                    workspacePath,
-                    pullRequestUrl,
-                    inProgressTransitionAttempted,
-                    resultCommentPosted,
-                    cancellation.Token);
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine($"Processing {issue.Key} failed: {exception.Message}");
+                    await ReportFailureAsync(
+                        jira,
+                        configuration,
+                        issue,
+                        exception,
+                        pushedBranchName,
+                        branchName,
+                        workspacePath,
+                        pullRequestUrl,
+                        inProgressTransitionAttempted,
+                        resultCommentPosted,
+                        cancellation.Token);
+                }
             }
         }
-
-        await Task.Delay(configuration.PollInterval, cancellation.Token);
+        await Task.Delay(pollInterval, cancellation.Token);
     }
 }
 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -257,6 +323,8 @@ static async Task ReportFailureAsync(
     CancellationToken cancellationToken)
 {
     var statusRestored = false;
+    var requirementsChanged = exception is InvalidOperationException &&
+        exception.Message.StartsWith("The Jira requirements changed after pickup.", StringComparison.Ordinal);
     if (pushedBranchName is null &&
         inProgressTransitionAttempted &&
         issue.StatusName.Length > 0 &&
@@ -297,7 +365,9 @@ static async Task ReportFailureAsync(
             $"The coding agent could not complete this task: {LimitForComment(exception.Message)}\n\n" +
             (pushedBranchName is not null
                 ? $"The `{configuration.PickupLabel}` label remains in place to prevent automatic duplicate work. Do not remove it to rerun implementation.\n\n"
-                : $"The `{configuration.PickupLabel}` label remains in place. Remove it after resolving the failure to allow the issue to be picked up again.\n\n") +
+                : requirementsChanged
+                    ? $"The `{configuration.PickupLabel}` and `{configuration.FailureLabel}` labels remain in place. Remove both to allow the manager to refresh the plan and the worker to retry.\n\n"
+                    : $"The `{configuration.PickupLabel}` label remains in place. Remove it after resolving the failure to allow the issue to be picked up again.\n\n") +
             recoveryDetails,
             cancellationToken);
     }

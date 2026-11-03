@@ -61,6 +61,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("StartupDatabasePatcher", 1),
             ("StartupDatabasePatcher", 2),
             ("StartupDatabasePatcher", 3),
+            ("StartupDatabasePatcher", 4),
             ("IntegrationSettings", 1),
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3)]);
@@ -80,9 +81,26 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Equal([
             ("StartupDatabasePatcher", 2),
             ("StartupDatabasePatcher", 3),
+            ("StartupDatabasePatcher", 4),
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3)], patcher.Executed);
 
+        patcher.Executed.Clear();
+        Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
+        Assert.Empty(patcher.Executed);
+    }
+
+    [Fact]
+    public void Patcher_UpgradesExistingPlansWithoutReapplyingOldPatches()
+    {
+        var patcher = new HistoryPatcher();
+        patcher.Applied.UnionWith([
+            ("StartupDatabasePatcher", 1), ("StartupDatabasePatcher", 2), ("StartupDatabasePatcher", 3),
+            ("StartupDatabasePatcher", 4),
+            ("IntegrationSettings", 1), ("IntegrationSettings", 2)]);
+
+        Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
+        Assert.Equal([("IntegrationSettings", 3)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);

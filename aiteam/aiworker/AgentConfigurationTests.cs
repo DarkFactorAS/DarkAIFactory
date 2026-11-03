@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace CodingAgent.Tests;
 
 [Collection("Environment")]
@@ -14,14 +16,74 @@ public sealed class AgentConfigurationTests
 
         Assert.Equal("ai-agent-picked", config.PickupLabel);
         Assert.Equal("ai-agent-failed", config.FailureLabel);
+        Assert.Equal("ai-analyzed", config.AnalyzedLabel);
+        Assert.True(config.RequiresManagerPlan);
         Assert.Equal("In Progress", config.InProgressStatus);
         Assert.Equal("In Review", config.InReviewStatus);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
         Assert.Equal("gh-token", config.AgentGitHubToken);
         Assert.Equal(
             "project = \"DFAI\" AND status = \"Selected for Development\" AND issuetype != Epic " +
+            "AND labels in (\"ai-analyzed\") " +
             "AND (labels is EMPTY OR labels not in (\"ai-agent-picked\")) ORDER BY priority DESC, created ASC",
             config.JiraJql);
+    }
+
+    [Fact]
+    public void Load_UsesEachManagerProjectMapping()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("GitHub:TargetRepositoryUrl", null)
+            .Set("Jira:JiraProjectKey", "IGNORED");
+        var first = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
+        var second = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
+
+        Assert.Equal(1, first.ManagerProjectId);
+        Assert.Equal("https://github.com/owner/first", first.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"FIRST\" AND ", first.JiraJql);
+        Assert.Equal(2, second.ManagerProjectId);
+        Assert.Equal("https://github.com/owner/second", second.RepositoryUrl.AbsoluteUri);
+        Assert.StartsWith("project = \"SECOND\" AND ", second.JiraJql);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void Load_RejectsEmptyMappedProject(string key)
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, key, "https://github.com/owner/repo")));
+    }
+
+    [Fact]
+    public void Load_DoesNotFallBackFromInvalidMapping()
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://gitlab.com/owner/repo")));
+    }
+
+    [Theory]
+    [InlineData("priority = High OR priority = Highest", "project = \"FIRST\" AND (priority = High OR priority = Highest)")]
+    [InlineData("summary ~ 'x ORDER BY y' ORDER BY created", "project = \"FIRST\" AND (summary ~ 'x ORDER BY y')")]
+    [InlineData("ORDER BY created", "project = \"FIRST\"")]
+    public void Load_ScopesCustomQueriesToMappedProject(string jql, string expectedPrefix)
+    {
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", jql);
+        var config = AgentConfiguration.Load(SettingsScope.Current,
+            new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
+
+        Assert.StartsWith(expectedPrefix + " AND labels in (\"ai-analyzed\") AND (labels is EMPTY", config.JiraJql);
+        Assert.True(config.RequiresManagerPlan);
+        if (jql.Contains("ORDER BY created", StringComparison.Ordinal))
+        {
+            Assert.EndsWith(" ORDER BY created", config.JiraJql);
+        }
     }
 
     [Theory]
@@ -142,6 +204,7 @@ public sealed class AgentConfigurationTests
     [Theory]
     [InlineData("Jira:JiraPickupLabel")]
     [InlineData("Jira:JiraFailureLabel")]
+    [InlineData("Jira:JiraAnalyzedLabel")]
     public void Load_RejectsLabelsWithWhitespace(string name)
     {
         using var env = new SettingsScope().WithValidDefaults().Set(name, "two words");
@@ -159,6 +222,27 @@ public sealed class AgentConfigurationTests
 
         Assert.Contains("project = \"A\\\"B\"", jql);
         Assert.Contains("status = \"C\\\\D\"", jql);
+    }
+
+    [Fact]
+    public void Load_RequiresAnalyzedLabelInDefaultJql()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("Jira:JiraAnalyzedLabel", "planned\"x");
+
+        var config = Load();
+
+        Assert.Equal("planned\"x", config.AnalyzedLabel);
+        Assert.Contains("AND labels in (\"planned\\\"x\")", config.JiraJql);
+    }
+
+    [Fact]
+    public void Load_JqlOverrideSkipsAnalyzedLabelRequirement()
+    {
+        using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", "project = X");
+
+        Assert.DoesNotContain("ai-analyzed", Load().JiraJql);
+        Assert.False(Load().RequiresManagerPlan);
     }
 
     [Fact]
