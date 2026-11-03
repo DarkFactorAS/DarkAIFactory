@@ -153,6 +153,53 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task GetIssueAsync_RefreshesRequirementsAndHandoffState()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK,
+            """
+            {"key":"TASK-1","fields":{"summary":"Changed title","description":{"type":"doc","content":[
+              {"type":"paragraph","content":[{"type":"text","text":"Changed requirements"}]}]},
+              "status":{"name":"Selected for Development"},"updated":"2026-11-02T13:00:00Z",
+              "labels":["ai-analyzed","ai-agent-picked"]}}
+            """);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("TASK-1", CancellationToken.None);
+
+        Assert.Equal("Changed title", issue.Summary);
+        Assert.Equal("Changed requirements", issue.Description);
+        Assert.Equal("2026-11-02T13:00:00Z", issue.UpdatedAt);
+        Assert.Equal(["ai-analyzed", "ai-agent-picked"], issue.Labels);
+        Assert.Equal("/rest/api/3/issue/TASK-1", handler.Request!.RequestUri!.AbsolutePath);
+        Assert.Contains("updated,labels", handler.Request.RequestUri.Query);
+    }
+
+    [Fact]
+    public async Task GetIssueAsync_DoesNotHideHttpErrors()
+    {
+        using var client = new JiraClient(CreateConfiguration(), new StubHandler(HttpStatusCode.Forbidden));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => client.GetIssueAsync("TASK-1", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AddCommentAsync_PreservesManagerPlanAuditMetadataInJiraAdf()
+    {
+        var handler = new StubHandler(HttpStatusCode.Created);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+        var plan = new AiTeam.Configuration.ManagerPlan("Plan", true, new string('A', 64), "2026-11-02T12:00:00Z");
+
+        await client.AddCommentAsync("TASK-1",
+            PromptBuilder.BuildResultComment("Implemented", "PR: https://github.com/owner/repo/pull/1", plan),
+            CancellationToken.None);
+
+        Assert.Contains("Plan source: manager plan from", handler.RequestBody!);
+        Assert.Contains(plan.RequirementsHash!, handler.RequestBody!);
+        Assert.Contains(plan.SourceUpdated!, handler.RequestBody!);
+        Assert.Contains("https://github.com/owner/repo/pull/1", handler.RequestBody!);
+    }
+
+    [Fact]
     public async Task FindWorkAsync_ParsesAdfDescription()
     {
         const string json = """
@@ -160,7 +207,8 @@ public sealed class JiraClientTests
           {"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}]},
-          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]}
+          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]},
+          {"type":"paragraph","content":[{"type":"text","text":"Guide","marks":[{"type":"link","attrs":{"href":"https://example.com/guide"}}]}]}
         ]}}}]}
         """;
         var handler = new StubHandler(HttpStatusCode.OK, json);
@@ -174,7 +222,22 @@ public sealed class JiraClientTests
         Assert.Equal("Selected for Development", issue.StatusName);
         Assert.Contains("fields=summary,description,status", handler.Request!.RequestUri!.Query);
         var lines = issue.Description.Split(Environment.NewLine);
-        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x" }, lines);
+        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x", "Guide (https://example.com/guide)" }, lines);
+    }
+
+    [Fact]
+    public async Task FindWorkAsync_FetchesAllPages()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-1","fields":{"summary":"First"}}],"nextPageToken":"token+1/="}"""),
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-2","fields":{"summary":"Second"}}]}"""));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issues = await client.FindWorkAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "DFAI-1", "DFAI-2" }, issues.Select(issue => issue.Key));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("nextPageToken=token%2B1%2F%3D", handler.Requests[1].Request.RequestUri!.Query);
     }
 
     [Fact]

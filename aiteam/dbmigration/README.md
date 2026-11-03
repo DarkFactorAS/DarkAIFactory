@@ -30,19 +30,25 @@ the process. Do not start clients unless migration completed successfully.
 
 ## Tables and upgrade compatibility
 
-The existing migration systems and IDs are unchanged:
+Existing migration systems and IDs are retained; new upgrades append patches:
 
 | System | ID | Operation |
 | --- | --- | --- |
 | `StartupDatabasePatcher` | 1 | Base logging table (`logtable`) |
 | `StartupDatabasePatcher` | 2 | `manager_projects` |
 | `StartupDatabasePatcher` | 3 | `manager_plans` |
+| `StartupDatabasePatcher` | 4 | Nullable plan fingerprint (`requirements_hash`) and Jira source timestamp (`source_updated`) |
 | `IntegrationSettings` | 1 | `settings` with shared/client scope constraint |
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database
-before upgrades. Before applying patches, dbmigration upgrades the library's
+before upgrades. Patch 4 uses `ADD COLUMN IF NOT EXISTS` so it can recover from a
+failed history write without losing plans. Existing rows have null freshness
+metadata; the manager replans eligible unclaimed issues once, and the worker
+waits instead of implementing unversioned plans. Stop both agents, run migration,
+then deploy/restart both updated agents together.
+Before applying patches, dbmigration upgrades the library's
 `version` table primary key from `patchId` alone to (`system`, `patchId`), retaining
 existing rows and allowing both migration systems to use their original IDs.
 Settings creation and seeding can recover from a previous failed history write

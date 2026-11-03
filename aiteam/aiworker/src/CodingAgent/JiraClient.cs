@@ -27,26 +27,60 @@ internal sealed class JiraClient : IDisposable
     {
         var query =
             $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
-            "&fields=summary,description,status&maxResults=20";
-        using var response = await _httpClient.GetAsync(
-            $"/rest/api/3/search/jql?{query}",
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            "&fields=summary,description,status,updated,labels&maxResults=20";
         var issues = new List<JiraIssue>();
-        foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+        string? nextPageToken = null;
+        do
         {
-            var fields = issue.GetProperty("fields");
-            issues.Add(new JiraIssue(
-                issue.GetProperty("key").GetString() ?? throw new InvalidDataException("A Jira result has no issue key."),
-                ReadString(fields, "summary"),
-                ReadAdfText(fields, "description"),
-                fields.TryGetProperty("status", out var status) ? ReadString(status, "name") : string.Empty));
+            var pageQuery = string.IsNullOrEmpty(nextPageToken)
+                ? query
+                : $"{query}&nextPageToken={Uri.EscapeDataString(nextPageToken)}";
+            using var response = await _httpClient.GetAsync(
+                $"/rest/api/3/search/jql?{pageQuery}",
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+            {
+                issues.Add(ReadIssue(issue));
+            }
+
+            nextPageToken = document.RootElement.TryGetProperty("nextPageToken", out var token)
+                ? token.GetString()
+                : null;
         }
+        while (!string.IsNullOrEmpty(nextPageToken));
 
         return issues;
+    }
+
+    public async Task<JiraIssue> GetIssueAsync(string issueKey, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}?fields=summary,description,status,updated,labels",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ReadIssue(document.RootElement);
+    }
+
+    private static JiraIssue ReadIssue(JsonElement issue)
+    {
+        var fields = issue.GetProperty("fields");
+        return new JiraIssue(
+            issue.GetProperty("key").GetString() ?? throw new InvalidDataException("A Jira result has no issue key."),
+            ReadString(fields, "summary"), ReadAdfText(fields, "description"),
+            fields.TryGetProperty("status", out var status) ? ReadString(status, "name") : string.Empty)
+        {
+            UpdatedAt = ReadString(fields, "updated"),
+            Labels = fields.TryGetProperty("labels", out var labels) && labels.ValueKind == JsonValueKind.Array
+                ? labels.EnumerateArray().Select(label => label.GetString()
+                    ?? throw new InvalidDataException("A Jira label is null.")).ToArray()
+                : []
+        };
     }
 
     public async Task AddLabelAsync(string issueKey, string label, CancellationToken cancellationToken)
@@ -167,6 +201,22 @@ internal sealed class JiraClient : IDisposable
         if (type == "text")
         {
             output.Append(ReadString(element, "text"));
+            if (element.TryGetProperty("marks", out var marks) && marks.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var mark in marks.EnumerateArray())
+                {
+                    if (ReadString(mark, "type") == "link" &&
+                        mark.TryGetProperty("attrs", out var attributes))
+                    {
+                        var href = ReadString(attributes, "href");
+                        if (href.Length > 0)
+                        {
+                            output.Append(" (").Append(href).Append(')');
+                        }
+                    }
+                }
+            }
+
             return;
         }
 

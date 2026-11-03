@@ -26,6 +26,7 @@ public sealed class AiDatabasePatcherTests
             expectedCalls.AddRange([
                 "patch:StartupDatabasePatcher:2", "successful",
                 "patch:StartupDatabasePatcher:3", "successful",
+                "patch:StartupDatabasePatcher:4", "successful",
                 "init:IntegrationSettings",
                 "patch:IntegrationSettings:1", "successful",
                 "patch:IntegrationSettings:2", "successful"]);
@@ -44,10 +45,14 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("`jira_key` VARCHAR(255) NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("`plan` LONGTEXT NOT NULL", dbPatcher.Sql[2]);
             Assert.Contains("UNIQUE KEY `uq_manager_plans_jira_key`", dbPatcher.Sql[2]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[3]);
-            Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[3]);
-            Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[3]);
-            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[4]);
+            Assert.Contains("ALTER TABLE `manager_plans`", dbPatcher.Sql[3]);
+            Assert.Contains("ADD COLUMN IF NOT EXISTS `requirements_hash` CHAR(64) NULL", dbPatcher.Sql[3]);
+            Assert.Contains("ADD COLUMN IF NOT EXISTS `source_updated` VARCHAR(64) NULL", dbPatcher.Sql[3]);
+            Assert.DoesNotContain("DELETE", dbPatcher.Sql[3]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[4]);
+            Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[4]);
+            Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[4]);
+            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[5]);
         }
     }
 
@@ -70,8 +75,8 @@ public sealed class AiDatabasePatcherTests
     }
 
     [Theory]
-    [InlineData(1, 4)]
-    [InlineData(2, 5)]
+    [InlineData(1, 5)]
+    [InlineData(2, 6)]
     public void RunPatcher_ReportsSettingsPatchFailure(int patchId, int expectedPatchCount)
     {
         var dbPatcher = new StubDbPatcher(true, failingSettingsPatch: patchId);
@@ -80,9 +85,19 @@ public sealed class AiDatabasePatcherTests
         Assert.Equal(expectedPatchCount, dbPatcher.Sql.Count);
     }
 
+    [Fact]
+    public void RunPatcher_StopsWhenFreshnessMigrationFails()
+    {
+        var dbPatcher = new StubDbPatcher(true, failFreshnessPatch: true);
+
+        Assert.False(new AiDatabasePatcher(dbPatcher).RunPatcher());
+        Assert.Equal(4, dbPatcher.Sql.Count);
+        Assert.DoesNotContain(dbPatcher.Calls, call => call.StartsWith("init:IntegrationSettings"));
+    }
+
     private sealed class StubDbPatcher(
         bool successful, bool failProjectPatch = false, bool failPlanPatch = false,
-        int failingSettingsPatch = 0) : IDBPatcher
+        int failingSettingsPatch = 0, bool failFreshnessPatch = false) : IDBPatcher
     {
         private bool _successful = successful;
         public List<string> Calls { get; } = [];
@@ -104,7 +119,7 @@ public sealed class AiDatabasePatcherTests
             Calls.Add($"patch:{system}:{patchId}");
             Sql.Add(sql);
             if ((system == "StartupDatabasePatcher" &&
-                 ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch))) ||
+                 ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch) || (patchId == 4 && failFreshnessPatch))) ||
                 (system == "IntegrationSettings" && patchId == failingSettingsPatch))
             {
                 _successful = false;

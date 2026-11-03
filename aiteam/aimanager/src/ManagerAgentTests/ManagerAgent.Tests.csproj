@@ -15,6 +15,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="../../../aiworker/DatabaseStub.cs" Link="DatabaseStub.cs" />
     <ProjectReference Include="../ManagerAgent/ManagerAgent.csproj" />
   </ItemGroup>
 </Project>

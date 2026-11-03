@@ -1,3 +1,5 @@
+using AiTeam.Configuration;
+
 namespace CodingAgent.Tests;
 
 public sealed class PromptBuilderTests
@@ -26,6 +28,45 @@ public sealed class PromptBuilderTests
         Assert.Contains("<plan>", prompt);
         Assert.Contains("step one", prompt);
         Assert.Contains("untrusted", prompt);
+    }
+
+    [Fact]
+    public void ResultComment_IdentifiesManagerPlanAndExactRequirementsVersion()
+    {
+        var plan = new ManagerPlan("Plan", true, new string('A', 64), "2026-11-02T12:00:00Z");
+
+        var comment = PromptBuilder.BuildResultComment("Implemented task", "Pull request: https://github.com/owner/repo/pull/1", plan);
+
+        Assert.Contains("Plan source: manager plan from `manager_plans`.", comment);
+        Assert.Contains($"Requirements fingerprint: `{plan.RequirementsHash}`.", comment);
+        Assert.Contains($"Source Jira updated: `{plan.SourceUpdated}`.", comment);
+        Assert.Contains("Implemented task", comment);
+        Assert.Contains("https://github.com/owner/repo/pull/1", comment);
+        Assert.DoesNotContain("local worker planning", comment);
+    }
+
+    [Fact]
+    public void ResultComment_IdentifiesLocalPlanningWithoutClaimingManagerDelegation()
+    {
+        var comment = PromptBuilder.BuildResultComment("Implemented locally", "No changes to push.", null);
+
+        Assert.Contains("Plan source: local worker planning", comment);
+        Assert.Contains("manager-less custom JQL mode", comment);
+        Assert.DoesNotContain("Requirements fingerprint", comment);
+        Assert.DoesNotContain("Source Jira updated", comment);
+    }
+
+    [Fact]
+    public void ResultComment_PreservesAuditMetadataAndDeliveryDetailsWhenResultIsTruncated()
+    {
+        var plan = new ManagerPlan("Plan", true, new string('A', 64), "2026-11-02T12:00:00Z");
+        var comment = PromptBuilder.BuildResultComment(new string('x', 40_000), "Pull request: https://github.com/owner/repo/pull/1", plan);
+
+        Assert.Contains(plan.RequirementsHash!, comment);
+        Assert.Contains(plan.SourceUpdated!, comment);
+        Assert.Contains("[Output truncated", comment);
+        Assert.EndsWith("Pull request: https://github.com/owner/repo/pull/1", comment);
+        Assert.True(comment.Length < 32_000);
     }
 
     [Fact]
