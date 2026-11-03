@@ -20,6 +20,12 @@ internal sealed class ManagerPlanner(
         }
         var requirementsHash = ManagerPlan.Fingerprint(issue.Summary, issue.Description, configuration.RepositoryUrl);
         var storedPlan = plans.Find(issue.Key);
+        if (storedPlan is not null && storedPlan.ManagerProjectId != projectId)
+        {
+            plans.RebindProject(projectId, issue.Key);
+            storedPlan = storedPlan with { ManagerProjectId = projectId };
+        }
+
         if (storedPlan is null || !storedPlan.IsCurrent(issue.Summary, issue.Description, configuration.RepositoryUrl))
         {
             await jira.RemoveLabelAsync(issue.Key, configuration.AnalyzedLabel, cancellationToken);

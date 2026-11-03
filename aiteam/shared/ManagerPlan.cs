@@ -4,7 +4,12 @@ using System.Text.Json;
 
 namespace AiTeam.Configuration;
 
-internal sealed record ManagerPlan(string Plan, bool PostedToJira, string? RequirementsHash = null, string? SourceUpdated = null)
+internal sealed record ManagerPlan(
+    string Plan,
+    bool PostedToJira,
+    string? RequirementsHash = null,
+    string? SourceUpdated = null,
+    long? ManagerProjectId = null)
 {
     public bool CanImplement(string summary, string description, Uri repositoryUrl) =>
         PostedToJira && IsCurrent(summary, description, repositoryUrl);

@@ -8,14 +8,27 @@ internal sealed class ManagerPlanRepository(IDbConnectionFactory connectionFacto
     public ManagerPlan? Find(string jiraKey)
     {
         using var command = connectionFactory.CreateCommand(
-            "SELECT plan, posted_to_jira, requirements_hash, source_updated FROM manager_plans WHERE jira_key = @jira_key");
+            "SELECT manager_project_id, plan, posted_to_jira, requirements_hash, source_updated FROM manager_plans WHERE jira_key = @jira_key");
         command.AddParameter("@jira_key", jiraKey);
         using var reader = command.ExecuteReader();
         return reader.Read()
-            ? new ManagerPlan(reader.GetString(0), reader.GetBoolean(1),
-                reader.IsDBNull(2) ? null : reader.GetString(2),
-                reader.IsDBNull(3) ? null : reader.GetString(3))
+            ? new ManagerPlan(reader.GetString(1), reader.GetBoolean(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetInt64(0))
             : null;
+    }
+
+    public void RebindProject(long projectId, string jiraKey)
+    {
+        using var command = connectionFactory.CreateCommand(
+            "UPDATE manager_plans SET manager_project_id = @project_id WHERE jira_key = @jira_key");
+        command.AddParameter("@project_id", projectId);
+        command.AddParameter("@jira_key", jiraKey);
+        if (command.ExecuteNonQuery() != 1)
+        {
+            throw new InvalidOperationException($"Could not rebind the plan for {jiraKey} to manager project {projectId}.");
+        }
     }
 
     public void Save(long projectId, string jiraKey, string plan, string requirementsHash, string sourceUpdated)

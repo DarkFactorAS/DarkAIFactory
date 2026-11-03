@@ -207,7 +207,8 @@ public sealed class JiraClientTests
           {"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}]},
-          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]}
+          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]},
+          {"type":"paragraph","content":[{"type":"text","text":"Guide","marks":[{"type":"link","attrs":{"href":"https://example.com/guide"}}]}]}
         ]}}}]}
         """;
         var handler = new StubHandler(HttpStatusCode.OK, json);
@@ -221,7 +222,22 @@ public sealed class JiraClientTests
         Assert.Equal("Selected for Development", issue.StatusName);
         Assert.Contains("fields=summary,description,status", handler.Request!.RequestUri!.Query);
         var lines = issue.Description.Split(Environment.NewLine);
-        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x" }, lines);
+        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x", "Guide (https://example.com/guide)" }, lines);
+    }
+
+    [Fact]
+    public async Task FindWorkAsync_FetchesAllPages()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-1","fields":{"summary":"First"}}],"nextPageToken":"token+1/="}"""),
+            (HttpStatusCode.OK, """{"issues":[{"key":"DFAI-2","fields":{"summary":"Second"}}]}"""));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issues = await client.FindWorkAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "DFAI-1", "DFAI-2" }, issues.Select(issue => issue.Key));
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("nextPageToken=token%2B1%2F%3D", handler.Requests[1].Request.RequestUri!.Query);
     }
 
     [Fact]

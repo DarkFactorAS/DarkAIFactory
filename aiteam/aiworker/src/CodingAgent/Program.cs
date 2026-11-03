@@ -299,6 +299,8 @@ static async Task ReportFailureAsync(
     CancellationToken cancellationToken)
 {
     var statusRestored = false;
+    var requirementsChanged = exception is InvalidOperationException &&
+        exception.Message.StartsWith("The Jira requirements changed after pickup.", StringComparison.Ordinal);
     if (pushedBranchName is null &&
         inProgressTransitionAttempted &&
         issue.StatusName.Length > 0 &&
@@ -339,7 +341,9 @@ static async Task ReportFailureAsync(
             $"The coding agent could not complete this task: {LimitForComment(exception.Message)}\n\n" +
             (pushedBranchName is not null
                 ? $"The `{configuration.PickupLabel}` label remains in place to prevent automatic duplicate work. Do not remove it to rerun implementation.\n\n"
-                : $"The `{configuration.PickupLabel}` label remains in place. Remove it after resolving the failure to allow the issue to be picked up again.\n\n") +
+                : requirementsChanged
+                    ? $"The `{configuration.PickupLabel}` and `{configuration.FailureLabel}` labels remain in place. Remove both to allow the manager to refresh the plan and the worker to retry.\n\n"
+                    : $"The `{configuration.PickupLabel}` label remains in place. Remove it after resolving the failure to allow the issue to be picked up again.\n\n") +
             recoveryDetails,
             cancellationToken);
     }

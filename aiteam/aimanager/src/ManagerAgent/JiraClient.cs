@@ -207,6 +207,22 @@ internal sealed class JiraClient : IDisposable
         if (type == "text")
         {
             output.Append(ReadString(element, "text"));
+            if (element.TryGetProperty("marks", out var marks) && marks.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var mark in marks.EnumerateArray())
+                {
+                    if (ReadString(mark, "type") == "link" &&
+                        mark.TryGetProperty("attrs", out var attributes))
+                    {
+                        var href = ReadString(attributes, "href");
+                        if (href.Length > 0)
+                        {
+                            output.Append(" (").Append(href).Append(')');
+                        }
+                    }
+                }
+            }
+
             return;
         }
 

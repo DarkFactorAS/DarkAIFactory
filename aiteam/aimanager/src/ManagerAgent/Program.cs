@@ -34,7 +34,13 @@ var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSetti
     .Load("aimanager", appSettings.PollIntervalSeconds);
 var workerSettings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aiworker", appSettings.PollIntervalSeconds);
-if (!string.Equals(settings.Jira.JiraAnalyzedLabel.Trim(), workerSettings.Jira.JiraAnalyzedLabel.Trim(), StringComparison.Ordinal))
+var managerAnalyzedLabel = string.IsNullOrWhiteSpace(settings.Jira.JiraAnalyzedLabel)
+    ? "ai-analyzed"
+    : settings.Jira.JiraAnalyzedLabel.Trim();
+var workerAnalyzedLabel = string.IsNullOrWhiteSpace(workerSettings.Jira.JiraAnalyzedLabel)
+    ? "ai-analyzed"
+    : workerSettings.Jira.JiraAnalyzedLabel.Trim();
+if (!string.Equals(managerAnalyzedLabel, workerAnalyzedLabel, StringComparison.Ordinal))
 {
     throw new InvalidOperationException("Manager and worker analyzed labels must match for the plan handoff.");
 }

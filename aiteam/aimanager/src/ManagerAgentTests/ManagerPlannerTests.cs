@@ -38,6 +38,27 @@ public sealed class ManagerPlannerTests
         Assert.Empty(events);
     }
 
+    [Fact]
+    public async Task PlanAsync_RebindsCurrentPlanWhenIssueMovesToAnotherMapping()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(CurrentPlan(), events, managerProjectId: 1);
+        var handler = new PlanningHandler(Issue, events);
+        using var jira = new JiraClient(Configuration, handler);
+        var paidRuns = 0;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            paidRuns++;
+            return Task.FromResult("Unexpected plan");
+        });
+
+        await planner.PlanAsync(2, Issue, CancellationToken.None);
+
+        Assert.Equal(0, paidRuns);
+        Assert.Equal(["rebind"], events);
+        Assert.Equal(2L, database.Rows.Rows[0]["manager_project_id"]);
+    }
+
     [Theory]
     [InlineData("New title", "Description")]
     [InlineData("Title", "New description")]
@@ -169,24 +190,30 @@ public sealed class ManagerPlannerTests
         ManagerPlan.Fingerprint(Issue.Summary, Issue.Description, Configuration.RepositoryUrl),
         "2026-11-02T12:00:00Z");
 
-    private static DatabaseStub CreateDatabase(ManagerPlan? plan, List<string> events)
+    private static DatabaseStub CreateDatabase(ManagerPlan? plan, List<string> events, long managerProjectId = 1)
     {
         var database = new DatabaseStub();
+        database.Rows.Columns.Add("manager_project_id", typeof(long));
         database.Rows.Columns.Add("plan", typeof(string));
         database.Rows.Columns.Add("posted_to_jira", typeof(bool));
         database.Rows.Columns.Add("requirements_hash", typeof(string));
         database.Rows.Columns.Add("source_updated", typeof(string));
         if (plan is not null)
         {
-            database.Rows.Rows.Add(plan.Plan, plan.PostedToJira,
+            database.Rows.Rows.Add(managerProjectId, plan.Plan, plan.PostedToJira,
                 (object?)plan.RequirementsHash ?? DBNull.Value, (object?)plan.SourceUpdated ?? DBNull.Value);
         }
         database.OnNonQuery = command =>
         {
-            if (command.CommandText.StartsWith("INSERT", StringComparison.Ordinal))
+            if (command.CommandText.StartsWith("UPDATE manager_plans SET manager_project_id", StringComparison.Ordinal))
+            {
+                database.Rows.Rows[0]["manager_project_id"] = command.Values["@project_id"];
+                events.Add("rebind");
+            }
+            else if (command.CommandText.StartsWith("INSERT", StringComparison.Ordinal))
             {
                 database.Rows.Rows.Clear();
-                database.Rows.Rows.Add(command.Values["@plan"], false,
+                database.Rows.Rows.Add(command.Values["@project_id"], command.Values["@plan"], false,
                     command.Values["@requirements_hash"], command.Values["@source_updated"]);
                 events.Add("save");
             }

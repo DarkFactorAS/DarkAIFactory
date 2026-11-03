@@ -180,7 +180,8 @@ public sealed class JiraClientTests
           {"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"item"}]}]}]},
-          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]}
+          {"type":"paragraph","content":[{"type":"inlineCard","attrs":{"url":"https://example.com/x"}}]},
+          {"type":"paragraph","content":[{"type":"text","text":"Guide","marks":[{"type":"link","attrs":{"href":"https://example.com/guide"}}]}]}
         ]}}}]}
         """;
         var handler = new StubHandler(HttpStatusCode.OK, json);
@@ -194,7 +195,7 @@ public sealed class JiraClientTests
         Assert.Equal("Selected for Development", issue.StatusName);
         Assert.Contains("fields=summary,description,status", handler.Request!.RequestUri!.Query);
         var lines = issue.Description.Split(Environment.NewLine);
-        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x" }, lines);
+        Assert.Equal(new[] { "Line one", "Line two", "- item", "https://example.com/x", "Guide (https://example.com/guide)" }, lines);
     }
 
     [Fact]

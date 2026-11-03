@@ -12,14 +12,28 @@ public sealed class ManagerPlanRepositoryTests
     public void Find_ReadsFreshnessMetadataIncludingLegacyRows(string? hash)
     {
         var database = new DatabaseStub();
+        database.Rows.Columns.Add("manager_project_id", typeof(long));
         database.Rows.Columns.Add("plan", typeof(string));
         database.Rows.Columns.Add("posted_to_jira", typeof(bool));
         database.Rows.Columns.Add("requirements_hash", typeof(string));
         database.Rows.Columns.Add("source_updated", typeof(string));
-        database.Rows.Rows.Add("Plan", false, (object?)hash ?? DBNull.Value, "2026-11-02T12:00:00Z");
+        database.Rows.Rows.Add(3L, "Plan", false, (object?)hash ?? DBNull.Value, "2026-11-02T12:00:00Z");
 
-        Assert.Equal(new ManagerPlan("Plan", false, hash, "2026-11-02T12:00:00Z"),
+        Assert.Equal(new ManagerPlan("Plan", false, hash, "2026-11-02T12:00:00Z", 3),
             new ManagerPlanRepository(database).Find("TASK-1"));
+    }
+
+    [Fact]
+    public void RebindProject_UpdatesPlanAssociation()
+    {
+        var database = new DatabaseStub { AffectedRows = 1 };
+
+        new ManagerPlanRepository(database).RebindProject(4, "TASK-1");
+
+        var command = Assert.Single(database.Commands);
+        Assert.Contains("SET manager_project_id = @project_id", command.CommandText);
+        Assert.Equal(4L, command.Values["@project_id"]);
+        Assert.Equal("TASK-1", command.Values["@jira_key"]);
     }
 
     [Theory]

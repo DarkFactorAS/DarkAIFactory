@@ -28,18 +28,30 @@ internal sealed class JiraClient : IDisposable
         var query =
             $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
             "&fields=summary,description,status,updated,labels&maxResults=20";
-        using var response = await _httpClient.GetAsync(
-            $"/rest/api/3/search/jql?{query}",
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         var issues = new List<JiraIssue>();
-        foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+        string? nextPageToken = null;
+        do
         {
-            issues.Add(ReadIssue(issue));
+            var pageQuery = string.IsNullOrEmpty(nextPageToken)
+                ? query
+                : $"{query}&nextPageToken={Uri.EscapeDataString(nextPageToken)}";
+            using var response = await _httpClient.GetAsync(
+                $"/rest/api/3/search/jql?{pageQuery}",
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
+            {
+                issues.Add(ReadIssue(issue));
+            }
+
+            nextPageToken = document.RootElement.TryGetProperty("nextPageToken", out var token)
+                ? token.GetString()
+                : null;
         }
+        while (!string.IsNullOrEmpty(nextPageToken));
 
         return issues;
     }
@@ -189,6 +201,22 @@ internal sealed class JiraClient : IDisposable
         if (type == "text")
         {
             output.Append(ReadString(element, "text"));
+            if (element.TryGetProperty("marks", out var marks) && marks.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var mark in marks.EnumerateArray())
+                {
+                    if (ReadString(mark, "type") == "link" &&
+                        mark.TryGetProperty("attrs", out var attributes))
+                    {
+                        var href = ReadString(attributes, "href");
+                        if (href.Length > 0)
+                        {
+                            output.Append(" (").Append(href).Append(')');
+                        }
+                    }
+                }
+            }
+
             return;
         }
 
