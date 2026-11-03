@@ -131,6 +131,30 @@ try
                 try
                 {
                     await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellation.Token);
+                    if (!string.IsNullOrEmpty(configuration.AssigneeAccountId))
+                    {
+                        try
+                        {
+                            await jira.AssignAsync(issue.Key, configuration.AssigneeAccountId, cancellation.Token);
+                        }
+                        catch (Exception exception) when (!cancellation.IsCancellationRequested)
+                        {
+                            Console.Error.WriteLine($"Could not assign {issue.Key}: {exception.Message}");
+                            try
+                            {
+                                await jira.AddCommentAsync(
+                                    issue.Key,
+                                    $"The coding agent could not assign this issue: {LimitForComment(exception.Message)}\n\nWork continues.",
+                                    cancellation.Token);
+                            }
+                            catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
+                            {
+                                Console.Error.WriteLine(
+                                    $"Could not post the assignment warning for {issue.Key}: {notificationException.Message}");
+                            }
+                        }
+                    }
+
                     try
                     {
                         inProgressTransitionAttempted = true;

@@ -20,6 +20,7 @@ public sealed class JiraSettings
     public string JiraAnalyzedLabel { get; set; } = "ai-analyzed";
     public string JiraInProgressStatus { get; set; } = "In Progress";
     public string JiraInReviewStatus { get; set; } = "In Review";
+    public string JiraAssigneeAccountId { get; set; } = string.Empty;
 }
 
 public sealed class GitHubSettings

@@ -15,7 +15,8 @@ internal sealed record AgentConfiguration(
     string FailureLabel,
     string InProgressStatus,
     string InReviewStatus,
-    TimeSpan PollInterval)
+    TimeSpan PollInterval,
+    string AssigneeAccountId = "")
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
     public long? ManagerProjectId { get; init; }
@@ -92,7 +93,8 @@ internal sealed record AgentConfiguration(
             failureLabel,
             Get(settings.Jira.JiraInProgressStatus, "In Progress"),
             Get(settings.Jira.JiraInReviewStatus, "In Review"),
-            TimeSpan.FromSeconds(pollSeconds))
+            TimeSpan.FromSeconds(pollSeconds),
+            Get(settings.Jira.JiraAssigneeAccountId, string.Empty))
         {
             AnalyzedLabel = analyzedLabel,
             ManagerProjectId = project?.Id,

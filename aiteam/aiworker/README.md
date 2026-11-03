@@ -153,4 +153,5 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Manager handoff label required by the default query |
 | `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
 | `Jira.JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
+| `Jira.JiraAssigneeAccountId` | empty | Jira account ID the issue is assigned to when work starts; empty disables assignment |
 | `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |

@@ -44,6 +44,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 JiraFailureLabel = Read("shared", "Jira.JiraFailureLabel"),
                 JiraInProgressStatus = Read("shared", "Jira.JiraInProgressStatus"),
                 JiraInReviewStatus = Read("shared", "Jira.JiraInReviewStatus"),
+                JiraAssigneeAccountId = Read("shared", "Jira.JiraAssigneeAccountId"),
                 JiraPickupLabel = Read(client, "Jira.JiraPickupLabel"),
                 JiraAnalyzedLabel = Read(client, "Jira.JiraAnalyzedLabel")
             },

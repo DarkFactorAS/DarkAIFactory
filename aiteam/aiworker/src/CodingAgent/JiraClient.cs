@@ -99,6 +99,15 @@ internal sealed class JiraClient : IDisposable
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task AssignAsync(string issueKey, string accountId, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/assignee",
+            new { accountId },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken)
     {
         var body = new JsonObject

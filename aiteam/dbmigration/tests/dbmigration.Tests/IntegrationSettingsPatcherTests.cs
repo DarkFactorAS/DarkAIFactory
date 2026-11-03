@@ -13,14 +13,16 @@ public sealed class IntegrationSettingsPatcherTests
     {
         var patcher = new SettingsPatcherStub(0);
         Assert.True(IntegrationSettingsPatcher.Run(patcher));
-        var values = Regex.Matches(patcher.Sql[1], @"\('([^']+)', '([^']+)', '([^']*)'\)")
+        var values = Regex.Matches(string.Join(Environment.NewLine, patcher.Sql.Skip(1)),
+            @"\('([^']+)', '([^']+)', '([^']*)'\)")
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
 
-        Assert.Equal(20, values.Count);
+        Assert.Equal(21, values.Count);
         Assert.Contains("ON DUPLICATE KEY UPDATE `value` = `settings`.`value`", patcher.Sql[1]);
-        Assert.Equal(11, values.Keys.Count(key => key.Client == "shared"));
+        Assert.Equal(12, values.Keys.Count(key => key.Client == "shared"));
         Assert.Equal("ai-agent-failed", values[("shared", "Jira.JiraFailureLabel")]);
+        Assert.Empty(values[("shared", "Jira.JiraAssigneeAccountId")]);
         Assert.Empty(values[("shared", "Jira.JiraApiToken")]);
         Assert.Empty(values[("shared", "GitHub.AgentGitHubToken")]);
         foreach (var client in Clients)
@@ -33,9 +35,10 @@ public sealed class IntegrationSettingsPatcherTests
     }
 
     [Theory]
-    [InlineData(0, true, 2)]
+    [InlineData(0, true, 3)]
     [InlineData(1, false, 1)]
     [InlineData(2, false, 2)]
+    [InlineData(3, false, 3)]
     public void Patcher_CreatesAndSeedsSettingsAndPropagatesFailures(
         int failingPatch, bool expected, int patchCount)
     {
@@ -60,7 +63,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("StartupDatabasePatcher", 3),
             ("StartupDatabasePatcher", 4),
             ("IntegrationSettings", 1),
-            ("IntegrationSettings", 2)]);
+            ("IntegrationSettings", 2),
+            ("IntegrationSettings", 3)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -78,7 +82,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("StartupDatabasePatcher", 2),
             ("StartupDatabasePatcher", 3),
             ("StartupDatabasePatcher", 4),
-            ("IntegrationSettings", 2)], patcher.Executed);
+            ("IntegrationSettings", 2),
+            ("IntegrationSettings", 3)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -91,10 +96,11 @@ public sealed class IntegrationSettingsPatcherTests
         var patcher = new HistoryPatcher();
         patcher.Applied.UnionWith([
             ("StartupDatabasePatcher", 1), ("StartupDatabasePatcher", 2), ("StartupDatabasePatcher", 3),
+            ("StartupDatabasePatcher", 4),
             ("IntegrationSettings", 1), ("IntegrationSettings", 2)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
-        Assert.Equal([("StartupDatabasePatcher", 4)], patcher.Executed);
+        Assert.Equal([("IntegrationSettings", 3)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
