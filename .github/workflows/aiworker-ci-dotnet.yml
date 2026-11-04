@@ -1,4 +1,4 @@
-name: Agent-CI-DotNet
+name: AIWorker-CI-DotNet
 
 permissions:
   contents: read
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    name: Build CodingAgent (.NET)
+    name: Build AIWorker (.NET)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

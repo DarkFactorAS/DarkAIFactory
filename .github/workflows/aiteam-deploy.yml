@@ -1,4 +1,4 @@
-name: Deploy - Production
+name: AI Team Deploy - Production
 
 permissions:
   contents: read
