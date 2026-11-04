@@ -64,7 +64,7 @@
       "group": "test"
     },
     {
-      "label": "test aimanager",
+      "label": "test aitechlead",
       "type": "process",
       "command": "dotnet",
       "args": [

@@ -1,6 +1,6 @@
-# Jira Manager Agent
+# AITechLead (Jira Manager Agent)
 
-aimanager polls Jira, clones each mapped repository for read-only context, asks
+AITechLead (folder and DB client key still `aimanager`) polls Jira, clones each mapped repository for read-only context, asks
 Copilot CLI for an implementation plan, saves the full plan in MariaDB and posts
 it to Jira. It does not implement code, run builds/tests in the cloned repository,
 create branches, commit, push, open pull requests or change ticket statuses.
@@ -143,9 +143,9 @@ Unit tests and their project live in `src/ManagerAgentTests/`:
 dotnet test aiteam/aimanager/src/ManagerAgentTests/ManagerAgent.Tests.csproj
 ```
 
-The **test aimanager** VS Code task runs the same command. Tests are not in the
+The **test aitechlead** VS Code task runs the same command. Tests are not in the
 Docker image. `Manager-CI-DotNet` builds the manager and runs unit tests in Release
-on pull requests and pushes to `main`; this validates aimanager itself, not code
+on pull requests and pushes to `main`; this validates AITechLead itself, not code
 from Jira tickets.
 
 ## Configuration
