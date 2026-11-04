@@ -13,7 +13,8 @@ public sealed class IntegrationSettingsPatcherTests
     {
         var patcher = new SettingsPatcherStub(0);
         Assert.True(IntegrationSettingsPatcher.Run(patcher));
-        var values = Regex.Matches(string.Join(Environment.NewLine, patcher.Sql.Skip(1)),
+        var insertSql = patcher.Sql.Where(sql => sql.StartsWith("INSERT INTO", StringComparison.Ordinal));
+        var values = Regex.Matches(string.Join(Environment.NewLine, insertSql),
             @"\('([^']+)', '([^']+)', '([^']*)'\)")
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
