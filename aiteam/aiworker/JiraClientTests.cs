@@ -321,6 +321,20 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task AssignAsync_NotFound_ThrowsWithStatusAndBody()
+    {
+        var handler = new StubHandler(HttpStatusCode.NotFound, "{\"errorMessages\":[\"User not found\"]}");
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.AssignAsync("DFAI-3", "bad-id", CancellationToken.None));
+
+        Assert.Contains("404", exception.Message);
+        Assert.Contains("bad-id", exception.Message);
+        Assert.Contains("User not found", exception.Message);
+    }
+
+    [Fact]
     public async Task AddCommentAsync_SendsAdfBody()
     {
         var handler = new StubHandler(HttpStatusCode.Created);
