@@ -280,6 +280,19 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task LinkIssuesAsync_RecordsBlockerAsInwardIssue()
+    {
+        var handler = new StubHandler(HttpStatusCode.NoContent);
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        await client.LinkIssuesAsync("TASK-1", "TASK-2", CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.RequestBody!);
+        Assert.Equal("TASK-1", body.RootElement.GetProperty("inwardIssue").GetProperty("key").GetString());
+        Assert.Equal("TASK-2", body.RootElement.GetProperty("outwardIssue").GetProperty("key").GetString());
+    }
+
+    [Fact]
     public async Task AddCommentAsync_SendsAdfBody()
     {
         var handler = new StubHandler(HttpStatusCode.Created);

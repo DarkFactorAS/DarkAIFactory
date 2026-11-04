@@ -104,6 +104,13 @@ Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
 optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
 as `--model`; blank uses the CLI default.
 
+Optional AITechLead triage settings (shared, default used when the row is absent):
+`Jira.JiraClarificationLabel` (`ai-needs-clarification`), `Jira.JiraApprovalLabel`
+(`ai-awaiting-approval`), `Jira.JiraApprovedLabel` (`ai-approved`),
+`Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),
+`Jira.JiraSubtaskIssueType` (`Sub-task`) and `Jira.JiraAutoApproveSmallChanges`
+(`true`). See the [aimanager README](../aimanager/README.md#triage-behaviour).
+
 Both agents use `manager_projects` for project/repository selection, reloading
 mappings each polling cycle. Shared `Jira.JiraProjectKey` and
 `GitHub.TargetRepositoryUrl` are only worker fallbacks when that table is empty.

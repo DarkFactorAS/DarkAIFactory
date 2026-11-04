@@ -21,6 +21,13 @@ public sealed class JiraSettings
     public string JiraInProgressStatus { get; set; } = "In Progress";
     public string JiraInReviewStatus { get; set; } = "In Review";
     public string JiraAssigneeAccountId { get; set; } = string.Empty;
+    public string JiraClarificationLabel { get; set; } = "ai-needs-clarification";
+    public string JiraApprovalLabel { get; set; } = "ai-awaiting-approval";
+    public string JiraApprovedLabel { get; set; } = "ai-approved";
+    public string JiraAnalysisOnlyStatus { get; set; } = "Code Review";
+    public string JiraDoneStatus { get; set; } = "Done";
+    public string JiraSubtaskIssueType { get; set; } = "Sub-task";
+    public string JiraAutoApproveSmallChanges { get; set; } = "true";
 }
 
 public sealed class GitHubSettings

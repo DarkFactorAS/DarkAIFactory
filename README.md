@@ -52,25 +52,21 @@ with deployment branch restrictions for `main` and `develop`, containing:
 
 ## Deployment
 
-All three apps have deployment entrypoints using the same reusable
-`infrastructure-server-deploy.yml` workflow as GameServer, pinned to `v1.7`:
+The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
+DBMigrator, AITechLead (`aiteam/aimanager`) and AIWorker using the reusable
+`infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
+manual `workflow_dispatch` and deploys only to `production`. The jobs run in
+order: DBMigrator, then AITechLead, then AIWorker. Deployments are serialized.
 
-- [AI worker](.github/workflows/agent-deploy.yml)
-- [AI manager](.github/workflows/manager-deploy.yml)
-- [AI build page](.github/workflows/aibuildpage-deploy.yml)
-
-Like GameServer, merged PRs into `master` or `main` deploy staging followed by
-production. Published releases also deploy staging before production, so the
-production job's staging dependency is not skipped. Manual dispatch offers
-`staging` (staging only) or `production` (staging, then production). Deployments
-are serialized per app.
+The [AI build page](.github/workflows/aibuildpage-deploy.yml) keeps its own
+separate deployment workflow.
 
 ### Required GitHub setup
 
 - A self-hosted Linux runner with Docker and access to the private reusable
   Infrastructure workflow.
-- GitHub environments named `staging` and `production`, with any desired
-  approval rules.
+- A GitHub environment named `production` (and `staging` for the build page),
+  with any desired approval rules.
 - Secrets `NUGET_USERNAME` and `NUGET_TOKEN`.
 - Database settings for all three clients: variables `DATABASE_SERVER`,
   `DATABASE_PORT`, `DATABASE_NAME`, and secrets `DATABASE_USERNAME`,
@@ -83,9 +79,9 @@ are serialized per app.
 The agents pass `external_port: 0` because they have no HTTP listener; the
 Infrastructure workflow nevertheless publishes an unused ephemeral port.
 All three clients require the same configured database for Jira/GitHub settings.
-Run dbmigration against that database before deploying any client. Compose
-handles this ordering for the agents; separate deployment workflows must run
-the migration executable as a prerequisite. Clients no longer create tables.
+Run dbmigration against that database before deploying any client. The deploy
+workflow does this by deploying DBMigrator first; Compose handles it locally.
+Clients no longer create tables.
 
 ### Deployment blockers
 
