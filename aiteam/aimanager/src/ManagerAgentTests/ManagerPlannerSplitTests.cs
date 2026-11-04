@@ -279,8 +279,8 @@ public sealed class ManagerPlannerSplitTests
                     AppendAdfText(content, text);
                 }
 
-                if (element.TryGetProperty("type", out type) &&
-                    type.GetString() is "paragraph" or "heading" or "listItem" or "codeBlock")
+                if (element.TryGetProperty("type", out var blockType) &&
+                    blockType.GetString() is "paragraph" or "heading" or "listItem" or "codeBlock")
                 {
                     text.Append('\n');
                 }
