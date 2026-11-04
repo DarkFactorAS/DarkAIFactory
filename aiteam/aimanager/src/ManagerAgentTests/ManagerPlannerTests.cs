@@ -167,7 +167,7 @@ public sealed class ManagerPlannerTests
         Assert.Contains("save", events);
         Assert.DoesNotContain("add:ai-analyzed", events);
         var stored = Assert.IsType<ManagerPlan>(new ManagerPlanRepository(database).Find(Issue.Key));
-        Assert.False(stored.CanImplement(handler.Current.Summary, handler.Current.Description, Configuration.RepositoryUrl));
+        Assert.False(stored.CanImplement(handler.Current.Summary, handler.Current.Description, Configuration.GitHubRepositoryUrl));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed class ManagerPlannerTests
     }
 
     private static ManagerPlan CurrentPlan() => new("Plan", true,
-        ManagerPlan.Fingerprint(Issue.Summary, Issue.Description, Configuration.RepositoryUrl),
+        ManagerPlan.Fingerprint(Issue.Summary, Issue.Description, Configuration.GitHubRepositoryUrl),
         "2026-11-02T12:00:00Z");
 
     private static DatabaseStub CreateDatabase(ManagerPlan? plan, List<string> events, long managerProjectId = 1)

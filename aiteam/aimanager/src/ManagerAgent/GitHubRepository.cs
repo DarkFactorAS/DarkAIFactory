@@ -35,7 +35,7 @@ internal static class GitHubRepository
                 "--separate-git-dir",
                 GitDirectory(workspacePath),
                 "--",
-                configuration.RepositoryUrl.AbsoluteUri,
+                configuration.GitHubRepositoryUrl.AbsoluteUri,
                 workspacePath
             ],
             cancellationToken,
