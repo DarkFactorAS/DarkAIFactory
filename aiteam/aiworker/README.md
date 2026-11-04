@@ -39,6 +39,12 @@ the analyzed-label gate (the worker's own pickup-label exclusion is always
 appended), which allows running the worker without a manager.
 Manager and worker `Jira.JiraAnalyzedLabel` values must match.
 
+The manager only adds the analyzed label when a ticket is cleared for
+implementation. Tickets awaiting clarification or human approval, analysis-only
+tickets and split parents never carry it, so the worker ignores them. Sub-tasks
+created by a split get their own stored plan and the label once released (moved
+to `In Progress`, dependencies done); the worker's query must match that status.
+
 ## Run
 
 First configure the app's environment-specific JSON file as described in

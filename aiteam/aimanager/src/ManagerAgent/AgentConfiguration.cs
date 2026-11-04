@@ -19,6 +19,13 @@ internal sealed record AgentConfiguration(
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
     public string WorkerPickupLabel { get; init; } = "ai-agent-picked";
+    public string ClarificationLabel { get; init; } = "ai-needs-clarification";
+    public string ApprovalLabel { get; init; } = "ai-awaiting-approval";
+    public string ApprovedLabel { get; init; } = "ai-approved";
+    public string AnalysisOnlyStatus { get; init; } = "Code Review";
+    public string DoneStatus { get; init; } = "Done";
+    public string SubtaskIssueType { get; init; } = "Sub-task";
+    public bool AutoApproveSmallChanges { get; init; } = true;
 
     public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject project, string workerPickupLabel = "ai-agent-picked")
     {
@@ -55,6 +62,22 @@ internal sealed record AgentConfiguration(
         ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
         ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
         ValidateLabel(analyzedLabel, "Jira.JiraAnalyzedLabel");
+        var clarificationLabel = Get(settings.Jira.JiraClarificationLabel, "ai-needs-clarification");
+        var approvalLabel = Get(settings.Jira.JiraApprovalLabel, "ai-awaiting-approval");
+        var approvedLabel = Get(settings.Jira.JiraApprovedLabel, "ai-approved");
+        ValidateLabel(clarificationLabel, "Jira.JiraClarificationLabel");
+        ValidateLabel(approvalLabel, "Jira.JiraApprovalLabel");
+        ValidateLabel(approvedLabel, "Jira.JiraApprovedLabel");
+        if (new[] { clarificationLabel, approvalLabel, approvedLabel, pickupLabel, analyzedLabel, failureLabel }
+                .Distinct(StringComparer.Ordinal).Count() != 6)
+        {
+            throw new InvalidOperationException("Clarification, approval, approved, pickup, analyzed and failure labels must all differ.");
+        }
+        var autoApproveText = Get(settings.Jira.JiraAutoApproveSmallChanges, "true");
+        if (!bool.TryParse(autoApproveText, out var autoApproveSmallChanges))
+        {
+            throw new InvalidOperationException("Jira.JiraAutoApproveSmallChanges must be true or false.");
+        }
         workerPickupLabel = Get(workerPickupLabel, "ai-agent-picked");
         ValidateLabel(workerPickupLabel, "aiworker Jira.JiraPickupLabel");
         if (workerPickupLabel == pickupLabel || workerPickupLabel == analyzedLabel)
@@ -90,7 +113,14 @@ internal sealed record AgentConfiguration(
             LoadPollInterval(settings.PollIntervalSeconds))
         {
             AnalyzedLabel = analyzedLabel,
-            WorkerPickupLabel = workerPickupLabel
+            WorkerPickupLabel = workerPickupLabel,
+            ClarificationLabel = clarificationLabel,
+            ApprovalLabel = approvalLabel,
+            ApprovedLabel = approvedLabel,
+            AnalysisOnlyStatus = Get(settings.Jira.JiraAnalysisOnlyStatus, "Code Review"),
+            DoneStatus = Get(settings.Jira.JiraDoneStatus, "Done"),
+            SubtaskIssueType = Get(settings.Jira.JiraSubtaskIssueType, "Sub-task"),
+            AutoApproveSmallChanges = autoApproveSmallChanges
         };
     }
 
