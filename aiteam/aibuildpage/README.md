@@ -25,7 +25,7 @@ before running the GitHub deployment workflow.
 
 ## Database
 
-Configure Production, Development or DevelopmentDocker JSON files using
+Configure Production, Development or Acceptance JSON files using
 [App configuration](../config/README.md). Files are copied into build/publish
 output and loaded from the executable's `Config` directory. Startup selects
 the executable directory as its working directory.

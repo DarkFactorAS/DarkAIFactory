@@ -82,7 +82,7 @@ there before running them:
 - Infrastructure unconditionally substitutes database values in
   `<project_path>/Config/appsettings.<environment>.json`. This repository instead keeps ignored runtime JSON under
   [aiteam/config](aiteam/config), with `Production`, `Development`, and
-  `DevelopmentDocker` filename casing. The expected staging/production files
+  `Acceptance` filename casing. The expected staging/production files
   do not exist at the Infrastructure paths.
 - Images deliberately exclude runtime configuration. Infrastructure must
   support read-only configuration mounts for database credentials rather than

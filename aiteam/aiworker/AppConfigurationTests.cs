@@ -9,7 +9,7 @@ public sealed class AppConfigurationTests
 {
     [Theory]
     [InlineData("Development")]
-    [InlineData("DevelopmentDocker")]
+    [InlineData("Acceptance")]
     [InlineData("Production")]
     public void ConfigurationHelper_LoadsSelectedEnvironment(string environmentName)
     {
