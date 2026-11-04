@@ -18,7 +18,7 @@ to `appsettings.<environment>.json` in the same folder (remove only `.example`):
 - `appsettings.Production.json`: deployed database host `aiteam_database`.
 - `appsettings.Development.json`: local database host `localhost` and its
   published port (Compose does not publish MariaDB by default).
-- `appsettings.DevelopmentDocker.json`: database host `host.docker.internal`
+- `appsettings.Acceptance.json`: database host `host.docker.internal`
   and the port of the database running on your host.
 
 For example, to configure all programs for local development:
@@ -152,7 +152,7 @@ Both agents depend on successful completion of the
 one-shot dbmigration service, which waits for MariaDB's health check.
 When deploying aibuildpage
 separately, mount this same shared directory at `<application directory>/Config`.
-Use `DOTNET_ENVIRONMENT=DevelopmentDocker` for that environment.
+Use `DOTNET_ENVIRONMENT=Acceptance` for that environment.
 
 ## Database administration
 

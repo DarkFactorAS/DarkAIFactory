@@ -25,7 +25,7 @@ The runtime configuration is ignored by Git. Compose mounts this directory
 read-only at `/app/Config` for all services; override `AITEAM_CONFIG_PATH` for another directory.
 For local runs, configured JSON files are copied into the executable's `Config`
 directory. See [App configuration](../config/README.md) for Production,
-Development and DevelopmentDocker setup. Startup selects the executable directory
+Development and Acceptance setup. Startup selects the executable directory
 as its working directory. Jira/GitHub settings load from the shared `settings`
 table, with three client-specific rows; see the configuration guide for migration.
 
