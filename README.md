@@ -38,12 +38,16 @@ also builds aibuildpage and builds/tests dbmigration. Docker CI uses the shared
 
 ### AI auto-approve
 
-`.github/workflows/ai-approve.yml` approves pull requests targeting `main` or
-`develop` when Copilot's review finds no issues. It requires:
+`.github/workflows/ai-approve.yml` uses GitHub's built-in CLI and REST API to
+approve a pull request targeting `main` or `develop` only after Copilot submits a
+review on the current head with no inline comments. It does not check out or run
+pull request code. The workflow requires an `ai-approval` environment configured
+with deployment branch restrictions for `main` and `develop`, containing:
 
 - Secret `GH_TOKEN`: fine-grained PAT of a dedicated bot account (not the PR
-  author) with Pull requests: write.
-- Repository variable `GH_USERNAME`: the bot account's login.
+  author) with Pull requests: write. Store it in the protected environment, not
+  as a repository secret.
+- Variable `GH_USERNAME`: the bot account's login.
 - Optionally, branch protection requiring the bot's approval.
 
 ## Deployment

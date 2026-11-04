@@ -1,30 +1,85 @@
 name: AI Auto-Approve Gate
 
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review]
   pull_request_review:
     types: [submitted]
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: none
+  pull-requests: read
 
 jobs:
   copilot-gate:
-    runs-on: ubuntu-latest
-    # Skip drafts and fork PRs (secrets are unavailable to forks)
     if: >-
+      github.event.review.user.login == 'copilot-pull-request-reviewer[bot]' &&
       github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.base.ref == 'main' ||
+       github.event.pull_request.base.ref == 'develop')
+    runs-on: ubuntu-latest
+    environment: ai-approval
     steps:
-      - name: Evaluate Copilot Verdict
-        # TODO: pin to a full commit SHA of the latest release
-        uses: mheap/pr-auto-approve-copilot@v1
-        with:
-          # Fine-grained PAT of a dedicated bot account with "Pull requests: write"
-          bot-token: ${{ secrets.GH_TOKEN }}
-          bot-login: ${{ vars.GH_USERNAME }}
-          base-branch: "main,develop"
-          # Number of Copilot review rounds evaluated before approving
-          rounds-threshold: 3
+      - name: Approve a clean Copilot review
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          BOT_LOGIN: ${{ vars.GH_USERNAME }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_ID: ${{ github.event.review.id }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$BOT_LOGIN" ]]; then
+            echo "Set GH_USERNAME in the ai-approval environment."
+            exit 1
+          fi
+
+          token_login="$(gh api user --jq '.login')"
+          if [[ "${token_login,,}" != "${BOT_LOGIN,,}" ]]; then
+            echo "GH_TOKEN must belong to the account configured as GH_USERNAME."
+            exit 1
+          fi
+          if [[ "${token_login,,}" == "${PR_AUTHOR,,}" ]]; then
+            echo "The approval bot cannot be the pull request author."
+            exit 1
+          fi
+
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          if ! jq -e \
+            --arg head "$PR_HEAD_SHA" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            '.state == "open" and .draft == false and .head.sha == $head and
+             .head.repo.full_name == $repository and
+             (.base.ref == "main" or .base.ref == "develop")' \
+            <<< "$pr" >/dev/null; then
+            echo "The pull request is no longer eligible for approval."
+            exit 0
+          fi
+
+          review="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews/$REVIEW_ID")"
+          if ! jq -e \
+            --arg head "$PR_HEAD_SHA" \
+            '.user.login == "copilot-pull-request-reviewer[bot]" and
+             .commit_id == $head and .state == "COMMENTED"' \
+            <<< "$review" >/dev/null; then
+            echo "The submitted Copilot review does not apply to the current head."
+            exit 0
+          fi
+
+          comment_count="$(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews/$REVIEW_ID/comments" \
+              --jq '.[].id' |
+              awk 'END { print NR }'
+          )"
+          if [[ "$comment_count" -ne 0 ]]; then
+            echo "Copilot left inline comments; not approving."
+            exit 0
+          fi
+
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews" \
+            -f event=APPROVE \
+            -f commit_id="$PR_HEAD_SHA" \
+            -f body="Approved after Copilot submitted a review with no inline comments."
