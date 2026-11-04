@@ -38,7 +38,7 @@ internal static partial class GitHubRepository
                 "--separate-git-dir",
                 GitDirectory(workspacePath),
                 "--",
-                configuration.RepositoryUrl.AbsoluteUri,
+                configuration.GitHubRepositoryUrl.AbsoluteUri,
                 workspacePath
             ],
             cancellationToken,
@@ -135,18 +135,18 @@ internal static partial class GitHubRepository
             branchName);
     }
 
-    public static (string Owner, string Repository) ParseOwnerAndRepository(Uri repositoryUrl)
+    public static (string Owner, string RepositoryName) ParseOwnerAndRepository(Uri gitHubRepositoryUrl)
     {
-        var parts = repositoryUrl.AbsolutePath.Trim('/').Split('/');
+        var parts = gitHubRepositoryUrl.AbsolutePath.Trim('/').Split('/');
         if (parts.Length != 2)
         {
-            throw new InvalidOperationException("The repository URL must be in the form https://github.com/owner/repository.");
+            throw new InvalidOperationException("The GitHub repository URL must be in the form https://github.com/owner/repository.");
         }
 
-        var repository = parts[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase)
+        var repositoryName = parts[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase)
             ? parts[1][..^4]
             : parts[1];
-        return (parts[0], repository);
+        return (parts[0], repositoryName);
     }
 
     public static async Task<string> CreatePullRequestAsync(
@@ -157,9 +157,9 @@ internal static partial class GitHubRepository
         CancellationToken cancellationToken,
         HttpMessageHandler? handler = null)
     {
-        var (owner, repository) = ParseOwnerAndRepository(configuration.RepositoryUrl);
+        var (owner, repositoryName) = ParseOwnerAndRepository(configuration.GitHubRepositoryUrl);
         var repositoryPath =
-            $"/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repository)}";
+            $"/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repositoryName)}";
         using var httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
         httpClient.BaseAddress = new Uri("https://api.github.com");
         httpClient.DefaultRequestHeaders.Authorization =

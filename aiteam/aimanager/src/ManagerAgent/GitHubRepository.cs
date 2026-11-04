@@ -7,7 +7,7 @@ internal static class GitHubRepository
 {
     public static string CreateWorkspacePath()
     {
-        var workspaceRoot = Directory.CreateTempSubdirectory("aimanager-");
+        var workspaceRoot = Directory.CreateTempSubdirectory("aitechlead-");
         var workspacePath = Path.Combine(workspaceRoot.FullName, "checkout");
         Directory.CreateDirectory(workspacePath);
         var hooksPath = Path.Combine(workspaceRoot.FullName, "disabled-hooks");
@@ -35,7 +35,7 @@ internal static class GitHubRepository
                 "--separate-git-dir",
                 GitDirectory(workspacePath),
                 "--",
-                configuration.RepositoryUrl.AbsoluteUri,
+                configuration.GitHubRepositoryUrl.AbsoluteUri,
                 workspacePath
             ],
             cancellationToken,
@@ -98,7 +98,7 @@ internal static class GitHubRepository
         startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
         startInfo.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
         startInfo.Environment["GIT_CONFIG_GLOBAL"] =
-            Path.Combine(Path.GetTempPath(), $"aimanager-{Guid.NewGuid():N}.gitconfig");
+            Path.Combine(Path.GetTempPath(), $"aitechlead-{Guid.NewGuid():N}.gitconfig");
         if (requiresGitHubCredentials)
         {
             startInfo.Environment["GIT_CONFIG_COUNT"] = "1";

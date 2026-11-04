@@ -6,17 +6,17 @@ namespace CodingAgent.Tests;
 
 public sealed class ManagerPlanTests
 {
-    private static readonly Uri Repository = new("https://github.com/owner/repo");
+    private static readonly Uri GitHubRepositoryUrl = new("https://github.com/owner/repo");
 
     [Theory]
     [InlineData("Changed title", "Description", "https://github.com/owner/repo")]
     [InlineData("Title", "Changed description", "https://github.com/owner/repo")]
     [InlineData("Title", "Description", "https://github.com/owner/other")]
-    public void CanImplement_RejectsChangedRequirementsOrRepository(string title, string description, string repository)
+    public void CanImplement_RejectsChangedRequirementsOrRepository(string title, string description, string gitHubRepositoryUrlText)
     {
-        var plan = new ManagerPlan("Plan", true, ManagerPlan.Fingerprint("Title", "Description", Repository));
+        var plan = new ManagerPlan("Plan", true, ManagerPlan.Fingerprint("Title", "Description", GitHubRepositoryUrl));
 
-        Assert.False(plan.CanImplement(title, description, new Uri(repository)));
+        Assert.False(plan.CanImplement(title, description, new Uri(gitHubRepositoryUrlText)));
     }
 
     [Fact]
@@ -26,10 +26,10 @@ public sealed class ManagerPlanTests
         {
             UpdatedAt = "2026-11-02T13:00:00Z", Labels = ["ai-analyzed", "ai-manager-planned"]
         };
-        var plan = new ManagerPlan("Plan", true, ManagerPlan.Fingerprint(issue.Summary, issue.Description, Repository),
+        var plan = new ManagerPlan("Plan", true, ManagerPlan.Fingerprint(issue.Summary, issue.Description, GitHubRepositoryUrl),
             "2026-11-02T12:00:00Z");
 
-        Assert.True(plan.CanImplement(issue.Summary, issue.Description, Repository));
+        Assert.True(plan.CanImplement(issue.Summary, issue.Description, GitHubRepositoryUrl));
     }
 
     [Theory]
@@ -40,9 +40,9 @@ public sealed class ManagerPlanTests
     public void CanImplement_RejectsLegacyUnpostedAndEmptyPlans(string? hash, bool posted, string text)
     {
         var plan = new ManagerPlan(text, posted,
-            hash == "current" ? ManagerPlan.Fingerprint("Title", "Description", Repository) : hash);
+            hash == "current" ? ManagerPlan.Fingerprint("Title", "Description", GitHubRepositoryUrl) : hash);
 
-        Assert.False(plan.CanImplement("Title", "Description", Repository));
+        Assert.False(plan.CanImplement("Title", "Description", GitHubRepositoryUrl));
     }
 
     [Fact]
@@ -56,9 +56,9 @@ public sealed class ManagerPlanTests
     [Fact]
     public void Fingerprint_SeparatesFieldsWithoutDelimiterCollisions()
     {
-        Assert.NotEqual(ManagerPlan.Fingerprint("A\nB", "C", Repository),
-            ManagerPlan.Fingerprint("A", "B\nC", Repository));
-        Assert.Equal(64, ManagerPlan.Fingerprint("A", "B", Repository).Length);
+        Assert.NotEqual(ManagerPlan.Fingerprint("A\nB", "C", GitHubRepositoryUrl),
+            ManagerPlan.Fingerprint("A", "B\nC", GitHubRepositoryUrl));
+        Assert.Equal(64, ManagerPlan.Fingerprint("A", "B", GitHubRepositoryUrl).Length);
     }
 
     [Fact]
@@ -74,6 +74,6 @@ public sealed class ManagerPlanTests
         var plan = Assert.IsType<ManagerPlan>(new ManagerPlanReader(database).Find("TASK-1", 1));
 
         Assert.Null(plan.RequirementsHash);
-        Assert.False(plan.CanImplement("Title", "Description", Repository));
+        Assert.False(plan.CanImplement("Title", "Description", GitHubRepositoryUrl));
     }
 }
