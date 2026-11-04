@@ -99,13 +99,16 @@ public sealed class AgentConfigurationTests
     }
 
     [Fact]
-    public void Load_ReadsSharedStatusesEvenThoughManagerDoesNotTransitionIssues()
+    public void Load_ReadsSharedJiraStatuses()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("Jira:JiraInProgressStatus", "Doing").Set("Jira:JiraInReviewStatus", "Code Review");
+            .Set("Jira:JiraStatusName", "Ready")
+            .Set("Jira:JiraInProgressStatus", "Doing")
+            .Set("Jira:JiraInReviewStatus", "Code Review");
 
         var config = Load();
 
+        Assert.Equal("Ready", config.JiraStatusName);
         Assert.Equal("Doing", config.InProgressStatus);
         Assert.Equal("Code Review", config.InReviewStatus);
     }
@@ -262,6 +265,18 @@ public sealed class AgentConfigurationTests
 
         Assert.Throws<InvalidOperationException>(() =>
             AgentConfiguration.Load(SettingsScope.Current, DefaultProject, "ai-analyzed"));
+    }
+
+    [Theory]
+    [InlineData("ai-needs-clarification")]
+    [InlineData("ai-awaiting-approval")]
+    [InlineData("ai-approved")]
+    public void Load_RejectsWorkerPickupThatCollidesWithTriageLabels(string label)
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            AgentConfiguration.Load(SettingsScope.Current, DefaultProject, label));
     }
 
     [Fact]

@@ -107,7 +107,7 @@ try
                 try
                 {
                     await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token);
-                    return await copilot.RunAsync(workspacePath, PromptBuilder.BuildPlanPrompt(issue), token);
+                    return await copilot.RunAsync(workspacePath, PromptBuilder.BuildTriagePrompt(issue), token);
                 }
                 finally
                 {

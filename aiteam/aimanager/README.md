@@ -1,9 +1,11 @@
 # AITechLead (Jira Manager Agent)
 
 AITechLead (folder and DB client key still `aimanager`) polls Jira, clones each mapped repository for read-only context, asks
-Copilot CLI for an implementation plan, saves the full plan in MariaDB and posts
-it to Jira. It does not implement code, run builds/tests in the cloned repository,
-create branches, commit, push, open pull requests or change ticket statuses.
+Copilot CLI to triage each ticket (clarify, analysis only, small, needs approval or split into
+sub-tasks), saves the full plan in MariaDB and posts it to Jira. It does not implement code,
+run builds/tests in the cloned repository, create branches, commit, push or open pull
+requests. It only changes ticket statuses for analysis-only tickets (to `Code Review`) and
+for released sub-tasks (to `In Progress`); see [Triage behaviour](#triage-behaviour).
 Copilot shell and write tools are always disabled.
 
 ## Database
@@ -92,10 +94,35 @@ aiworker's default query only picks up issues that carry it, and the worker then
 implements using the plan stored in `manager_plans`. Because the plan is saved
 before the label is added, the worker always finds a stored plan for gated
 issues. The worker also checks the fingerprint against fresh Jira requirements;
-stale or unpublished plans are never implemented. Ticket statuses remain unchanged.
+stale or unpublished plans are never implemented. Apart from the triage outcomes
+below, ticket statuses remain unchanged.
 To deliberately replan an unclaimed ticket, remove its analysis and completion
 labels, delete its `manager_plans` row, and clear any failure label. Do not reset
 claimed or already pushed work; follow the worker's recovery instructions instead.
+
+## Triage behaviour
+
+Copilot returns one JSON triage document (`decision`, `questions`, `analysis`,
+`plan`, `subtasks[{title, description, dependsOn}]`, `riskAreas`). Malformed or
+inconsistent JSON (unknown decision, missing fields, dependency cycles) fails the
+ticket like any planning failure. Plain-text output is still accepted as a
+legacy plan and handed off. Decisions:
+
+| Decision | Behaviour |
+| --- | --- |
+| `clarify` | Requirements unclear or contradictory: the questions are posted as a Jira comment and `Jira.JiraClarificationLabel` is added. No handoff. The ticket is re-triaged when the title/description change (or the label is removed). |
+| `analysis_only` | Only analysis requested: the analysis is written to Jira and the issue is moved to `Jira.JiraAnalysisOnlyStatus` (`Code Review`, in Jira, not GitHub). No code, branch, pull request or handoff label. |
+| `small` | Handed off directly with the normal plan flow (no human approval). |
+| `needs_approval` | Authentication, database or architecture changes: the plan is posted and `Jira.JiraApprovalLabel` is added. The worker is not triggered until a human adds `Jira.JiraApprovedLabel`; the manager then hands off and removes both labels. |
+| `split` | Large ticket: sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraStatusName` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
+
+Triage outcomes are stored in `manager_plans` with a `[triage:<decision>]` first
+line, so no schema change is needed and they are never handed off. If sub-task
+creation fails partway, retrying after removing the failure label can create
+duplicate sub-tasks; delete the partial ones first. The worker only picks up
+sub-tasks that its query matches. Released sub-tasks are placed in the shared
+`Jira.JiraStatusName` status selected by both agents. The extra settings are
+optional and default as shown; add them to the shared `settings` rows to change them.
 
 ## Run
 
@@ -160,9 +187,16 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraApiToken` | required | Jira API token |
 | `GitHub.AgentGitHubToken` | required | Token with Copilot Requests permission |
 | `GitHub.GitHubRepositoryToken` | required | Read-only access to all mapped repositories |
-| `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket status |
+| `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket and released sub-task status |
 | `Jira.JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
 | `Jira.JiraPickupLabel` | `ai-manager-planned` | Completion label |
 | `Jira.JiraFailureLabel` | `ai-agent-failed` | Shared failure label |
 | `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Label added after the plan is posted to Jira |
+| `Jira.JiraClarificationLabel` | `ai-needs-clarification` | Optional shared setting: added when the requirements are unclear |
+| `Jira.JiraApprovalLabel` | `ai-awaiting-approval` | Optional shared setting: plan is held for human approval |
+| `Jira.JiraApprovedLabel` | `ai-approved` | Optional shared setting: a human adds it to release a held plan |
+| `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets |
+| `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants |
+| `Jira.JiraSubtaskIssueType` | `Sub-task` | Optional shared setting: issue type used for created sub-tasks |
+| `Jira.JiraAutoApproveSmallChanges` | `true` | Optional shared setting: `false` holds small changes for approval too |
 | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |

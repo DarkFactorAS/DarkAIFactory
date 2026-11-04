@@ -164,6 +164,47 @@ internal sealed class JiraClient : IDisposable
         transitionResponse.EnsureSuccessStatusCode();
     }
 
+    public async Task<string> CreateSubtaskAsync(
+        string parentKey, string summary, string description, CancellationToken cancellationToken)
+    {
+        var dash = parentKey.LastIndexOf('-');
+        if (dash <= 0)
+        {
+            throw new InvalidDataException($"Cannot derive the Jira project from issue key \"{parentKey}\".");
+        }
+
+        var body = new JsonObject
+        {
+            ["fields"] = new JsonObject
+            {
+                ["project"] = new JsonObject { ["key"] = parentKey[..dash] },
+                ["parent"] = new JsonObject { ["key"] = parentKey },
+                ["issuetype"] = new JsonObject { ["name"] = _configuration.SubtaskIssueType },
+                ["summary"] = summary,
+                ["description"] = CreateAdfDocument(description)
+            }
+        };
+        using var response = await _httpClient.PostAsJsonAsync("/rest/api/3/issue", body, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return ReadString(document.RootElement, "key") is { Length: > 0 } key
+            ? key
+            : throw new InvalidDataException("Jira did not return a key for the created sub-task.");
+    }
+
+    public async Task LinkIssuesAsync(string blockerKey, string blockedKey, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject
+        {
+            ["type"] = new JsonObject { ["name"] = "Blocks" },
+            ["inwardIssue"] = new JsonObject { ["key"] = blockerKey },
+            ["outwardIssue"] = new JsonObject { ["key"] = blockedKey }
+        };
+        using var response = await _httpClient.PostAsJsonAsync("/rest/api/3/issueLink", body, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private static string ReadString(JsonElement parent, string propertyName) =>

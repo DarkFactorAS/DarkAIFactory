@@ -9,6 +9,7 @@ internal sealed class DatabaseStub : IDbConnectionFactory
     public List<Command> Commands { get; } = [];
     public int AffectedRows { get; set; } = 1;
     public Func<Command, int>? OnNonQuery { get; set; }
+    public Func<Command, IDataReader>? OnReader { get; set; }
 
     public IDbConnection CreateConnection() => throw new NotSupportedException();
     public IBluDbCommand CreateCommand(string commandText)
@@ -28,7 +29,7 @@ internal sealed class DatabaseStub : IDbConnectionFactory
         public CommandType CommandType { get; set; }
         public IDataParameterCollection Parameters => throw new NotSupportedException();
         public int ExecuteNonQuery() => database.OnNonQuery?.Invoke(this) ?? database.AffectedRows;
-        public IDataReader ExecuteReader() => database.Rows.CreateDataReader();
+        public IDataReader ExecuteReader() => database.OnReader?.Invoke(this) ?? database.Rows.CreateDataReader();
         public object ExecuteScalar() => throw new NotSupportedException();
         public TReturnType ExecuteScalar<TReturnType>() => throw new NotSupportedException();
         public void Prepare() => throw new NotSupportedException();

@@ -186,6 +186,149 @@ public sealed class ManagerPlannerTests
         Assert.DoesNotContain("add:ai-analyzed", events);
     }
 
+    private const string ClarifyJson = """{"decision":"clarify","questions":["Which API?","What is the limit?"]}""";
+    private const string AnalysisJson = """{"decision":"analysis_only","analysis":"The cache is safe to remove."}""";
+    private const string SmallJson = """{"decision":"small","plan":"Fix the typo in README.md."}""";
+    private const string ApprovalJson =
+        """{"decision":"needs_approval","plan":"Change the login flow.","riskAreas":["authentication"]}""";
+
+    private static readonly JiraIssue FreshIssue = Issue with { Labels = [] };
+
+    private static ManagerPlanner TriagePlanner(DatabaseStub database, JiraClient jira, string output, Action? onGenerate = null) =>
+        new(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            onGenerate?.Invoke();
+            return Task.FromResult(output);
+        });
+
+    [Fact]
+    public async Task PlanAsync_ClarifyPostsQuestionsAndLabelsWithoutHandoff()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        using var jira = new JiraClient(Configuration, new PlanningHandler(FreshIssue, events));
+
+        await TriagePlanner(database, jira, ClarifyJson).PlanAsync(1, FreshIssue, CancellationToken.None);
+
+        Assert.Equal(["remove:ai-analyzed", "remove:ai-manager-planned", "save", "comment", "posted",
+            "add:ai-needs-clarification"], events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_ClarifyDoesNotReplanUntilRequirementsChange()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        var handler = new PlanningHandler(FreshIssue, events);
+        using var jira = new JiraClient(Configuration, handler);
+        var paidRuns = 0;
+        var planner = TriagePlanner(database, jira, ClarifyJson, () => paidRuns++);
+
+        await planner.PlanAsync(1, FreshIssue, CancellationToken.None);
+        events.Clear();
+        await planner.PlanAsync(1, handler.Current, CancellationToken.None);
+
+        Assert.Equal(1, paidRuns);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_AnalysisOnlyPostsAnalysisAndTransitionsWithoutLabels()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        using var jira = new JiraClient(Configuration, new PlanningHandler(FreshIssue, events));
+        var planner = TriagePlanner(database, jira, AnalysisJson);
+
+        await planner.PlanAsync(1, FreshIssue, CancellationToken.None);
+
+        Assert.Equal(["remove:ai-analyzed", "remove:ai-manager-planned", "save", "comment", "posted", "transition"], events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SmallChangeIsHandedOffImmediately()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        using var jira = new JiraClient(Configuration, new PlanningHandler(FreshIssue, events));
+
+        await TriagePlanner(database, jira, SmallJson).PlanAsync(1, FreshIssue, CancellationToken.None);
+
+        Assert.Equal(["remove:ai-analyzed", "remove:ai-manager-planned", "save", "comment", "posted",
+            "add:ai-manager-planned", "add:ai-analyzed"], events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_NeedsApprovalHoldsUntilApprovedLabelThenHandsOff()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        var handler = new PlanningHandler(FreshIssue, events);
+        using var jira = new JiraClient(Configuration, handler);
+        var paidRuns = 0;
+        var planner = TriagePlanner(database, jira, ApprovalJson, () => paidRuns++);
+
+        await planner.PlanAsync(1, FreshIssue, CancellationToken.None);
+        Assert.DoesNotContain("add:ai-analyzed", events);
+        Assert.Contains("add:ai-awaiting-approval", events);
+        Assert.Contains("[triage:needs_approval]", (string)database.Rows.Rows[0]["plan"]);
+
+        events.Clear();
+        await planner.PlanAsync(1, handler.Current, CancellationToken.None);
+        Assert.Empty(events);
+
+        handler.Current = handler.Current with
+        {
+            Labels = handler.Current.Labels.Where(label => label != "ai-awaiting-approval").ToArray()
+        };
+        var renamedApprovalLabel = new ManagerPlanner(
+            Configuration with { ApprovalLabel = "ai-awaiting-approval-renamed" },
+            new ManagerPlanRepository(database), jira, (_, _) =>
+            {
+                paidRuns++;
+                return Task.FromResult("Unexpected plan");
+            });
+        await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
+        Assert.Empty(events);
+        Assert.DoesNotContain("ai-analyzed", handler.Current.Labels);
+
+        handler.Current = handler.Current with { Labels = [.. handler.Current.Labels, "ai-approved"] };
+        await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
+
+        Assert.Equal(1, paidRuns);
+        Assert.Equal(["add:ai-manager-planned", "add:ai-analyzed", "replace-plan",
+            "remove:ai-awaiting-approval-renamed", "remove:ai-approved"], events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SmallChangeNeedsApprovalWhenAutoApproveIsDisabled()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        using var jira = new JiraClient(Configuration, new PlanningHandler(FreshIssue, events));
+        var strict = new ManagerPlanner(
+            Configuration with { AutoApproveSmallChanges = false },
+            new ManagerPlanRepository(database), jira, (_, _) => Task.FromResult(SmallJson));
+
+        await strict.PlanAsync(1, FreshIssue, CancellationToken.None);
+
+        Assert.Contains("add:ai-awaiting-approval", events);
+        Assert.DoesNotContain("add:ai-analyzed", events);
+    }
+
+    [Fact]
+    public async Task PlanAsync_MalformedTriageJsonFails()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        using var jira = new JiraClient(Configuration, new PlanningHandler(FreshIssue, events));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            TriagePlanner(database, jira, """{"decision":"small",""").PlanAsync(1, FreshIssue, CancellationToken.None));
+
+        Assert.DoesNotContain("save", events);
+    }
+
     private static ManagerPlan CurrentPlan() => new("Plan", true,
         ManagerPlan.Fingerprint(Issue.Summary, Issue.Description, Configuration.GitHubRepositoryUrl),
         "2026-11-02T12:00:00Z");
@@ -217,6 +360,11 @@ public sealed class ManagerPlannerTests
                     command.Values["@requirements_hash"], command.Values["@source_updated"]);
                 events.Add("save");
             }
+            else if (command.CommandText.StartsWith("UPDATE manager_plans SET plan", StringComparison.Ordinal))
+            {
+                database.Rows.Rows[0]["plan"] = command.Values["@plan"];
+                events.Add("replace-plan");
+            }
             else
             {
                 database.Rows.Rows[0]["posted_to_jira"] = true;
@@ -234,6 +382,14 @@ public sealed class ManagerPlannerTests
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (request.Method == HttpMethod.Get && request.RequestUri!.AbsolutePath.EndsWith("/transitions", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        """{"transitions":[{"id":"31","name":"Review","to":{"name":"Code Review"}}]}""")
+                };
+            }
             if (request.Method == HttpMethod.Get)
             {
                 return new HttpResponseMessage(HttpStatusCode.OK)
@@ -255,7 +411,11 @@ public sealed class ManagerPlannerTests
                     }))
                 };
             }
-            if (request.Method == HttpMethod.Post)
+            if (request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/transitions", StringComparison.Ordinal))
+            {
+                events.Add("transition");
+            }
+            else if (request.Method == HttpMethod.Post)
             {
                 events.Add("comment");
                 OnComment?.Invoke();

@@ -30,6 +30,10 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 ? value
                 : throw new InvalidOperationException($"Required database setting settings[{scope}, {name}] is missing.");
 
+        var defaults = new JiraSettings();
+        string ReadOptional(string name, string defaultValue) =>
+            values.TryGetValue(("shared", name), out var value) ? value : defaultValue;
+
         return new IntegrationSettings
         {
             PollIntervalSeconds = pollIntervalSeconds,
@@ -45,6 +49,14 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 JiraInProgressStatus = Read("shared", "Jira.JiraInProgressStatus"),
                 JiraInReviewStatus = Read("shared", "Jira.JiraInReviewStatus"),
                 JiraAssigneeAccountId = Read("shared", "Jira.JiraAssigneeAccountId"),
+                JiraClarificationLabel = ReadOptional("Jira.JiraClarificationLabel", defaults.JiraClarificationLabel),
+                JiraApprovalLabel = ReadOptional("Jira.JiraApprovalLabel", defaults.JiraApprovalLabel),
+                JiraApprovedLabel = ReadOptional("Jira.JiraApprovedLabel", defaults.JiraApprovedLabel),
+                JiraAnalysisOnlyStatus = ReadOptional("Jira.JiraAnalysisOnlyStatus", defaults.JiraAnalysisOnlyStatus),
+                JiraDoneStatus = ReadOptional("Jira.JiraDoneStatus", defaults.JiraDoneStatus),
+                JiraSubtaskIssueType = ReadOptional("Jira.JiraSubtaskIssueType", defaults.JiraSubtaskIssueType),
+                JiraAutoApproveSmallChanges = ReadOptional(
+                    "Jira.JiraAutoApproveSmallChanges", defaults.JiraAutoApproveSmallChanges),
                 JiraPickupLabel = Read(client, "Jira.JiraPickupLabel"),
                 JiraAnalyzedLabel = Read(client, "Jira.JiraAnalyzedLabel")
             },
