@@ -14,7 +14,7 @@ public sealed class PullRequestCloserTests
 
     private const string TransitionsJson = """{"transitions":[{"id":"31","name":"Done","to":{"name":"Done"}}]}""";
 
-    private sealed class JiraHandler(params string[] codeReviewKeys) : HttpMessageHandler
+    private sealed class JiraHandler(params string[] inReviewKeys) : HttpMessageHandler
     {
         public List<string> Transitioned { get; } = [];
         public string? Jql { get; private set; }
@@ -26,8 +26,8 @@ public sealed class PullRequestCloserTests
             if (path == "/rest/api/3/search/jql")
             {
                 Jql = Uri.UnescapeDataString(request.RequestUri.Query);
-                var issues = string.Join(",", codeReviewKeys.Select(key =>
-                    $$"""{"key":"{{key}}","fields":{"summary":"S","status":{"name":"Code Review"}}}"""));
+                var issues = string.Join(",", inReviewKeys.Select(key =>
+                    $$"""{"key":"{{key}}","fields":{"summary":"S","status":{"name":"In Review"}}}"""));
                 body = $$"""{"issues":[{{issues}}]}""";
             }
             else if (request.Method == HttpMethod.Post)
@@ -81,7 +81,7 @@ public sealed class PullRequestCloserTests
 
         Assert.Equal(["T-1", "T-3"], closed);
         Assert.Equal(2, handler.Transitioned.Count);
-        Assert.Contains("Code Review", handler.Jql);
+        Assert.Contains("In Review", handler.Jql);
         Assert.Contains("project = \"T\"", handler.Jql);
     }
 

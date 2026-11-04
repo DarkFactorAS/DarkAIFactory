@@ -19,6 +19,7 @@ internal sealed record AgentConfiguration(
     string AssigneeAccountId = "")
 {
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
+    public string JiraProjectKey { get; init; } = string.Empty;
     public long? ManagerProjectId { get; init; }
     public bool RequiresManagerPlan { get; init; } = true;
     public string AgentModel { get; init; } = string.Empty;
@@ -98,6 +99,7 @@ internal sealed record AgentConfiguration(
             Get(settings.Jira.JiraAssigneeAccountId, string.Empty))
         {
             AnalyzedLabel = analyzedLabel,
+            JiraProjectKey = jiraProjectKey,
             ManagerProjectId = project?.Id,
             AgentModel = Get(settings.GitHub.AgentModel, string.Empty),
             RequiresManagerPlan = project is not null || string.IsNullOrWhiteSpace(settings.Jira.JiraJql)

@@ -64,6 +64,18 @@ try
         {
             using var jira = new JiraClient(configuration);
             var copilot = new CopilotRunner(configuration);
+            var pullRequests = scope.ServiceProvider.GetRequiredService<PullRequestRepository>();
+            try
+            {
+                await new PullRequestRecordRecovery(configuration, jira, pullRequests)
+                    .RecoverAsync(cancellation.Token);
+            }
+            catch (Exception exception) when (!cancellation.IsCancellationRequested)
+            {
+                Console.Error.WriteLine(
+                    $"Pull-request tracking recovery failed for {configuration.GitHubRepositoryUrl}: {exception.Message}");
+            }
+
             if (loggedConfigurations.Add(configuration))
             {
                 await copilot.CheckAvailableAsync(cancellation.Token);
@@ -236,14 +248,29 @@ try
                             message += $" Pull request: {pullRequestUrl}";
                             try
                             {
-                                scope.ServiceProvider.GetRequiredService<PullRequestRepository>()
-                                    .Record(issue.Key, configuration.GitHubRepositoryUrl, pullRequestUrl);
+                                pullRequests.Record(issue.Key, configuration.GitHubRepositoryUrl, pullRequestUrl);
                             }
                             catch (Exception exception) when (!cancellation.IsCancellationRequested)
                             {
                                 // The PR already exists; a bookkeeping failure must not rerun the implementation.
                                 Console.Error.WriteLine(
                                     $"Could not record pull request {pullRequestUrl} for {issue.Key} in the database: {exception.Message}");
+                                try
+                                {
+                                    await jira.AddCommentAsync(
+                                        issue.Key,
+                                        $"{PullRequestRecordRecovery.PendingCommentPrefix}{pullRequestUrl}",
+                                        cancellation.Token);
+                                    await jira.AddLabelAsync(
+                                        issue.Key,
+                                        PullRequestRecordRecovery.PendingLabel,
+                                        cancellation.Token);
+                                }
+                                catch (Exception recoveryException) when (!cancellation.IsCancellationRequested)
+                                {
+                                    Console.Error.WriteLine(
+                                        $"Could not schedule record-only recovery for {pullRequestUrl}: {recoveryException.Message}");
+                                }
                             }
                         }
                         else

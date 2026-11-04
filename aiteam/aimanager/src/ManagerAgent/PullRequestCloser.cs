@@ -8,11 +8,11 @@ internal sealed class PullRequestCloser(
     JiraClient jira,
     Func<PullRequestRecord, CancellationToken, Task<bool>> isMerged)
 {
-    // Moves Code Review issues to Done once every stored pull request is merged.
+    // Moves In Review issues to Done once every stored pull request is merged.
     // Issues without a stored pull request are left untouched. Returns the keys moved to Done.
     public async Task<IReadOnlyList<string>> CloseMergedAsync(string jiraProjectKey, CancellationToken cancellationToken)
     {
-        var issues = await jira.FindIssuesInStatusAsync(jiraProjectKey, configuration.AnalysisOnlyStatus, cancellationToken);
+        var issues = await jira.FindIssuesInStatusAsync(jiraProjectKey, configuration.InReviewStatus, cancellationToken);
         var closed = new List<string>();
         foreach (var issue in issues)
         {

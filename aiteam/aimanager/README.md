@@ -5,7 +5,7 @@ Copilot CLI to triage each ticket (clarify, analysis only, small, needs approval
 sub-tasks), saves the full plan in MariaDB and posts it to Jira. It does not implement code,
 run builds/tests in the cloned repository, create branches, commit, push or open pull
 requests. It changes ticket statuses for analysis-only tickets (to `Code Review`), for
-released sub-tasks (to `In Progress`), and for `Code Review` tickets whose pull requests
+released sub-tasks (to `In Progress`), and for `In Review` tickets whose pull requests
 are all merged (to `Done`); see [Triage behaviour](#triage-behaviour) and
 [Closing merged pull requests](#closing-merged-pull-requests).
 Copilot shell and write tools are always disabled.
@@ -131,16 +131,17 @@ optional and default as shown; add them to the shared `settings` rows to change 
 ## Closing merged pull requests
 
 At the start of every polling cycle for each mapped project, before new tasks are
-handled, AITechLead lists the project's issues in `Jira.JiraAnalysisOnlyStatus`
-(`Code Review`) and loads their pull requests from `pull_requests`. It then asks the
+handled, AITechLead lists the project's issues in `Jira.JiraInReviewStatus`
+(`In Review`) and loads their pull requests from `pull_requests`. It then asks the
 GitHub API whether each one is merged:
 
-- no stored pull request: the issue stays in `Code Review`;
-- any pull request open, or closed without merging: the issue stays in `Code Review`;
+- no stored pull request: the issue stays in `In Review`;
+- any pull request open, or closed without merging: the issue stays in `In Review`;
 - all pull requests merged: the issue (or sub-task) is moved to `Jira.JiraDoneStatus` (`Done`).
 
-Failures are logged per issue and do not stop the polling cycle. Pull requests
-created before the `pull_requests` table existed are not backfilled.
+Failures are logged per issue and do not stop the polling cycle. The worker retries
+failed pull-request tracking writes from Jira without rerunning implementation.
+Pull requests created before the `pull_requests` table existed are not backfilled.
 
 ## Run
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
@@ -213,7 +214,8 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraClarificationLabel` | `ai-needs-clarification` | Optional shared setting: added when the requirements are unclear |
 | `Jira.JiraApprovalLabel` | `ai-awaiting-approval` | Optional shared setting: plan is held for human approval |
 | `Jira.JiraApprovedLabel` | `ai-approved` | Optional shared setting: a human adds it to release a held plan |
-| `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets; tickets here are moved to Done when all their pull requests are merged |
+| `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets |
+| `Jira.JiraInReviewStatus` | `In Review` | Optional shared setting: worker handoff status; tickets here are moved to Done when all their pull requests are merged |
 | `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants, and the status set when all pull requests are merged |
 | `Jira.JiraSubtaskIssueType` | `Sub-task` | Optional shared setting: issue type used for created sub-tasks |
 | `Jira.JiraAutoApproveSmallChanges` | `true` | Optional shared setting: `false` holds small changes for approval too |

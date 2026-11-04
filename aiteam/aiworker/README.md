@@ -97,10 +97,12 @@ the issue to `In Progress` (a failure to do so is logged and commented, and work
 continues). After pushing, it opens a pull request against the repository's
 default branch, links it in the Jira result comment and moves the issue to
 `In Review`. Every pull request is also recorded in the `pull_requests` table
-(idempotent by PR URL; a database failure is logged and never reruns the
-implementation) so AITechLead can move the issue to `Done` once all its pull
-requests are merged. Every result comment identifies whether the implementation used
-the manager's stored plan or local worker planning. Manager-sourced results
+(idempotent by PR URL). If that database write fails, the worker stores a Jira
+recovery marker and retries the record-only operation on later polling cycles;
+it never reruns the implementation for this recovery. This lets AITechLead move
+the issue to `Done` once all its pull requests are merged. Every result comment
+identifies whether the implementation used the manager's stored plan or local
+worker planning. Manager-sourced results
 include the exact requirements fingerprint and source Jira update timestamp,
 so reviewers can trace the delegated plan version. Audit metadata and delivery
 details are retained even when long implementation output is truncated.
