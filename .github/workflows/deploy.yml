@@ -1,0 +1,44 @@
+name: Deploy - Production
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  dbmigrator:
+    name: Deploy DBMigrator
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/dbmigration
+      project_name: DbMigrator
+    secrets: inherit
+
+  aitechlead:
+    name: Deploy AITechLead
+    needs: [dbmigrator]
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/aimanager
+      project_name: ManagerAgent
+    secrets: inherit
+
+  aiworker:
+    name: Deploy AIWorker
+    needs: [aitechlead]
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/aiworker
+      project_name: CodingAgent
+    secrets: inherit
