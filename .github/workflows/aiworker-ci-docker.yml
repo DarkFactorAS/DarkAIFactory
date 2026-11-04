@@ -1,4 +1,4 @@
-name: Agent-CI-Docker
+name: AIWorker-CI-Docker
 
 permissions:
   contents: read

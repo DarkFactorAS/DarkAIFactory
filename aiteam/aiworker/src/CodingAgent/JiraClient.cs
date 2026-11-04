@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -105,7 +106,24 @@ internal sealed class JiraClient : IDisposable
             $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/assignee",
             new { accountId },
             cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (errorBody.Length > 500)
+        {
+            errorBody = errorBody[..500];
+        }
+
+        var hint = response.StatusCode == HttpStatusCode.NotFound
+            ? " The account ID may be invalid or not assignable in this project (it must be a Jira accountId, not an email or username)."
+            : string.Empty;
+        throw new HttpRequestException(
+            $"Jira returned {(int)response.StatusCode} ({response.StatusCode}) when assigning {issueKey} to account '{accountId}'.{hint} Response: {errorBody}",
+            null,
+            response.StatusCode);
     }
 
     public async Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken)
