@@ -42,6 +42,12 @@ internal sealed class CopilotRunner
         var startInfo = CreateStartInfo(workspacePath);
         startInfo.ArgumentList.Add("--prompt");
         startInfo.ArgumentList.Add(prompt);
+        if (_configuration.AgentModel.Length > 0)
+        {
+            startInfo.ArgumentList.Add("--model");
+            startInfo.ArgumentList.Add(_configuration.AgentModel);
+        }
+
         startInfo.ArgumentList.Add("--silent");
         startInfo.ArgumentList.Add("--trust-folder");
         startInfo.ArgumentList.Add("--secret-env-vars=GH_TOKEN,GITHUB_TOKEN");

@@ -49,6 +49,7 @@ public static class IntegrationSettingsPatcher
                 ('aiworker', 'Jira.JiraPickupLabel', 'ai-agent-picked'),
                 ('aiworker', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aiworker', 'GitHub.GitHubRepositoryToken', ''),
+                ('aiworker', 'GitHub.AgentModel', 'gpt-5-mini'),
                 ('aibuildpage', 'Jira.JiraPickupLabel', 'ai-build-picked'),
                 ('aibuildpage', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aibuildpage', 'GitHub.GitHubRepositoryToken', '')

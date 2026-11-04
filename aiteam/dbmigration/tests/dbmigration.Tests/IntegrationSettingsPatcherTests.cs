@@ -18,7 +18,7 @@ public sealed class IntegrationSettingsPatcherTests
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
 
-        Assert.Equal(21, values.Count);
+        Assert.Equal(22, values.Count);
         Assert.Contains("ON DUPLICATE KEY UPDATE `value` = `settings`.`value`", patcher.Sql[1]);
         Assert.Equal(12, values.Keys.Count(key => key.Client == "shared"));
         Assert.Equal("ai-agent-failed", values[("shared", "Jira.JiraFailureLabel")]);
@@ -27,7 +27,7 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Empty(values[("shared", "GitHub.AgentGitHubToken")]);
         foreach (var client in Clients)
         {
-            Assert.Equal(3, values.Keys.Count(key => key.Client == client));
+            Assert.Equal(client == "aiworker" ? 4 : 3, values.Keys.Count(key => key.Client == client));
             Assert.Equal("ai-analyzed", values[(client, "Jira.JiraAnalyzedLabel")]);
             Assert.Empty(values[(client, "GitHub.GitHubRepositoryToken")]);
             Assert.NotEmpty(values[(client, "Jira.JiraPickupLabel")]);

@@ -100,7 +100,9 @@ Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraJql` (empty for generated JQL), `Jira.JiraFailureLabel`
 (`ai-agent-failed`), `Jira.JiraInProgressStatus` (`In Progress`),
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
-Requests) and `GitHub.TargetRepositoryUrl`.
+Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
+optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
+as `--model`; blank uses the CLI default.
 
 Both agents use `manager_projects` for project/repository selection, reloading
 mappings each polling cycle. Shared `Jira.JiraProjectKey` and

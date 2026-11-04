@@ -27,5 +27,6 @@ public sealed class GitHubSettings
 {
     public string AgentGitHubToken { get; set; } = string.Empty;
     public string GitHubRepositoryToken { get; set; } = string.Empty;
+    public string AgentModel { get; set; } = string.Empty;
     public string TargetRepositoryUrl { get; set; } = string.Empty;
 }

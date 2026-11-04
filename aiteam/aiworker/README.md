@@ -143,6 +143,7 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraEmail` | required | Jira account email |
 | `Jira.JiraApiToken` | required | Jira API token |
 | `GitHub.AgentGitHubToken` | required | Fine-grained token with Copilot Requests permission |
+| `GitHub.AgentModel` | `gpt-5-mini` (seeded) | Copilot CLI model for AI work (`--model`); blank uses the CLI default |
 | `GitHub.GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
 | `GitHub.TargetRepositoryUrl` | required without mappings | Fallback HTTPS repository URL when `manager_projects` is empty |
 | `Jira.JiraProjectKey` | `DFAI` | Fallback project when `manager_projects` is empty |
