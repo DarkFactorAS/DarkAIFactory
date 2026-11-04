@@ -198,8 +198,8 @@ internal sealed class JiraClient : IDisposable
         var body = new JsonObject
         {
             ["type"] = new JsonObject { ["name"] = "Blocks" },
-            ["outwardIssue"] = new JsonObject { ["key"] = blockerKey },
-            ["inwardIssue"] = new JsonObject { ["key"] = blockedKey }
+            ["inwardIssue"] = new JsonObject { ["key"] = blockerKey },
+            ["outwardIssue"] = new JsonObject { ["key"] = blockedKey }
         };
         using var response = await _httpClient.PostAsJsonAsync("/rest/api/3/issueLink", body, cancellationToken);
         response.EnsureSuccessStatusCode();

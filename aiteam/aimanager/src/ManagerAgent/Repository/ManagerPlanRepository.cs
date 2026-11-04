@@ -63,4 +63,17 @@ internal sealed class ManagerPlanRepository(IDbConnectionFactory connectionFacto
             throw new InvalidOperationException($"Could not mark the saved plan for {jiraKey} as posted to Jira.");
         }
     }
+
+    public void ReplacePlan(string jiraKey, string requirementsHash, string plan)
+    {
+        using var command = connectionFactory.CreateCommand(
+            "UPDATE manager_plans SET plan = @plan WHERE jira_key = @jira_key AND requirements_hash = @requirements_hash");
+        command.AddParameter("@plan", plan);
+        command.AddParameter("@jira_key", jiraKey);
+        command.AddParameter("@requirements_hash", requirementsHash);
+        if (command.ExecuteNonQuery() != 1)
+        {
+            throw new InvalidOperationException($"Could not update the saved plan for {jiraKey}.");
+        }
+    }
 }

@@ -271,17 +271,33 @@ public sealed class ManagerPlannerTests
         await planner.PlanAsync(1, FreshIssue, CancellationToken.None);
         Assert.DoesNotContain("add:ai-analyzed", events);
         Assert.Contains("add:ai-awaiting-approval", events);
+        Assert.Contains("[triage:needs_approval]", (string)database.Rows.Rows[0]["plan"]);
 
         events.Clear();
         await planner.PlanAsync(1, handler.Current, CancellationToken.None);
         Assert.Empty(events);
 
+        handler.Current = handler.Current with
+        {
+            Labels = handler.Current.Labels.Where(label => label != "ai-awaiting-approval").ToArray()
+        };
+        var renamedApprovalLabel = new ManagerPlanner(
+            Configuration with { ApprovalLabel = "ai-awaiting-approval-renamed" },
+            new ManagerPlanRepository(database), jira, (_, _) =>
+            {
+                paidRuns++;
+                return Task.FromResult("Unexpected plan");
+            });
+        await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
+        Assert.Empty(events);
+        Assert.DoesNotContain("ai-analyzed", handler.Current.Labels);
+
         handler.Current = handler.Current with { Labels = [.. handler.Current.Labels, "ai-approved"] };
-        await planner.PlanAsync(1, handler.Current, CancellationToken.None);
+        await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
 
         Assert.Equal(1, paidRuns);
-        Assert.Equal(["add:ai-manager-planned", "add:ai-analyzed", "remove:ai-awaiting-approval",
-            "remove:ai-approved"], events);
+        Assert.Equal(["add:ai-manager-planned", "add:ai-analyzed", "replace-plan",
+            "remove:ai-awaiting-approval-renamed", "remove:ai-approved"], events);
     }
 
     [Fact]
@@ -343,6 +359,11 @@ public sealed class ManagerPlannerTests
                 database.Rows.Rows.Add(command.Values["@project_id"], command.Values["@plan"], false,
                     command.Values["@requirements_hash"], command.Values["@source_updated"]);
                 events.Add("save");
+            }
+            else if (command.CommandText.StartsWith("UPDATE manager_plans SET plan", StringComparison.Ordinal))
+            {
+                database.Rows.Rows[0]["plan"] = command.Values["@plan"];
+                events.Add("replace-plan");
             }
             else
             {

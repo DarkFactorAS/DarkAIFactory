@@ -270,6 +270,6 @@ internal sealed record TriageResult(
             text = text[(firstNewLine + 1)..closingFence].Trim();
         }
 
-        return text.StartsWith('{') ? text : null;
+        return text.StartsWith('{') || text.StartsWith('[') ? text : null;
     }
 }

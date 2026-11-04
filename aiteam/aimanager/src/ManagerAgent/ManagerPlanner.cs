@@ -32,13 +32,19 @@ internal sealed class ManagerPlanner(
         var hasApprovalLabel = issue.Labels.Contains(configuration.ApprovalLabel);
         var hasApprovedLabel = issue.Labels.Contains(configuration.ApprovedLabel);
         var newlyHeld = false;
+        var approvalRequired = false;
+        if (storedPlan is not null && IsDependencyHold(storedPlan.Plan))
+        {
+            return;
+        }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
         {
-            if (!storedPlan.PostedToJira)
+            if (!storedPlan.PostedToJira && storedDecision == TriageDecision.Split)
             {
-                reusable = false;
+                await CompleteSplitAsync(issue.Key, storedPlan.Plan, storedPlan.RequirementsHash!, cancellationToken);
+                return;
             }
-            else if (storedDecision == TriageDecision.AnalysisOnly)
+            else if (storedPlan.PostedToJira && storedDecision == TriageDecision.AnalysisOnly)
             {
                 if (!string.Equals(issue.StatusName, configuration.AnalysisOnlyStatus, StringComparison.OrdinalIgnoreCase))
                 {
@@ -46,14 +52,26 @@ internal sealed class ManagerPlanner(
                 }
                 return;
             }
-            else if (storedDecision == TriageDecision.Split)
+            else if (storedPlan.PostedToJira && storedDecision == TriageDecision.Split)
             {
                 await ReleaseSubtasksAsync(storedPlan.Plan, cancellationToken);
                 return;
             }
-            else if (issue.Labels.Contains(configuration.ClarificationLabel))
+            else if (storedDecision == TriageDecision.NeedsApproval)
+            {
+                approvalRequired = true;
+                if (storedPlan.PostedToJira && !hasApprovedLabel)
+                {
+                    return;
+                }
+            }
+            else if (storedPlan.PostedToJira && issue.Labels.Contains(configuration.ClarificationLabel))
             {
                 return;
+            }
+            else if (!storedPlan.PostedToJira && storedDecision != TriageDecision.NeedsApproval)
+            {
+                reusable = false;
             }
             else
             {
@@ -110,9 +128,11 @@ internal sealed class ManagerPlanner(
                         plan = triage.RiskAreas.Count == 0
                             ? triage.Plan
                             : $"{triage.Plan}\n\nRisk areas requiring human approval: {string.Join(", ", triage.RiskAreas)}";
+                        plan = ManagerPlanMarker(TriageDecision.NeedsApproval, plan);
                         await jira.AddLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
                         hasApprovalLabel = true;
                         newlyHeld = true;
+                        approvalRequired = true;
                         break;
                     default:
                         plan = triage.Plan;
@@ -124,7 +144,7 @@ internal sealed class ManagerPlanner(
             storedPlan = new ManagerPlan(plan, false, requirementsHash, issue.UpdatedAt);
         }
         else if (storedPlan!.PostedToJira &&
-            !(hasApprovalLabel && hasApprovedLabel) &&
+            !(hasApprovedLabel && (hasApprovalLabel || approvalRequired)) &&
             issue.Labels.Contains(configuration.AnalyzedLabel) &&
             issue.Labels.Contains(configuration.PickupLabel))
         {
@@ -133,7 +153,7 @@ internal sealed class ManagerPlanner(
 
         if (!storedPlan!.PostedToJira)
         {
-            foreach (var comment in PromptBuilder.BuildPlanComments(storedPlan.Plan))
+            foreach (var comment in PromptBuilder.BuildPlanComments(TriageResult.StripMarker(storedPlan.Plan)))
             {
                 await jira.AddCommentAsync(issue.Key, comment, cancellationToken);
             }
@@ -149,7 +169,7 @@ internal sealed class ManagerPlanner(
             plans.MarkPostedToJira(issue.Key, requirementsHash);
         }
 
-        if (hasApprovalLabel && !hasApprovedLabel)
+        if ((approvalRequired || hasApprovalLabel) && !hasApprovedLabel)
         {
             Console.WriteLine($"Plan for {issue.Key} is awaiting human approval.");
             return;
@@ -169,7 +189,11 @@ internal sealed class ManagerPlanner(
             await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellationToken);
         }
         await jira.AddLabelAsync(issue.Key, configuration.AnalyzedLabel, cancellationToken);
-        if (hasApprovalLabel)
+        if (approvalRequired)
+        {
+            plans.ReplacePlan(issue.Key, requirementsHash, TriageResult.StripMarker(storedPlan.Plan));
+        }
+        if (approvalRequired || hasApprovalLabel)
         {
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovedLabel, cancellationToken);
@@ -227,7 +251,10 @@ internal sealed class ManagerPlanner(
             var created = await jira.GetIssueAsync(key, cancellationToken);
             var subtaskPlan = $"{subtask.Description}\n\nThis is part of {issue.Key}: {issue.Summary}." +
                 (dependencies.Length == 0 ? string.Empty : $" Its dependencies are {string.Join(", ", dependencies)}.");
-            plans.Save(projectId, key, subtaskPlan,
+            var storedSubtaskPlan = dependencies.Length == 0
+                ? subtaskPlan
+                : DependencyHoldPlan(subtaskPlan, dependencies);
+            plans.Save(projectId, key, storedSubtaskPlan,
                 ManagerPlan.Fingerprint(created.Summary, created.Description, configuration.GitHubRepositoryUrl),
                 created.UpdatedAt);
             foreach (var comment in PromptBuilder.BuildPlanComments(subtaskPlan))
@@ -249,36 +276,34 @@ internal sealed class ManagerPlanner(
             }
         }
 
-        var state = new SplitState(keys.Select((key, index) => new SplitSubtask(
-            key, triage.Subtasks[index].DependsOn.Select(title => keys[titleToIndex[title.Trim().ToLowerInvariant()]]).ToArray())).ToArray());
+        var state = new SplitState(triage.Plan, order.Select(index => new SplitSubtask(
+            keys[index],
+            triage.Subtasks[index].Title,
+            triage.Subtasks[index].DependsOn
+                .Select(title => keys[titleToIndex[title.Trim().ToLowerInvariant()]]).ToArray())).ToArray());
         SaveTriaged(projectId, issue, TriageDecision.Split, JsonSerializer.Serialize(state), requirementsHash);
-        var listing = string.Join("\n", order.Select((index, position) =>
-        {
-            var subtask = triage.Subtasks[index];
-            var dependsOn = state.Subtasks[index].DependsOn;
-            return $"{position + 1}. {keys[index]} {subtask.Title}" +
-                (dependsOn.Length == 0 ? " (no dependencies)" : $" (after {string.Join(", ", dependsOn)})");
-        }));
-        var intro = triage.Plan.Length == 0 ? string.Empty : triage.Plan + "\n\n";
-        await jira.AddCommentAsync(
-            issue.Key,
-            $"{intro}The task was split into sub-tasks. Execution order:\n\n{listing}\n\n" +
-            $"Sub-tasks without open dependencies are moved to {configuration.InProgressStatus} for the worker. " +
-            $"The others are released when all their dependencies reach {configuration.DoneStatus}.",
-            cancellationToken);
-        plans.MarkPostedToJira(issue.Key, requirementsHash);
-        await ReleaseSubtasksAsync(ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)), cancellationToken);
+        await CompleteSplitAsync(
+            issue.Key, ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)), requirementsHash, cancellationToken);
         Console.WriteLine($"Split {issue.Key} into {keys.Length} sub-tasks.");
+    }
+
+    private async Task CompleteSplitAsync(
+        string issueKey, string storedPlan, string requirementsHash, CancellationToken cancellationToken)
+    {
+        var state = ReadSplitState(storedPlan);
+        await jira.AddCommentAsync(issueKey, BuildSplitComment(state), cancellationToken);
+        plans.MarkPostedToJira(issueKey, requirementsHash);
+        await ReleaseSubtasksAsync(storedPlan, cancellationToken);
     }
 
     private async Task ReleaseSubtasksAsync(string storedPlan, CancellationToken cancellationToken)
     {
-        var state = JsonSerializer.Deserialize<SplitState>(TriageResult.StripMarker(storedPlan))
-            ?? throw new InvalidDataException("The stored split state is invalid.");
+        var state = ReadSplitState(storedPlan);
         foreach (var subtask in state.Subtasks)
         {
             var current = await jira.GetIssueAsync(subtask.Key, cancellationToken);
-            if (current.Labels.Contains(configuration.AnalyzedLabel) ||
+            if (string.Equals(current.StatusName, configuration.DoneStatus, StringComparison.OrdinalIgnoreCase) ||
+                current.Labels.Contains(configuration.AnalyzedLabel) ||
                 current.Labels.Contains(configuration.FailureLabel) ||
                 current.Labels.Contains(configuration.WorkerPickupLabel))
             {
@@ -301,9 +326,27 @@ internal sealed class ManagerPlanner(
                 continue;
             }
 
-            if (!string.Equals(current.StatusName, configuration.InProgressStatus, StringComparison.OrdinalIgnoreCase))
+            var storedSubtaskPlan = plans.Find(subtask.Key);
+            if (storedSubtaskPlan is not null && IsDependencyHold(storedSubtaskPlan.Plan))
             {
-                await jira.TransitionToAsync(subtask.Key, configuration.InProgressStatus, cancellationToken);
+                var dependencyHold = ReadDependencyHold(storedSubtaskPlan.Plan);
+                plans.ReplacePlan(
+                    subtask.Key,
+                    storedSubtaskPlan.RequirementsHash!,
+                    dependencyHold.Plan);
+                if (!storedSubtaskPlan.IsCurrent(
+                    current.Summary, current.Description, configuration.GitHubRepositoryUrl))
+                {
+                    if (!string.Equals(current.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await jira.TransitionToAsync(subtask.Key, configuration.JiraStatusName, cancellationToken);
+                    }
+                    continue;
+                }
+            }
+            if (!string.Equals(current.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
+            {
+                await jira.TransitionToAsync(subtask.Key, configuration.JiraStatusName, cancellationToken);
             }
             if (configuration.PickupLabel != configuration.AnalyzedLabel)
             {
@@ -321,7 +364,36 @@ internal sealed class ManagerPlanner(
     private static string ManagerPlanMarker(TriageDecision decision, string text) =>
         $"{TriageResult.MarkerFor(decision)}\n{text}";
 
-    private sealed record SplitSubtask(string Key, string[] DependsOn);
+    private const string DependencyHoldMarker = "[triage:dependency_hold]";
 
-    private sealed record SplitState(SplitSubtask[] Subtasks);
+    private static string DependencyHoldPlan(string plan, string[] dependencies) =>
+        $"{DependencyHoldMarker}\n{JsonSerializer.Serialize(new DependencyHoldState(plan, dependencies))}";
+
+    private static bool IsDependencyHold(string plan) =>
+        plan.StartsWith(DependencyHoldMarker, StringComparison.Ordinal);
+
+    private static DependencyHoldState ReadDependencyHold(string plan) =>
+        JsonSerializer.Deserialize<DependencyHoldState>(plan[DependencyHoldMarker.Length..].TrimStart('\r', '\n'))
+            ?? throw new InvalidDataException("The stored dependency hold is invalid.");
+
+    private static SplitState ReadSplitState(string storedPlan) =>
+        JsonSerializer.Deserialize<SplitState>(TriageResult.StripMarker(storedPlan))
+            ?? throw new InvalidDataException("The stored split state is invalid.");
+
+    private string BuildSplitComment(SplitState state)
+    {
+        var listing = string.Join("\n", state.Subtasks.Select((subtask, index) =>
+            $"{index + 1}. {subtask.Key} {subtask.Title}" +
+            (subtask.DependsOn.Length == 0 ? " (no dependencies)" : $" (after {string.Join(", ", subtask.DependsOn)})")));
+        var intro = state.Plan.Length == 0 ? string.Empty : state.Plan + "\n\n";
+        return $"{intro}The task was split into sub-tasks. Execution order:\n\n{listing}\n\n" +
+            $"Sub-tasks without open dependencies are moved to {configuration.JiraStatusName} for the worker. " +
+            $"The others are released when all their dependencies reach {configuration.DoneStatus}.";
+    }
+
+    private sealed record DependencyHoldState(string Plan, string[] Dependencies);
+
+    private sealed record SplitSubtask(string Key, string Title, string[] DependsOn);
+
+    private sealed record SplitState(string Plan, SplitSubtask[] Subtasks);
 }

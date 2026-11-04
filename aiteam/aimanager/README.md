@@ -114,15 +114,15 @@ legacy plan and handed off. Decisions:
 | `analysis_only` | Only analysis requested: the analysis is written to Jira and the issue is moved to `Jira.JiraAnalysisOnlyStatus` (`Code Review`, in Jira, not GitHub). No code, branch, pull request or handoff label. |
 | `small` | Handed off directly with the normal plan flow (no human approval). |
 | `needs_approval` | Authentication, database or architecture changes: the plan is posted and `Jira.JiraApprovalLabel` is added. The worker is not triggered until a human adds `Jira.JiraApprovedLabel`; the manager then hands off and removes both labels. |
-| `split` | Large ticket: sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraInProgressStatus` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
+| `split` | Large ticket: sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraStatusName` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
 
 Triage outcomes are stored in `manager_plans` with a `[triage:<decision>]` first
 line, so no schema change is needed and they are never handed off. If sub-task
 creation fails partway, retrying after removing the failure label can create
 duplicate sub-tasks; delete the partial ones first. The worker only picks up
-sub-tasks that its query matches, so set the worker's `Jira.JiraStatusName` (or
-JQL) accordingly. The extra settings are optional and default as shown; add them
-to the shared `settings` rows to change them.
+sub-tasks that its query matches. Released sub-tasks are placed in the shared
+`Jira.JiraStatusName` status selected by both agents. The extra settings are
+optional and default as shown; add them to the shared `settings` rows to change them.
 
 ## Run
 
@@ -187,7 +187,7 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraApiToken` | required | Jira API token |
 | `GitHub.AgentGitHubToken` | required | Token with Copilot Requests permission |
 | `GitHub.GitHubRepositoryToken` | required | Read-only access to all mapped repositories |
-| `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket status |
+| `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket and released sub-task status |
 | `Jira.JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
 | `Jira.JiraPickupLabel` | `ai-manager-planned` | Completion label |
 | `Jira.JiraFailureLabel` | `ai-agent-failed` | Shared failure label |

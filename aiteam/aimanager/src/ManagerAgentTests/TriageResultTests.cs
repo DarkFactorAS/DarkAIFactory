@@ -20,6 +20,13 @@ public sealed class TriageResultTests
         Assert.False(TriageResult.TryParse("1. Edit the file", out _));
     }
 
+    [Fact]
+    public void TryParse_RejectsArrayShapedJson()
+    {
+        Assert.Throws<InvalidDataException>(() =>
+            TriageResult.TryParse("""[{"decision":"clarify","questions":["Which API?"]}]""", out _));
+    }
+
     [Theory]
     [InlineData("""{"decision":"small",""")]
     [InlineData("""{"decision":"unknown"}""")]

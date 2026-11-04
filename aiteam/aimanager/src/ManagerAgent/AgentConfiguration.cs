@@ -25,6 +25,7 @@ internal sealed record AgentConfiguration(
     public string AnalysisOnlyStatus { get; init; } = "Code Review";
     public string DoneStatus { get; init; } = "Done";
     public string SubtaskIssueType { get; init; } = "Sub-task";
+    public string JiraStatusName { get; init; } = "Selected for Development";
     public bool AutoApproveSmallChanges { get; init; } = true;
 
     public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject project, string workerPickupLabel = "ai-agent-picked")
@@ -68,11 +69,6 @@ internal sealed record AgentConfiguration(
         ValidateLabel(clarificationLabel, "Jira.JiraClarificationLabel");
         ValidateLabel(approvalLabel, "Jira.JiraApprovalLabel");
         ValidateLabel(approvedLabel, "Jira.JiraApprovedLabel");
-        if (new[] { clarificationLabel, approvalLabel, approvedLabel, pickupLabel, analyzedLabel, failureLabel }
-                .Distinct(StringComparer.Ordinal).Count() != 6)
-        {
-            throw new InvalidOperationException("Clarification, approval, approved, pickup, analyzed and failure labels must all differ.");
-        }
         var autoApproveText = Get(settings.Jira.JiraAutoApproveSmallChanges, "true");
         if (!bool.TryParse(autoApproveText, out var autoApproveSmallChanges))
         {
@@ -80,9 +76,13 @@ internal sealed record AgentConfiguration(
         }
         workerPickupLabel = Get(workerPickupLabel, "ai-agent-picked");
         ValidateLabel(workerPickupLabel, "aiworker Jira.JiraPickupLabel");
-        if (workerPickupLabel == pickupLabel || workerPickupLabel == analyzedLabel)
+        if (new[]
+            {
+                clarificationLabel, approvalLabel, approvedLabel, pickupLabel, analyzedLabel, failureLabel, workerPickupLabel
+            }.Distinct(StringComparer.Ordinal).Count() != 7)
         {
-            throw new InvalidOperationException("Worker pickup label must differ from manager completion and analyzed labels.");
+            throw new InvalidOperationException(
+                "Clarification, approval, approved, manager pickup, analyzed, failure and worker pickup labels must all differ.");
         }
 
         var defaultJql =
@@ -117,6 +117,7 @@ internal sealed record AgentConfiguration(
             ClarificationLabel = clarificationLabel,
             ApprovalLabel = approvalLabel,
             ApprovedLabel = approvedLabel,
+            JiraStatusName = jiraStatusName,
             AnalysisOnlyStatus = Get(settings.Jira.JiraAnalysisOnlyStatus, "Code Review"),
             DoneStatus = Get(settings.Jira.JiraDoneStatus, "Done"),
             SubtaskIssueType = Get(settings.Jira.JiraSubtaskIssueType, "Sub-task"),
