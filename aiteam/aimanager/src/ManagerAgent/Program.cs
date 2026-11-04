@@ -20,6 +20,7 @@ new DFServices(builder.Services)
     .LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<ManagerPlanRepository>();
+builder.Services.AddScoped<PullRequestRepository>();
 builder.Services.AddScoped<IntegrationSettingsRepository>();
 
 using var host = builder.Build();
@@ -86,6 +87,26 @@ try
                 Console.WriteLine(
                     $"Polling manager project {project.Id}: {project.JiraProjectKey}. GitHub repository: {configuration.GitHubRepositoryUrl}");
             }
+            try
+            {
+                await new PullRequestCloser(
+                    configuration,
+                    scope.ServiceProvider.GetRequiredService<PullRequestRepository>(),
+                    jira,
+                    (record, token) => GitHubRepository.IsPullRequestMergedAsync(
+                        configuration, record.RepositoryUrl, record.Number, token))
+                    .CloseMergedAsync(project.JiraProjectKey, cancellation.Token);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine(
+                    $"Pull request handling failed for manager project {project.Id}: {exception.Message}. Continuing with new tasks.");
+            }
+
             IReadOnlyList<JiraIssue> issues;
             try
             {

@@ -38,6 +38,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `StartupDatabasePatcher` | 2 | `manager_projects` |
 | `StartupDatabasePatcher` | 3 | `manager_plans` |
 | `StartupDatabasePatcher` | 4 | Nullable plan fingerprint (`requirements_hash`) and Jira source timestamp (`source_updated`) |
+| `StartupDatabasePatcher` | 5 | `pull_requests` (Jira key, repository, PR number, unique PR URL), written by aiworker and read by AITechLead |
 | `IntegrationSettings` | 1 | `settings` with shared/client scope constraint |
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
 

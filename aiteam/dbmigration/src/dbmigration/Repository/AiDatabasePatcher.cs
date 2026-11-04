@@ -56,6 +56,25 @@ public class AiDatabasePatcher : StartupDatabasePatcher
                 ADD COLUMN IF NOT EXISTS `requirements_hash` CHAR(64) NULL,
                 ADD COLUMN IF NOT EXISTS `source_updated` VARCHAR(64) NULL
             """);
+        if (!_dbPatcher.Successful())
+        {
+            return false;
+        }
+
+        _dbPatcher.Patch("StartupDatabasePatcher", 5,
+            """
+            CREATE TABLE IF NOT EXISTS `pull_requests` (
+                `id` BIGINT NOT NULL AUTO_INCREMENT,
+                `jira_key` VARCHAR(255) NOT NULL,
+                `repository_url` VARCHAR(2048) NOT NULL,
+                `pr_number` BIGINT NOT NULL,
+                `pr_url` VARCHAR(700) NOT NULL,
+                `created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uq_pull_requests_pr_url` (`pr_url`),
+                KEY `ix_pull_requests_jira_key` (`jira_key`)
+            )
+            """);
         return _dbPatcher.Successful() && IntegrationSettingsPatcher.Run(_dbPatcher);
     }
 }

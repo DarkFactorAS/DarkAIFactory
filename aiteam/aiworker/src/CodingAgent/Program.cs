@@ -18,6 +18,7 @@ new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLe
 builder.Services.AddScoped<IntegrationSettingsRepository>();
 builder.Services.AddScoped<ManagerPlanReader>();
 builder.Services.AddScoped<ManagerProjectRepository>();
+builder.Services.AddScoped<PullRequestRepository>();
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
@@ -233,6 +234,17 @@ try
                                 issue.Summary,
                                 cancellation.Token);
                             message += $" Pull request: {pullRequestUrl}";
+                            try
+                            {
+                                scope.ServiceProvider.GetRequiredService<PullRequestRepository>()
+                                    .Record(issue.Key, configuration.GitHubRepositoryUrl, pullRequestUrl);
+                            }
+                            catch (Exception exception) when (!cancellation.IsCancellationRequested)
+                            {
+                                // The PR already exists; a bookkeeping failure must not rerun the implementation.
+                                Console.Error.WriteLine(
+                                    $"Could not record pull request {pullRequestUrl} for {issue.Key} in the database: {exception.Message}");
+                            }
                         }
                         else
                         {

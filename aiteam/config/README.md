@@ -120,7 +120,8 @@ for every mapped repository.
 
 Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
 `ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.
-The manager needs a read-only repository token; the worker needs Contents and
+The manager needs a read-only repository token (Contents and Pull requests read, to
+check whether pull requests are merged); the worker needs Contents and
 Pull requests read/write. Manager and worker analysis labels must match for
 handoff. The manager also reads the worker pickup label to avoid replanning
 claimed issues. After a failed planning attempt, clear the shared failure label

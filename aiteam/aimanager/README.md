@@ -4,8 +4,10 @@ AITechLead (folder and DB client key still `aimanager`) polls Jira, clones each 
 Copilot CLI to triage each ticket (clarify, analysis only, small, needs approval or split into
 sub-tasks), saves the full plan in MariaDB and posts it to Jira. It does not implement code,
 run builds/tests in the cloned repository, create branches, commit, push or open pull
-requests. It only changes ticket statuses for analysis-only tickets (to `Code Review`) and
-for released sub-tasks (to `In Progress`); see [Triage behaviour](#triage-behaviour).
+requests. It changes ticket statuses for analysis-only tickets (to `Code Review`), for
+released sub-tasks (to `In Progress`), and for `Code Review` tickets whose pull requests
+are all merged (to `Done`); see [Triage behaviour](#triage-behaviour) and
+[Closing merged pull requests](#closing-merged-pull-requests).
 Copilot shell and write tools are always disabled.
 
 ## Database
@@ -17,6 +19,8 @@ The standalone [dbmigration](../dbmigration/README.md) executable creates:
 - `manager_plans`: auto-increment `BIGINT` primary key `id`, `manager_project_id`
   foreign key, unique `jira_key`, full `plan` (`LONGTEXT`), `posted_to_jira`
   flag, `created` timestamp, `requirements_hash` and `source_updated` metadata.
+- `pull_requests`: written by aiworker for every pull request it opens (`jira_key`,
+  `repository_url`, `pr_number`, unique `pr_url`, `created`). A Jira issue can have several.
 
 The manager does not create tables or run migrations. Run dbmigration first;
 missing tables or database read failures stop startup.
@@ -95,7 +99,7 @@ implements using the plan stored in `manager_plans`. Because the plan is saved
 before the label is added, the worker always finds a stored plan for gated
 issues. The worker also checks the fingerprint against fresh Jira requirements;
 stale or unpublished plans are never implemented. Apart from the triage outcomes
-below, ticket statuses remain unchanged.
+below, ticket statuses remain unchanged apart from closing merged pull requests.
 To deliberately replan an unclaimed ticket, remove its analysis and completion
 labels, delete its `manager_plans` row, and clear any failure label. Do not reset
 claimed or already pushed work; follow the worker's recovery instructions instead.
@@ -124,14 +128,28 @@ sub-tasks that its query matches. Released sub-tasks are placed in the shared
 `Jira.JiraStatusName` status selected by both agents. The extra settings are
 optional and default as shown; add them to the shared `settings` rows to change them.
 
-## Run
+## Closing merged pull requests
 
+At the start of every polling cycle for each mapped project, before new tasks are
+handled, AITechLead lists the project's issues in `Jira.JiraAnalysisOnlyStatus`
+(`Code Review`) and loads their pull requests from `pull_requests`. It then asks the
+GitHub API whether each one is merged:
+
+- no stored pull request: the issue stays in `Code Review`;
+- any pull request open, or closed without merging: the issue stays in `Code Review`;
+- all pull requests merged: the issue (or sub-task) is moved to `Jira.JiraDoneStatus` (`Done`).
+
+Failures are logged per issue and do not stop the polling cycle. Pull requests
+created before the `pull_requests` table existed are not backfilled.
+
+## Run
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
 3. Set shared `GitHub.AgentGitHubToken` to a fine-grained token with **Copilot Requests** permission.
-4. Set the `aimanager` row `GitHub.GitHubRepositoryToken` with **Contents: read** permission for all mapped
+4. Set the `aimanager` row `GitHub.GitHubRepositoryToken` with **Contents: read** and
+   **Pull requests: read** permission for all mapped
    repositories and their submodules. The manager needs no push or pull-request
-   permissions. Use a separate read-only token from aiworker when running both.
+   write permissions. Use a separate read-only token from aiworker when running both.
 5. Configure the database file above, and set `MARIADB_ROOT_PASSWORD`,
    `MARIADB_PASSWORD`, `NUGET_USERNAME` and `NUGET_TOKEN` in `aiteam/.env`.
 6. Create the external database volume once:
@@ -195,8 +213,8 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraClarificationLabel` | `ai-needs-clarification` | Optional shared setting: added when the requirements are unclear |
 | `Jira.JiraApprovalLabel` | `ai-awaiting-approval` | Optional shared setting: plan is held for human approval |
 | `Jira.JiraApprovedLabel` | `ai-approved` | Optional shared setting: a human adds it to release a held plan |
-| `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets |
-| `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants |
+| `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets; tickets here are moved to Done when all their pull requests are merged |
+| `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants, and the status set when all pull requests are merged |
 | `Jira.JiraSubtaskIssueType` | `Sub-task` | Optional shared setting: issue type used for created sub-tasks |
 | `Jira.JiraAutoApproveSmallChanges` | `true` | Optional shared setting: `false` holds small changes for approval too |
 | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |
