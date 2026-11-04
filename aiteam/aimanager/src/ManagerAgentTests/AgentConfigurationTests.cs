@@ -116,7 +116,7 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults();
 
         Assert.Equal("github.com", AgentConfiguration.Load(SettingsScope.Current,
-            DefaultProject with { TargetRepositoryUrl = "https://github.com/owner/repo.git" }).RepositoryUrl.Host);
+            DefaultProject with { TargetRepositoryUrl = "https://github.com/owner/repo.git" }).GitHubRepositoryUrl.Host);
     }
 
     [Theory]
@@ -274,9 +274,9 @@ public sealed class AgentConfigurationTests
         var first = AgentConfiguration.Load(SettingsScope.Current, new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
         var second = AgentConfiguration.Load(SettingsScope.Current, new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
 
-        Assert.Equal("https://github.com/owner/first", first.RepositoryUrl.AbsoluteUri);
+        Assert.Equal("https://github.com/owner/first", first.GitHubRepositoryUrl.AbsoluteUri);
         Assert.StartsWith("project = \"FIRST\" AND ", first.JiraJql);
-        Assert.Equal("https://github.com/owner/second", second.RepositoryUrl.AbsoluteUri);
+        Assert.Equal("https://github.com/owner/second", second.GitHubRepositoryUrl.AbsoluteUri);
         Assert.StartsWith("project = \"SECOND\" AND ", second.JiraJql);
     }
 

@@ -9,7 +9,7 @@ internal sealed record AgentConfiguration(
     string JiraApiToken,
     string AgentGitHubToken,
     string GitHubRepositoryToken,
-    Uri RepositoryUrl,
+    Uri GitHubRepositoryUrl,
     string JiraJql,
     string PickupLabel,
     string FailureLabel,
@@ -32,15 +32,15 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("JiraBaseUrl must be an https URL without embedded credentials.");
         }
 
-        var repositoryUrl = Required(project?.TargetRepositoryUrl ?? settings.GitHub.TargetRepositoryUrl,
+        var gitHubRepositoryUrl = Required(project?.TargetRepositoryUrl ?? settings.GitHub.TargetRepositoryUrl,
             project is null ? "GitHub.TargetRepositoryUrl" : $"Manager project {project.Id}: target_repository_url");
-        if (!Uri.TryCreate(repositoryUrl, UriKind.Absolute, out var repositoryUri) ||
-            repositoryUri.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(repositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
-            !string.IsNullOrEmpty(repositoryUri.UserInfo) ||
-            !string.IsNullOrEmpty(repositoryUri.Query) ||
-            !string.IsNullOrEmpty(repositoryUri.Fragment) ||
-            repositoryUri.AbsolutePath.Trim('/').Split('/').Length != 2)
+        if (!Uri.TryCreate(gitHubRepositoryUrl, UriKind.Absolute, out var gitHubRepositoryUri) ||
+            gitHubRepositoryUri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(gitHubRepositoryUri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrEmpty(gitHubRepositoryUri.UserInfo) ||
+            !string.IsNullOrEmpty(gitHubRepositoryUri.Query) ||
+            !string.IsNullOrEmpty(gitHubRepositoryUri.Fragment) ||
+            gitHubRepositoryUri.AbsolutePath.Trim('/').Split('/').Length != 2)
         {
             throw new InvalidOperationException(
                 "TargetRepositoryUrl must be an https GitHub repository URL in the form https://github.com/owner/repository.");
@@ -87,7 +87,7 @@ internal sealed record AgentConfiguration(
             Required(settings.Jira.JiraApiToken, "Jira.JiraApiToken"),
             agentGitHubToken,
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
-            repositoryUri,
+            gitHubRepositoryUri,
             AddPickupLabelExclusion(jql, pickupLabel),
             pickupLabel,
             failureLabel,

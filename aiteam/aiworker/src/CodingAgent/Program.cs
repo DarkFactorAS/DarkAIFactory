@@ -69,7 +69,7 @@ try
                 Console.WriteLine(
                     $"Coding agent polling every {pollInterval.TotalSeconds:0} seconds. " +
                     $"Manager project: {configuration.ManagerProjectId?.ToString() ?? "legacy single-repository mode"}. " +
-                    $"Repository: {configuration.RepositoryUrl}");
+                    $"GitHub repository: {configuration.GitHubRepositoryUrl}");
             }
             IReadOnlyList<JiraIssue> issues;
             try
@@ -81,7 +81,7 @@ try
                 (exception is HttpRequestException || exception is OperationCanceledException))
             {
                 Console.Error.WriteLine(
-                    $"Jira polling failed for {configuration.RepositoryUrl}: {exception.Message}. Retrying next cycle.");
+                    $"Jira polling failed for {configuration.GitHubRepositoryUrl}: {exception.Message}. Retrying next cycle.");
                 continue;
             }
 
@@ -108,7 +108,7 @@ try
                 var managerPlan = scope.ServiceProvider.GetRequiredService<ManagerPlanReader>()
                     .Find(issue.Key, configuration.ManagerProjectId);
                 if (managerPlan is not null &&
-                    !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                    !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl))
                 {
                     Console.Error.WriteLine($"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
                     continue;
@@ -205,8 +205,8 @@ try
                         }
 
                         var beforeImplementation = await jira.GetIssueAsync(issue.Key, cancellation.Token);
-                        if (ManagerPlan.Fingerprint(beforeImplementation.Summary, beforeImplementation.Description, configuration.RepositoryUrl) !=
-                            ManagerPlan.Fingerprint(issue.Summary, issue.Description, configuration.RepositoryUrl))
+                        if (ManagerPlan.Fingerprint(beforeImplementation.Summary, beforeImplementation.Description, configuration.GitHubRepositoryUrl) !=
+                            ManagerPlan.Fingerprint(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl))
                         {
                             throw new InvalidOperationException("The Jira requirements changed after pickup. Refresh the manager plan before retrying implementation.");
                         }
