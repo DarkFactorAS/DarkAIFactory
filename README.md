@@ -36,6 +36,16 @@ workflows in [.github/workflows](.github/workflows). The worker .NET workflow
 also builds aibuildpage and builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
+### AI auto-approve
+
+`.github/workflows/ai-approve.yml` approves pull requests targeting `main` or
+`develop` when Copilot's review finds no issues. It requires:
+
+- Secret `GH_TOKEN`: fine-grained PAT of a dedicated bot account (not the PR
+  author) with Pull requests: write.
+- Repository variable `GH_USERNAME`: the bot account's login.
+- Optionally, branch protection requiring the bot's approval.
+
 ## Deployment
 
 All three apps have deployment entrypoints using the same reusable
