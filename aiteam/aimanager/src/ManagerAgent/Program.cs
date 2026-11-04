@@ -84,7 +84,7 @@ try
             if (loggedProjects.Add(project))
             {
                 Console.WriteLine(
-                    $"Polling manager project {project.Id}: {project.JiraProjectKey}. Repository: {configuration.RepositoryUrl}");
+                    $"Polling manager project {project.Id}: {project.JiraProjectKey}. GitHub repository: {configuration.GitHubRepositoryUrl}");
             }
             IReadOnlyList<JiraIssue> issues;
             try

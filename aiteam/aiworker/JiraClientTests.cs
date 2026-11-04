@@ -117,7 +117,7 @@ public sealed class JiraClientTests
             (HttpStatusCode.Created, """{"html_url":"https://github.com/owner/repo/pull/7"}"""));
 
         var url = await GitHubRepository.CreatePullRequestAsync(
-            CreateConfiguration() with { RepositoryUrl = new Uri("https://github.com/owner/repo.git") },
+            CreateConfiguration() with { GitHubRepositoryUrl = new Uri("https://github.com/owner/repo.git") },
             "ai-agent/DFAI-3-x",
             "DFAI-3",
             "Do thing",
