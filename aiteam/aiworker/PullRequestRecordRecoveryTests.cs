@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using AiTeam.Tests;
 using CodingAgent.Repository;
 
@@ -28,7 +29,38 @@ public sealed class PullRequestRecordRecoveryTests
         """{"issues":[{"key":"TASK-1","fields":{"summary":"S","status":{"name":"In Review"},"labels":["ai-pr-tracking-pending"]}}]}""";
 
     private static string CommentsResponse(string url) =>
-        $$"""{"startAt":0,"maxResults":100,"total":1,"isLast":true,"comments":[{"body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"{{PullRequestRecordRecovery.PendingCommentPrefix}}{{url}}"}]}]}}]}""";
+        JsonSerializer.Serialize(new
+        {
+            startAt = 0,
+            maxResults = 100,
+            total = 1,
+            isLast = true,
+            comments = new[]
+            {
+                new
+                {
+                    body = new
+                    {
+                        type = "doc",
+                        content = new[]
+                        {
+                            new
+                            {
+                                type = "paragraph",
+                                content = new[]
+                                {
+                                    new
+                                    {
+                                        type = "text",
+                                        text = PullRequestRecordRecovery.PendingCommentPrefix + url
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
     private sealed class RecoveryHandler(string url) : HttpMessageHandler
     {

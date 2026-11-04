@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using AiTeam.Tests;
 using ManagerAgent.Repository;
 
@@ -26,8 +27,11 @@ public sealed class PullRequestCloserTests
             if (path == "/rest/api/3/search/jql")
             {
                 Jql = Uri.UnescapeDataString(request.RequestUri.Query);
-                var issues = string.Join(",", inReviewKeys.Select(key =>
-                    $$"""{"key":"{{key}}","fields":{"summary":"S","status":{"name":"In Review"}}}"""));
+                var issues = string.Join(",", inReviewKeys.Select(key => JsonSerializer.Serialize(new
+                {
+                    key,
+                    fields = new { summary = "S", status = new { name = "In Review" } }
+                })));
                 body = $$"""{"issues":[{{issues}}]}""";
             }
             else if (request.Method == HttpMethod.Post)
