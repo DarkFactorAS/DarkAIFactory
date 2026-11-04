@@ -23,10 +23,20 @@ internal sealed class JiraClient : IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-ManagerAgent/1.0");
     }
 
-    public async Task<IReadOnlyList<JiraIssue>> FindWorkAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<JiraIssue>> FindWorkAsync(CancellationToken cancellationToken) =>
+        SearchAsync(_configuration.JiraJql, cancellationToken);
+
+    public Task<IReadOnlyList<JiraIssue>> FindIssuesInStatusAsync(
+        string jiraProjectKey, string statusName, CancellationToken cancellationToken) =>
+        SearchAsync(
+            $"project = \"{AiTeam.Configuration.JiraQuery.EscapeJql(jiraProjectKey)}\" " +
+            $"AND status = \"{AiTeam.Configuration.JiraQuery.EscapeJql(statusName)}\" ORDER BY created ASC",
+            cancellationToken);
+
+    private async Task<IReadOnlyList<JiraIssue>> SearchAsync(string jql, CancellationToken cancellationToken)
     {
         var query =
-            $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
+            $"jql={Uri.EscapeDataString(jql)}" +
             "&fields=summary,description,status,updated,labels&maxResults=20";
         var issues = new List<JiraIssue>();
         string? nextPageToken = null;

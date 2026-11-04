@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using static AiTeam.Configuration.JiraQuery;
 
 namespace CodingAgent;
 
@@ -24,10 +25,19 @@ internal sealed class JiraClient : IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-CodingAgent/1.0");
     }
 
-    public async Task<IReadOnlyList<JiraIssue>> FindWorkAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<JiraIssue>> FindWorkAsync(CancellationToken cancellationToken) =>
+        SearchAsync(_configuration.JiraJql, cancellationToken);
+
+    public Task<IReadOnlyList<JiraIssue>> FindPullRequestTrackingIssuesAsync(CancellationToken cancellationToken) =>
+        SearchAsync(
+            $"project = \"{EscapeJql(_configuration.JiraProjectKey)}\" " +
+            $"AND labels in (\"{EscapeJql(PullRequestRecordRecovery.PendingLabel)}\") ORDER BY updated ASC",
+            cancellationToken);
+
+    private async Task<IReadOnlyList<JiraIssue>> SearchAsync(string jql, CancellationToken cancellationToken)
     {
         var query =
-            $"jql={Uri.EscapeDataString(_configuration.JiraJql)}" +
+            $"jql={Uri.EscapeDataString(jql)}" +
             "&fields=summary,description,status,updated,labels&maxResults=20";
         var issues = new List<JiraIssue>();
         string? nextPageToken = null;
@@ -68,6 +78,43 @@ internal sealed class JiraClient : IDisposable
         return ReadIssue(document.RootElement);
     }
 
+    public async Task<IReadOnlyList<string>> GetCommentsAsync(string issueKey, CancellationToken cancellationToken)
+    {
+        var comments = new List<string>();
+        var startAt = 0;
+        while (true)
+        {
+            using var response = await _httpClient.GetAsync(
+                $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/comment?startAt={startAt}&maxResults=100",
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = document.RootElement;
+            var page = root.GetProperty("comments");
+            var count = page.GetArrayLength();
+            foreach (var comment in page.EnumerateArray())
+            {
+                comments.Add(ReadAdfText(comment, "body"));
+            }
+
+            var isLast = root.TryGetProperty("isLast", out var last) && last.ValueKind == JsonValueKind.True;
+            int? totalCount = root.TryGetProperty("total", out var total) && total.TryGetInt32(out var parsedTotal)
+                ? parsedTotal
+                : null;
+            if (count == 0 || isLast ||
+                (totalCount.HasValue && startAt + count >= totalCount.Value) ||
+                (!totalCount.HasValue && count < 100))
+            {
+                break;
+            }
+
+            startAt += count;
+        }
+
+        return comments;
+    }
+
     private static JiraIssue ReadIssue(JsonElement issue)
     {
         var fields = issue.GetProperty("fields");
@@ -91,6 +138,22 @@ internal sealed class JiraClient : IDisposable
             update = new
             {
                 labels = new[] { new { add = label } }
+            }
+        };
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}",
+            body,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RemoveLabelAsync(string issueKey, string label, CancellationToken cancellationToken)
+    {
+        var body = new
+        {
+            update = new
+            {
+                labels = new[] { new { remove = label } }
             }
         };
         using var response = await _httpClient.PutAsJsonAsync(

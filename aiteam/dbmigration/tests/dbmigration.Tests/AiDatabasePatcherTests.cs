@@ -27,6 +27,7 @@ public sealed class AiDatabasePatcherTests
                 "patch:StartupDatabasePatcher:2", "successful",
                 "patch:StartupDatabasePatcher:3", "successful",
                 "patch:StartupDatabasePatcher:4", "successful",
+                "patch:StartupDatabasePatcher:5", "successful",
                 "init:IntegrationSettings",
                 "patch:IntegrationSettings:1", "successful",
                 "patch:IntegrationSettings:2", "successful",
@@ -52,13 +53,17 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("ADD COLUMN IF NOT EXISTS `requirements_hash` CHAR(64) NULL", dbPatcher.Sql[3]);
             Assert.Contains("ADD COLUMN IF NOT EXISTS `source_updated` VARCHAR(64) NULL", dbPatcher.Sql[3]);
             Assert.DoesNotContain("DELETE", dbPatcher.Sql[3]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[4]);
-            Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[4]);
-            Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[4]);
-            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[5]);
-            Assert.Contains("('shared', 'Jira.JiraAssigneeAccountId', '')", dbPatcher.Sql[6]);
-            Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", dbPatcher.Sql[7]);
-            Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", dbPatcher.Sql[8]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `pull_requests`", dbPatcher.Sql[4]);
+            Assert.Contains("`jira_key` VARCHAR(255) NOT NULL", dbPatcher.Sql[4]);
+            Assert.Contains("`pr_number` BIGINT NOT NULL", dbPatcher.Sql[4]);
+            Assert.Contains("UNIQUE KEY `uq_pull_requests_pr_url`", dbPatcher.Sql[4]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[5]);
+            Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[5]);
+            Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[5]);
+            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[6]);
+            Assert.Contains("('shared', 'Jira.JiraAssigneeAccountId', '')", dbPatcher.Sql[7]);
+            Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", dbPatcher.Sql[8]);
+            Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", dbPatcher.Sql[9]);
         }
     }
 
@@ -81,11 +86,11 @@ public sealed class AiDatabasePatcherTests
     }
 
     [Theory]
-    [InlineData(1, 5)]
-    [InlineData(2, 6)]
-    [InlineData(3, 7)]
-    [InlineData(4, 8)]
-    [InlineData(5, 9)]
+    [InlineData(1, 6)]
+    [InlineData(2, 7)]
+    [InlineData(3, 8)]
+    [InlineData(4, 9)]
+    [InlineData(5, 10)]
     public void RunPatcher_ReportsSettingsPatchFailure(int patchId, int expectedPatchCount)
     {
         var dbPatcher = new StubDbPatcher(true, failingSettingsPatch: patchId);
@@ -104,9 +109,19 @@ public sealed class AiDatabasePatcherTests
         Assert.DoesNotContain(dbPatcher.Calls, call => call.StartsWith("init:IntegrationSettings"));
     }
 
+    [Fact]
+    public void RunPatcher_StopsWhenPullRequestMigrationFails()
+    {
+        var dbPatcher = new StubDbPatcher(true, failPullRequestPatch: true);
+
+        Assert.False(new AiDatabasePatcher(dbPatcher).RunPatcher());
+        Assert.Equal(5, dbPatcher.Sql.Count);
+        Assert.DoesNotContain(dbPatcher.Calls, call => call.StartsWith("init:IntegrationSettings"));
+    }
+
     private sealed class StubDbPatcher(
         bool successful, bool failProjectPatch = false, bool failPlanPatch = false,
-        int failingSettingsPatch = 0, bool failFreshnessPatch = false) : IDBPatcher
+        int failingSettingsPatch = 0, bool failFreshnessPatch = false, bool failPullRequestPatch = false) : IDBPatcher
     {
         private bool _successful = successful;
         public List<string> Calls { get; } = [];
@@ -128,7 +143,7 @@ public sealed class AiDatabasePatcherTests
             Calls.Add($"patch:{system}:{patchId}");
             Sql.Add(sql);
             if ((system == "StartupDatabasePatcher" &&
-                 ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch) || (patchId == 4 && failFreshnessPatch))) ||
+                 ((patchId == 2 && failProjectPatch) || (patchId == 3 && failPlanPatch) || (patchId == 4 && failFreshnessPatch) || (patchId == 5 && failPullRequestPatch))) ||
                 (system == "IntegrationSettings" && patchId == failingSettingsPatch))
             {
                 _successful = false;

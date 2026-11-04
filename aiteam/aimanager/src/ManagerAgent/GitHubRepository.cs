@@ -45,6 +45,45 @@ internal static class GitHubRepository
         ProtectGitConfiguration(workspacePath);
     }
 
+    public static async Task<bool> IsPullRequestMergedAsync(
+        AgentConfiguration configuration,
+        Uri repositoryUrl,
+        long pullRequestNumber,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        var parts = repositoryUrl.AbsolutePath.Trim('/').Split('/');
+        if (parts.Length != 2 ||
+            !string.Equals(repositoryUrl.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The stored repository URL \"{repositoryUrl}\" is not in the form https://github.com/owner/repository.");
+        }
+
+        var repositoryName = parts[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? parts[1][..^4] : parts[1];
+        using var httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        httpClient.BaseAddress = new Uri("https://api.github.com");
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", configuration.GitHubRepositoryToken);
+        httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-ManagerAgent/1.0");
+
+        using var response = await httpClient.GetAsync(
+            $"/repos/{Uri.EscapeDataString(parts[0])}/{Uri.EscapeDataString(repositoryName)}/pulls/{pullRequestNumber}",
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Reading pull request {pullRequestNumber} failed with status {(int)response.StatusCode}. " +
+                "Verify that GitHub.GitHubRepositoryToken has the Pull requests: read permission.");
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.TryGetProperty("merged", out var merged) &&
+            merged.ValueKind == System.Text.Json.JsonValueKind.True;
+    }
+
     public static void DeleteWorkspace(string workspacePath)
     {
         var workspaceRoot = Directory.GetParent(workspacePath)

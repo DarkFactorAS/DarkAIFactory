@@ -70,6 +70,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("StartupDatabasePatcher", 2),
             ("StartupDatabasePatcher", 3),
             ("StartupDatabasePatcher", 4),
+            ("StartupDatabasePatcher", 5),
             ("IntegrationSettings", 1),
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3),
@@ -92,6 +93,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("StartupDatabasePatcher", 2),
             ("StartupDatabasePatcher", 3),
             ("StartupDatabasePatcher", 4),
+            ("StartupDatabasePatcher", 5),
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3),
             ("IntegrationSettings", 4),
@@ -108,7 +110,7 @@ public sealed class IntegrationSettingsPatcherTests
         var patcher = new HistoryPatcher();
         patcher.Applied.UnionWith([
             ("StartupDatabasePatcher", 1), ("StartupDatabasePatcher", 2), ("StartupDatabasePatcher", 3),
-            ("StartupDatabasePatcher", 4),
+            ("StartupDatabasePatcher", 4), ("StartupDatabasePatcher", 5),
             ("IntegrationSettings", 1), ("IntegrationSettings", 2)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());

@@ -183,6 +183,21 @@ public sealed class JiraClientTests
     }
 
     [Fact]
+    public async Task GetCommentsAsync_FetchesAllPages()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"startAt":0,"maxResults":1,"total":2,"comments":[{"body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"first"}]}]}}]}"""),
+            (HttpStatusCode.OK, """{"startAt":1,"maxResults":1,"total":2,"isLast":true,"comments":[{"body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"second"}]}]}}]}"""));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var comments = await client.GetCommentsAsync("TASK-1", CancellationToken.None);
+
+        Assert.Equal(["first", "second"], comments);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("startAt=1", handler.Requests[1].Request.RequestUri!.Query);
+    }
+
+    [Fact]
     public async Task AddCommentAsync_PreservesManagerPlanAuditMetadataInJiraAdf()
     {
         var handler = new StubHandler(HttpStatusCode.Created);
