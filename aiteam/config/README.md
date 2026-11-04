@@ -100,7 +100,9 @@ Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraJql` (empty for generated JQL), `Jira.JiraFailureLabel`
 (`ai-agent-failed`), `Jira.JiraInProgressStatus` (`In Progress`),
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
-Requests) and `GitHub.TargetRepositoryUrl`.
+Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
+optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
+as `--model`; blank uses the CLI default.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraClarificationLabel` (`ai-needs-clarification`), `Jira.JiraApprovalLabel`

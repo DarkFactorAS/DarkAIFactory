@@ -20,7 +20,8 @@ public static class IntegrationSettingsPatcher
                         ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken'))
                     OR
                     (`client` IN ('aimanager', 'aiworker', 'aibuildpage') AND `name` IN
-                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken'))
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
                 )
             )
             """);
@@ -63,6 +64,35 @@ public static class IntegrationSettingsPatcher
             """
             INSERT INTO `settings` (`client`, `name`, `value`) VALUES
                 ('shared', 'Jira.JiraAssigneeAccountId', '')
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 4,
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aibuildpage') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                )
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 5,
+            """
+            INSERT INTO `settings` (`client`, `name`, `value`) VALUES
+                ('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);
         return patcher.Successful();

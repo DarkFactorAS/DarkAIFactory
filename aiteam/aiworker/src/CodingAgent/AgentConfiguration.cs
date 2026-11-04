@@ -21,6 +21,7 @@ internal sealed record AgentConfiguration(
     public string AnalyzedLabel { get; init; } = "ai-analyzed";
     public long? ManagerProjectId { get; init; }
     public bool RequiresManagerPlan { get; init; } = true;
+    public string AgentModel { get; init; } = string.Empty;
 
     public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject? project = null)
     {
@@ -98,6 +99,7 @@ internal sealed record AgentConfiguration(
         {
             AnalyzedLabel = analyzedLabel,
             ManagerProjectId = project?.Id,
+            AgentModel = Get(settings.GitHub.AgentModel, string.Empty),
             RequiresManagerPlan = project is not null || string.IsNullOrWhiteSpace(settings.Jira.JiraJql)
         };
     }

@@ -30,7 +30,9 @@ public sealed class AiDatabasePatcherTests
                 "init:IntegrationSettings",
                 "patch:IntegrationSettings:1", "successful",
                 "patch:IntegrationSettings:2", "successful",
-                "patch:IntegrationSettings:3", "successful"]);
+                "patch:IntegrationSettings:3", "successful",
+                "patch:IntegrationSettings:4", "successful",
+                "patch:IntegrationSettings:5", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -55,6 +57,8 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[4]);
             Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[5]);
             Assert.Contains("('shared', 'Jira.JiraAssigneeAccountId', '')", dbPatcher.Sql[6]);
+            Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", dbPatcher.Sql[7]);
+            Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", dbPatcher.Sql[8]);
         }
     }
 
@@ -80,6 +84,8 @@ public sealed class AiDatabasePatcherTests
     [InlineData(1, 5)]
     [InlineData(2, 6)]
     [InlineData(3, 7)]
+    [InlineData(4, 8)]
+    [InlineData(5, 9)]
     public void RunPatcher_ReportsSettingsPatchFailure(int patchId, int expectedPatchCount)
     {
         var dbPatcher = new StubDbPatcher(true, failingSettingsPatch: patchId);

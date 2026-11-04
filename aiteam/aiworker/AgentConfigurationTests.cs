@@ -128,6 +128,23 @@ public sealed class AgentConfigurationTests
         Assert.Equal("fallback", Load().AgentGitHubToken);
     }
 
+    [Fact]
+    public void Load_AgentModelDefaultsToEmpty()
+    {
+        using var env = new SettingsScope().WithValidDefaults();
+
+        Assert.Equal(string.Empty, Load().AgentModel);
+    }
+
+    [Fact]
+    public void Load_TrimsAgentModel()
+    {
+        using var env = new SettingsScope().WithValidDefaults()
+            .Set("GitHub:AgentModel", " gpt-5-mini ");
+
+        Assert.Equal("gpt-5-mini", Load().AgentModel);
+    }
+
     [Theory]
     [InlineData("http://example.atlassian.net")]
     [InlineData("https://user:pw@example.atlassian.net")]
