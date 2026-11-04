@@ -102,6 +102,10 @@ there before running them:
   support read-only configuration mounts for database credentials rather than
   baking Jira/GitHub credentials into images. Jira/GitHub credentials live in
   the shared database, not in images.
+- When a pull request is merged into `main` or `develop`, the
+  `jira-close-on-pr.yml` workflow moves the linked Jira issue to Done. It needs
+  the `JIRA_BASE_URL`, `JIRA_EMAIL` and `JIRA_API_TOKEN` repository secrets and
+  optionally a `JIRA_DONE_STATUS` variable (default `Done`).
 - Infrastructure sets only `ASPNETCORE_ENVIRONMENT` to lowercase `staging` or
   `production`. Agents select configuration using `DOTNET_ENVIRONMENT`, and
   the web app selects the exact ASP.NET Core environment filename. Environment

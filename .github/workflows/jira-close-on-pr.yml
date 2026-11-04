@@ -1,0 +1,38 @@
+name: Close Jira issue on merged PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  close-jira:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Close Jira issue
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_DONE_STATUS: ${{ vars.JIRA_DONE_STATUS }}
+        run: |
+          key=""
+          for text in "$HEAD_REF" "$PR_TITLE" "$PR_BODY"; do
+            key="$(grep -oE '[A-Z][A-Z0-9_]*-[0-9]+' <<< "$text" | head -n1 || true)"
+            [[ -n "$key" ]] && break
+          done
+          if [[ -z "$key" ]]; then
+            echo "No Jira key found in branch, title or body; skipping."
+            exit 0
+          fi
+          bash .agents/skills/jira-task-ingest/scripts/jira-transition.sh "$key" "$PR_URL"
