@@ -102,7 +102,7 @@ public sealed class ActiveAiTaskServiceTests
     public async Task ReadsUrlsFromAdfSmartLinks()
     {
         var adf = "{\"type\":\"doc\",\"content\":[" +
-                  "{\"type\":\"inlineCard\",\"attrs\":{\"url\":\"https://example.com/inline\"}}," +
+                  "{\"type\":\"paragraph\",\"content\":[{\"type\":\"inlineCard\",\"attrs\":{\"url\":\"https://example.com/inline\"}}]}," +
                   "{\"type\":\"blockCard\",\"attrs\":{\"url\":\"https://example.com/block\"}}," +
                   "{\"type\":\"embedCard\",\"attrs\":{\"url\":\"https://example.com/embed\"}}]}";
         var body = "{\"issues\":[" +
