@@ -281,6 +281,29 @@ public sealed class ManagerPlannerTests
     }
 
     [Fact]
+    public async Task PlanAsync_ResumesAnalysisOnlyAndClearsIgnoredMarkerWithoutReplanning()
+    {
+        var events = new List<string>();
+        var database = CreateDatabase(null, events);
+        var handler = new PlanningHandler(FreshIssue, events);
+        using var jira = new JiraClient(Configuration, handler);
+        var paidRuns = 0;
+        var planner = TriagePlanner(database, jira, AnalysisJson, () => paidRuns++);
+
+        await planner.PlanAsync(1, FreshIssue, CancellationToken.None);
+        events.Clear();
+        handler.Current = handler.Current with
+        {
+            StatusName = Configuration.AnalysisOnlyStatus,
+            Labels = [.. handler.Current.Labels, "ai-ignored"]
+        };
+        await planner.PlanAsync(1, handler.Current, CancellationToken.None);
+
+        Assert.Equal(1, paidRuns);
+        Assert.Equal(["remove:ai-ignored"], events);
+    }
+
+    [Fact]
     public async Task PlanAsync_SmallChangeIsHandedOffImmediately()
     {
         var events = new List<string>();
@@ -311,6 +334,7 @@ public sealed class ManagerPlannerTests
         events.Clear();
         await planner.PlanAsync(1, handler.Current, CancellationToken.None);
         Assert.Equal(["add:ai-ignored"], events);
+        events.Clear();
 
         handler.Current = handler.Current with
         {
@@ -324,14 +348,15 @@ public sealed class ManagerPlannerTests
                 return Task.FromResult("Unexpected plan");
             });
         await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
-        Assert.Equal(["add:ai-ignored", "add:ai-ignored"], events);
+        Assert.Equal(["add:ai-ignored"], events);
         Assert.DoesNotContain("ai-analyzed", handler.Current.Labels);
 
+        events.Clear();
         handler.Current = handler.Current with { Labels = [.. handler.Current.Labels, "ai-approved"] };
         await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
 
         Assert.Equal(1, paidRuns);
-        Assert.Equal(["add:ai-manager-planned", "add:ai-analyzed", "replace-plan",
+        Assert.Equal(["remove:ai-ignored", "add:ai-manager-planned", "add:ai-analyzed", "replace-plan",
             "remove:ai-awaiting-approval-renamed", "remove:ai-approved"], events);
     }
 

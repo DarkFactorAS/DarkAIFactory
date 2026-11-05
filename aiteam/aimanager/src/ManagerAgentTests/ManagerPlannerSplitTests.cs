@@ -46,6 +46,7 @@ public sealed class ManagerPlannerSplitTests
         Assert.Equal(1, generated);
         Assert.Equal(3, handler.CreatedKeys.Count);
         Assert.False(new ManagerPlanRepository(database).Find("TASK-1")!.PostedToJira);
+        handler.AddLabel("TASK-1", "ai-ignored");
 
         await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
 
@@ -53,6 +54,7 @@ public sealed class ManagerPlannerSplitTests
         Assert.Equal(3, handler.CreatedKeys.Count);
         Assert.Equal(2, handler.ParentCommentAttempts);
         Assert.True(new ManagerPlanRepository(database).Find("TASK-1")!.PostedToJira);
+        Assert.DoesNotContain("ai-ignored", handler.GetIssue("TASK-1").Labels);
 
         var rootKey = handler.CreatedKeys[0];
         var dependentKey = handler.CreatedKeys[1];
@@ -182,6 +184,9 @@ public sealed class ManagerPlannerSplitTests
 
         public void SetStatus(string key, string status) =>
             _issues[key] = _issues[key] with { StatusName = status };
+
+        public void AddLabel(string key, string label) =>
+            _issues[key] = _issues[key] with { Labels = [.. _issues[key].Labels, label] };
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
