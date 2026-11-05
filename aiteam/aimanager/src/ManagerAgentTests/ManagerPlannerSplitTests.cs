@@ -78,6 +78,29 @@ public sealed class ManagerPlannerSplitTests
         Assert.DoesNotContain("ai-analyzed", handler.GetIssue(doneKey).Labels);
     }
 
+    [Fact]
+    public async Task PlanAsync_ReleasesDependencyHoldDirectlyWhenDependenciesAreDone()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler();
+        using var jira = new JiraClient(Configuration, handler);
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => Task.FromResult(SplitJson));
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+        var rootKey = handler.CreatedKeys[0];
+        var dependentKey = handler.CreatedKeys[1];
+
+        await planner.PlanAsync(1, handler.GetIssue(dependentKey), CancellationToken.None);
+        Assert.StartsWith("[triage:dependency_hold]", new ManagerPlanRepository(database).Find(dependentKey)!.Plan);
+
+        handler.SetStatus(rootKey, "Done");
+        await planner.PlanAsync(1, handler.GetIssue(dependentKey), CancellationToken.None);
+
+        Assert.DoesNotContain("[triage:dependency_hold]", new ManagerPlanRepository(database).Find(dependentKey)!.Plan);
+    }
+
     private static DatabaseStub CreateDatabase()
     {
         var database = new DatabaseStub();
