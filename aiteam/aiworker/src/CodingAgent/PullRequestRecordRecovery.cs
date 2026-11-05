@@ -1,4 +1,5 @@
 using CodingAgent.Repository;
+using DFCommonLib.Logger;
 
 namespace CodingAgent;
 
@@ -28,7 +29,9 @@ internal sealed class PullRequestRecordRecovery(
                     .ToArray();
                 if (urls.Length == 0)
                 {
-                    Console.Error.WriteLine(
+                    DFLogger.LogOutput(
+                        DFLogLevel.WARNING,
+                        "Recovery",
                         $"Could not recover pull-request tracking for {issue.Key}: no tracking URL was found in Jira comments.");
                     continue;
                 }
@@ -46,7 +49,7 @@ internal sealed class PullRequestRecordRecovery(
                 }
 
                 await jira.RemoveLabelAsync(issue.Key, PendingLabel, cancellationToken);
-                Console.WriteLine($"Recovered pull-request tracking for {issue.Key} without rerunning implementation.");
+                DFLogger.LogOutput(DFLogLevel.INFO, "Recovery", $"Recovered pull-request tracking for {issue.Key} without rerunning implementation.");
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -54,7 +57,7 @@ internal sealed class PullRequestRecordRecovery(
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine($"Could not recover pull-request tracking for {issue.Key}: {exception.Message}");
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Recovery", $"Could not recover pull-request tracking for {issue.Key}: {exception.Message}");
             }
         }
     }

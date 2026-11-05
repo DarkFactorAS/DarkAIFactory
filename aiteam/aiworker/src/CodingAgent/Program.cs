@@ -10,9 +10,6 @@ using System.Runtime.InteropServices;
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
-Console.WriteLine(
-    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
-    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
@@ -21,9 +18,16 @@ builder.Services.AddScoped<ManagerPlanReader>();
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
 using var host = builder.Build();
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Startup",
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
-Console.WriteLine(
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Startup",
     $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
     $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
 using var databaseScope = host.Services.CreateScope();
@@ -79,14 +83,18 @@ try
             }
             catch (Exception exception) when (!cancellation.IsCancellationRequested)
             {
-                Console.Error.WriteLine(
+                DFLogger.LogOutput(
+                    DFLogLevel.ERROR,
+                    "Worker",
                     $"Pull-request tracking recovery failed for {configuration.GitHubRepositoryUrl}: {exception.Message}");
             }
 
             if (loggedConfigurations.Add(configuration))
             {
                 await copilot.CheckAvailableAsync(cancellation.Token);
-                Console.WriteLine(
+                DFLogger.LogOutput(
+                    DFLogLevel.INFO,
+                    "Worker",
                     $"Coding agent polling every {pollInterval.TotalSeconds:0} seconds. " +
                     $"Manager project: {configuration.ManagerProjectId?.ToString() ?? "legacy single-repository mode"}. " +
                     $"GitHub repository: {configuration.GitHubRepositoryUrl}");
@@ -100,7 +108,9 @@ try
                 !cancellation.IsCancellationRequested &&
                 (exception is HttpRequestException || exception is OperationCanceledException))
             {
-                Console.Error.WriteLine(
+                DFLogger.LogOutput(
+                    DFLogLevel.ERROR,
+                    "Worker",
                     $"Jira polling failed for {configuration.GitHubRepositoryUrl}: {exception.Message}. Retrying next cycle.");
                 continue;
             }
@@ -117,7 +127,7 @@ try
                     !cancellation.IsCancellationRequested &&
                     exception is HttpRequestException or OperationCanceledException)
                 {
-                    Console.Error.WriteLine($"Could not refresh {candidate.Key} before claiming: {exception.Message}. Retrying next cycle.");
+                    DFLogger.LogOutput(DFLogLevel.ERROR, "Worker", $"Could not refresh {candidate.Key} before claiming: {exception.Message}. Retrying next cycle.");
                     continue;
                 }
                 if (issue.Labels.Contains(configuration.PickupLabel) ||
@@ -130,17 +140,19 @@ try
                 if (managerPlan is not null &&
                     !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl))
                 {
-                    Console.Error.WriteLine($"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
+                    DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", $"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
                     continue;
                 }
                 if (configuration.RequiresManagerPlan &&
                     (managerPlan is null || !issue.Labels.Contains(configuration.AnalyzedLabel)))
                 {
-                    Console.Error.WriteLine(
+                    DFLogger.LogOutput(
+                        DFLogLevel.WARNING,
+                        "Worker",
                         $"Skipping {issue.Key}: no manager plan exists for the selected project. Verify the manager handoff labels and mapping.");
                     continue;
                 }
-                Console.WriteLine($"Claiming {issue.Key}: {issue.Summary}");
+                DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
 
                 string? workspacePath = null;
                 string? branchName = null;
@@ -159,7 +171,7 @@ try
                         }
                         catch (Exception exception) when (!cancellation.IsCancellationRequested)
                         {
-                            Console.Error.WriteLine($"Could not assign {issue.Key}: {exception.Message}");
+                            DFLogger.LogOutput(DFLogLevel.ERROR, "Worker", $"Could not assign {issue.Key}: {exception.Message}");
                             try
                             {
                                 await jira.AddCommentAsync(
@@ -169,7 +181,9 @@ try
                             }
                             catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
                             {
-                                Console.Error.WriteLine(
+                                DFLogger.LogOutput(
+                                    DFLogLevel.ERROR,
+                                    "Worker",
                                     $"Could not post the assignment warning for {issue.Key}: {notificationException.Message}");
                             }
                         }
@@ -182,7 +196,9 @@ try
                     }
                     catch (Exception exception) when (!cancellation.IsCancellationRequested)
                     {
-                        Console.Error.WriteLine(
+                        DFLogger.LogOutput(
+                            DFLogLevel.ERROR,
+                            "Worker",
                             $"Could not move {issue.Key} to {configuration.InProgressStatus}: {exception.Message}");
                         try
                         {
@@ -193,7 +209,9 @@ try
                         }
                         catch (Exception notificationException) when (!cancellation.IsCancellationRequested)
                         {
-                            Console.Error.WriteLine(
+                            DFLogger.LogOutput(
+                                DFLogLevel.ERROR,
+                                "Worker",
                                 $"Could not post the transition warning for {issue.Key}: {notificationException.Message}");
                         }
                     }
@@ -211,12 +229,12 @@ try
                         string plan;
                         if (managerPlan is not null)
                         {
-                            Console.WriteLine($"Using the manager's stored plan for {issue.Key}.");
+                            DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Using the manager's stored plan for {issue.Key}.");
                             plan = managerPlan.Plan;
                         }
                         else
                         {
-                            Console.WriteLine($"No manager plan found for {issue.Key}; generating a plan locally.");
+                            DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"No manager plan found for {issue.Key}; generating a plan locally.");
                             plan = await copilot.RunAsync(
                                 workspacePath,
                                 PromptBuilder.BuildPlanPrompt(issue),
@@ -260,7 +278,9 @@ try
                             catch (Exception exception) when (!cancellation.IsCancellationRequested)
                             {
                                 // The PR already exists; a bookkeeping failure must not rerun the implementation.
-                                Console.Error.WriteLine(
+                                DFLogger.LogOutput(
+                                    DFLogLevel.ERROR,
+                                    "Worker",
                                     $"Could not record pull request {pullRequestUrl} for {issue.Key} in the database: {exception.Message}");
                                 try
                                 {
@@ -275,7 +295,9 @@ try
                                 }
                                 catch (Exception recoveryException) when (!cancellation.IsCancellationRequested)
                                 {
-                                    Console.Error.WriteLine(
+                                    DFLogger.LogOutput(
+                                        DFLogLevel.ERROR,
+                                        "Worker",
                                         $"Could not schedule record-only recovery for {pullRequestUrl}: {recoveryException.Message}");
                                 }
                             }
@@ -296,7 +318,7 @@ try
                         }
 
                         delivered = true;
-                        Console.WriteLine($"Completed {issue.Key}.");
+                        DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Completed {issue.Key}.");
                     }
                     finally
                     {
@@ -309,7 +331,9 @@ try
                             catch (Exception exception) when (
                                 exception is IOException or UnauthorizedAccessException)
                             {
-                                Console.Error.WriteLine(
+                                DFLogger.LogOutput(
+                                    DFLogLevel.WARNING,
+                                    "Worker",
                                     $"Could not remove temporary workspace for {issue.Key}: {exception.Message}");
                             }
                         }
@@ -318,7 +342,9 @@ try
                             var branchStatus = pushedBranchName is null
                                 ? branchName is null ? string.Empty : $" Local branch: {branchName}."
                                 : $" Pushed branch: {pushedBranchName}.";
-                            Console.Error.WriteLine(
+                            DFLogger.LogOutput(
+                                DFLogLevel.WARNING,
+                                "Worker",
                                 $"Retained temporary workspace for {issue.Key} at {workspacePath}.{branchStatus}");
                         }
                     }
@@ -329,7 +355,7 @@ try
                 }
                 catch (Exception exception)
                 {
-                    Console.Error.WriteLine($"Processing {issue.Key} failed: {exception.Message}");
+                    DFLogger.LogOutput(DFLogLevel.ERROR, "Worker", $"Processing {issue.Key} failed: {exception.Message}");
                     await ReportFailureAsync(
                         jira,
                         configuration,
@@ -350,7 +376,7 @@ try
 }
 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 {
-    Console.WriteLine("Coding agent stopped.");
+    DFLogger.LogOutput(DFLogLevel.INFO, "Worker", "Coding agent stopped.");
 }
 
 static string LimitForComment(string text) => PromptBuilder.LimitForComment(text);
@@ -383,7 +409,9 @@ static async Task ReportFailureAsync(
         }
         catch (Exception restorationException) when (!cancellationToken.IsCancellationRequested)
         {
-            Console.Error.WriteLine(
+            DFLogger.LogOutput(
+                DFLogLevel.ERROR,
+                "Worker",
                 $"Could not restore the status of {issue.Key} to {issue.StatusName}: {restorationException.Message}");
         }
     }
@@ -419,7 +447,9 @@ static async Task ReportFailureAsync(
     }
     catch (Exception notificationException)
     {
-        Console.Error.WriteLine(
+        DFLogger.LogOutput(
+            DFLogLevel.ERROR,
+            "Worker",
             $"Could not report the failure for {issue.Key} to Jira: {notificationException.Message}. " +
             $"Pushed branch: {pushedBranchName ?? "none"}; local branch: {branchName ?? "none"}.");
     }

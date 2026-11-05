@@ -7,9 +7,6 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
-Console.WriteLine(
-    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
-    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
@@ -26,7 +23,14 @@ builder.Services.AddSingleton(services =>
 var app = builder.Build();
 
 var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
-Console.WriteLine(
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Startup",
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Startup",
     $"Connecting to database '{appSettings.DatabaseConnection.Database}' " +
     $"at {appSettings.DatabaseConnection.Server}:{appSettings.DatabaseConnection.Port}.");
 
