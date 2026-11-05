@@ -47,8 +47,33 @@ internal sealed class ManagerPlanner(
         var approvalRequired = false;
         if (storedPlan is not null && IsDependencyHold(storedPlan.Plan))
         {
-            await ReportIgnoredAsync(issue.Key, "it is waiting for its dependencies to be done.", cancellationToken);
-            return;
+            var hold = ReadDependencyHold(storedPlan.Plan);
+            var blocking = new List<string>();
+            foreach (var dependency in hold.Dependencies)
+            {
+                var dependencyIssue = await jira.GetIssueAsync(dependency, cancellationToken);
+                if (!string.Equals(dependencyIssue.StatusName, configuration.DoneStatus, StringComparison.OrdinalIgnoreCase))
+                {
+                    blocking.Add($"{dependency} ({dependencyIssue.StatusName})");
+                }
+            }
+            if (blocking.Count > 0)
+            {
+                await ReportIgnoredAsync(
+                    issue.Key,
+                    $"it is waiting for its dependencies to be done ({configuration.DoneStatus}): {string.Join(", ", blocking)}.",
+                    cancellationToken);
+                return;
+            }
+            if (!string.Equals(issue.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
+            {
+                await jira.TransitionToAsync(issue.Key, configuration.JiraStatusName, cancellationToken);
+                issue = await jira.GetIssueAsync(issue.Key, cancellationToken);
+            }
+            plans.ReplacePlan(issue.Key, storedPlan.RequirementsHash!, hold.Plan);
+            storedPlan = plans.Find(issue.Key);
+            reusable = storedPlan is not null &&
+                storedPlan.IsCurrent(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl);
         }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
         {
