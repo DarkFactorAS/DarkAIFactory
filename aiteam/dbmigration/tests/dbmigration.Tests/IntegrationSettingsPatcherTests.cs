@@ -38,12 +38,16 @@ public sealed class IntegrationSettingsPatcherTests
     }
 
     [Theory]
-    [InlineData(0, true, 5)]
+    [InlineData(0, true, 9)]
     [InlineData(1, false, 1)]
     [InlineData(2, false, 2)]
     [InlineData(3, false, 3)]
     [InlineData(4, false, 4)]
     [InlineData(5, false, 5)]
+    [InlineData(6, false, 6)]
+    [InlineData(7, false, 7)]
+    [InlineData(8, false, 8)]
+    [InlineData(9, false, 9)]
     public void Patcher_CreatesAndSeedsSettingsAndPropagatesFailures(
         int failingPatch, bool expected, int patchCount)
     {
@@ -74,6 +78,10 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 3),
             ("IntegrationSettings", 4),
             ("IntegrationSettings", 5),
+            ("IntegrationSettings", 6),
+            ("IntegrationSettings", 7),
+            ("IntegrationSettings", 8),
+            ("IntegrationSettings", 9),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3)]);
@@ -91,10 +99,10 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Equal("WorkflowLabels", patcher.System);
         Assert.Equal(3, patcher.Sql.Count);
         Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", patcher.Sql[0]);
-        var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aibuildpage)', '([^']+)', '([^']+)', '")
+        var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aidashboard)', '([^']+)', '([^']+)', '")
             .ToDictionary(match => (match.Groups[1].Value, match.Groups[2].Value), match => match.Groups[3].Value);
         Assert.Equal(9, rows.Count);
-        Assert.DoesNotContain(rows.Keys, key => key.Item1 == "aibuildpage");
+        Assert.DoesNotContain(rows.Keys, key => key.Item1 == "aidashboard");
         Assert.Equal("ai-manager-planned", rows[("aimanager", "PickupLabel")]);
         Assert.Equal("ai-agent-picked", rows[("aiworker", "PickupLabel")]);
         Assert.Equal("ai-agent-failed", rows[("aimanager", "FailureLabel")]);
@@ -132,6 +140,10 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 3),
             ("IntegrationSettings", 4),
             ("IntegrationSettings", 5),
+            ("IntegrationSettings", 6),
+            ("IntegrationSettings", 7),
+            ("IntegrationSettings", 8),
+            ("IntegrationSettings", 9),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3)], patcher.Executed);
@@ -153,6 +165,8 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Equal([
             ("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5),
+            ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
+            ("IntegrationSettings", 9),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());

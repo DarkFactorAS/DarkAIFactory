@@ -88,6 +88,61 @@ public static class IntegrationSettingsPatcher
                 ('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // Rename the aibuildpage client to aidashboard: widen the constraint, move the rows, then narrow it.
+        patcher.Patch(system, 6,
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aibuildpage', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                )
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 7,
+            """
+            UPDATE IGNORE `settings` SET `client` = 'aidashboard' WHERE `client` = 'aibuildpage'
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 8,
+            """
+            DELETE FROM `settings` WHERE `client` = 'aibuildpage'
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 9,
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                )
+            """);
         return patcher.Successful();
     }
 }

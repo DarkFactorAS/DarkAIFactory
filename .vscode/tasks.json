@@ -75,12 +75,12 @@
       "group": "test"
     },
     {
-      "label": "build aibuildpage",
+      "label": "build aidashboard",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj",
+        "${workspaceFolder}/aiteam/aidashboard/src/aidashboard/aidashboard.csproj",
         "--configuration",
         "Debug"
       ],
@@ -88,13 +88,13 @@
       "group": "build"
     },
     {
-      "label": "run aibuildpage",
+      "label": "run aidashboard",
       "type": "process",
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "${workspaceFolder}/aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj"
+        "${workspaceFolder}/aiteam/aidashboard/src/aidashboard/aidashboard.csproj"
       ],
       "problemMatcher": "$msCompile"
     }

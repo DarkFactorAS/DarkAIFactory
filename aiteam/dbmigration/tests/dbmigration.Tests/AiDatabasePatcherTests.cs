@@ -34,6 +34,10 @@ public sealed class AiDatabasePatcherTests
                 "patch:IntegrationSettings:3", "successful",
                 "patch:IntegrationSettings:4", "successful",
                 "patch:IntegrationSettings:5", "successful",
+                "patch:IntegrationSettings:6", "successful",
+                "patch:IntegrationSettings:7", "successful",
+                "patch:IntegrationSettings:8", "successful",
+                "patch:IntegrationSettings:9", "successful",
                 "init:WorkflowLabels",
                 "patch:WorkflowLabels:1", "successful",
                 "patch:WorkflowLabels:2", "successful",
@@ -68,9 +72,13 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("('shared', 'Jira.JiraAssigneeAccountId', '')", dbPatcher.Sql[7]);
             Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", dbPatcher.Sql[8]);
             Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", dbPatcher.Sql[9]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[10]);
-            Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[11]);
-            Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[12]);
+            Assert.Contains("'aidashboard'", dbPatcher.Sql[10]);
+            Assert.Contains("UPDATE IGNORE `settings` SET `client` = 'aidashboard'", dbPatcher.Sql[11]);
+            Assert.Contains("DELETE FROM `settings` WHERE `client` = 'aibuildpage'", dbPatcher.Sql[12]);
+            Assert.Contains("'aidashboard'", dbPatcher.Sql[13]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[14]);
+            Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[15]);
+            Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[16]);
         }
     }
 

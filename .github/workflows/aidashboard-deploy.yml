@@ -1,4 +1,4 @@
-name: AI Build Page - Deploy
+name: AI Dashboard - Deploy
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ on:
           - production
 
 concurrency:
-  group: aibuildpage-deploy
+  group: aidashboard-deploy
   cancel-in-progress: false
 
 jobs:
@@ -31,9 +31,9 @@ jobs:
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
     with:
       environment: staging
-      external_port: ${{ fromJSON(vars.AIBUILDPAGE_STAGING_PORT) }}
-      project_path: aiteam/aibuildpage
-      project_name: aibuildpage
+      external_port: ${{ fromJSON(vars.AIDASHBOARD_STAGING_PORT) }}
+      project_path: aiteam/aidashboard
+      project_name: aidashboard
     secrets: inherit
 
   production:
@@ -43,7 +43,7 @@ jobs:
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
     with:
       environment: production
-      external_port: ${{ fromJSON(vars.AIBUILDPAGE_PRODUCTION_PORT) }}
-      project_path: aiteam/aibuildpage
-      project_name: aibuildpage
+      external_port: ${{ fromJSON(vars.AIDASHBOARD_PRODUCTION_PORT) }}
+      project_path: aiteam/aidashboard
+      project_name: aidashboard
     secrets: inherit

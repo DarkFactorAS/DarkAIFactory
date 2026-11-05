@@ -4,7 +4,7 @@ namespace CodingAgent.Tests;
 
 public sealed class IntegrationSettingsTests
 {
-    private static readonly string[] Clients = ["aimanager", "aiworker", "aibuildpage"];
+    private static readonly string[] Clients = ["aimanager", "aiworker", "aidashboard"];
 
     [Fact]
     public void Load_AllClientsShareEverySettingExceptTheThreeExplicitExceptions()

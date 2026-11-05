@@ -9,8 +9,8 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   GitHub Copilot CLI to implement them in a target repository, and opens pull
   requests. See [the AI worker README](aiteam/aiworker/README.md) for setup,
   configuration, and tests.
-- **aibuildpage** — a minimal ASP.NET Core application.
-  See [the aibuildpage README](aiteam/aibuildpage/README.md).
+- **aidashboard** — a minimal ASP.NET Core application.
+  See [the aidashboard README](aiteam/aidashboard/README.md).
 - **dbmigration** — a one-shot executable that creates and upgrades the shared
   database before clients start. See [the migration README](aiteam/dbmigration/README.md).
 
@@ -33,7 +33,7 @@ git submodule update --init --recursive
 
 Pushes to `main` and pull requests run the worker and manager .NET and Docker
 workflows in [.github/workflows](.github/workflows). The worker .NET workflow
-also builds aibuildpage and builds/tests dbmigration. Docker CI uses the shared
+also builds aidashboard and builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
 ### AI auto-approve
@@ -58,21 +58,21 @@ DBMigrator, AITechLead (`aiteam/aimanager`) and AIWorker using the reusable
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
 order: DBMigrator, then AITechLead, then AIWorker. Deployments are serialized.
 
-The [AI build page](.github/workflows/aibuildpage-deploy.yml) keeps its own
+The [AI dashboard](.github/workflows/aidashboard-deploy.yml) keeps its own
 separate deployment workflow.
 
 ### Required GitHub setup
 
 - A self-hosted Linux runner with Docker and access to the private reusable
   Infrastructure workflow.
-- A GitHub environment named `production` (and `staging` for the build page),
+- A GitHub environment named `production` (and `staging` for the dashboard),
   with any desired approval rules.
 - Secrets `NUGET_USERNAME` and `NUGET_TOKEN`.
 - Database settings for all three clients: variables `DATABASE_SERVER`,
   `DATABASE_PORT`, `DATABASE_NAME`, and secrets `DATABASE_USERNAME`,
   `DATABASE_PASSWORD`, available to each environment.
-- Repository variables `AIBUILDPAGE_STAGING_PORT` and
-  `AIBUILDPAGE_PRODUCTION_PORT`, containing distinct numeric host ports
+- Repository variables `AIDASHBOARD_STAGING_PORT` and
+  `AIDASHBOARD_PRODUCTION_PORT`, containing distinct numeric host ports
   (1-65535). These are repository variables because reusable-workflow inputs
   cannot read the called job's environment variables.
 
@@ -108,6 +108,6 @@ there before running them:
 - Infrastructure starts detached containers without checking application
   readiness. Successful startup must be verified before promoting to production.
 
-The build page now has a [Dockerfile](aiteam/aibuildpage/Dockerfile) using the
+The dashboard now has a [Dockerfile](aiteam/aidashboard/Dockerfile) using the
 same NuGet BuildKit secrets as the agents. It requires a runtime config mount
 at `/app/Config` and database access, just like local deployment.

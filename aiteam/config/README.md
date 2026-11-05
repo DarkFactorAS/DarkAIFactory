@@ -2,7 +2,7 @@
 
 All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
 as `ConfigurationHelper<AgentSettings>` for the agents and
-`ConfigurationHelper<AppSettings>` for aibuildpage and dbmigration, reading
+`ConfigurationHelper<AppSettings>` for aidashboard and dbmigration, reading
 `Config/appsettings.<environment>.json`. JSON contains app/database settings and
 the agents' `PollIntervalSeconds` (integer, minimum 5), not Jira/GitHub settings.
 All three clients load Jira/GitHub settings from the same MariaDB `settings`
@@ -30,7 +30,7 @@ cp aiteam/config/appsettings.Development.json.example \
 
 Run this from the repository root, only if the destination does not already
 contain your configuration. `AppName` is shared (`DarkAIFactory` in the templates).
-Both agents use the same `PollIntervalSeconds`; aibuildpage and dbmigration
+Both agents use the same `PollIntervalSeconds`; aidashboard and dbmigration
 ignore this agent-only property.
 
 When upgrading from per-client directories, move one selected configuration for
@@ -53,7 +53,7 @@ column. Names use the former JSON section/property notation, for example
 
 - `shared`: every Jira/GitHub setting except the exceptions below. All clients read
   these same rows, including `GitHub.AgentGitHubToken`.
-- `aimanager`, `aiworker`, `aibuildpage`: exactly `GitHub.GitHubRepositoryToken`
+- `aimanager`, `aiworker`, `aidashboard`: exactly `GitHub.GitHubRepositoryToken`
   (and `GitHub.AgentModel` for `aiworker`).
   Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
@@ -139,7 +139,7 @@ Pull requests read/write. Manager and worker analysis labels must match for
 handoff. The manager also reads the worker pickup label to avoid replanning
 claimed issues. After a failed planning attempt, clear the shared failure label
 only after resolving the error to resume automatic planning.
-aibuildpage loads the same settings server-side but
+aidashboard loads the same settings server-side but
 currently performs no Jira/GitHub operations, so its repository token may remain
 empty. Its page never exposes settings or credentials.
 
@@ -173,7 +173,7 @@ the same `config` directory read-only at `/app/Config` for all services,
 controlled by `AITEAM_CONFIG_PATH` (default `./config`).
 Both agents depend on successful completion of the
 one-shot dbmigration service, which waits for MariaDB's health check.
-When deploying aibuildpage
+When deploying aidashboard
 separately, mount this same shared directory at `<application directory>/Config`.
 Use `DOTNET_ENVIRONMENT=Acceptance` for that environment.
 
