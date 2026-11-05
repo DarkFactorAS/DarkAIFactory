@@ -20,6 +20,13 @@ builder.Services.AddSingleton(services =>
     return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aidashboard");
 });
 
+builder.Services.AddScoped<WorkflowLabelRepository>();
+builder.Services.AddScoped<IActiveAiTaskService>(services =>
+{
+    var repository = services.GetRequiredService<WorkflowLabelRepository>();
+    return new ActiveAiTaskService(services.GetRequiredService<IntegrationSettings>(), repository.Load);
+});
+
 var app = builder.Build();
 
 var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
@@ -38,6 +45,19 @@ DFLogger.LogOutput(
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.GetActiveAsync(cancellationToken));
+    }
+    catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or InvalidDataException)
+    {
+        DFLogger.LogOutput(DFLogLevel.ERROR, "ActiveAiTasks", ex.Message);
+        return Results.Problem("Unable to load active AI tasks.", statusCode: StatusCodes.Status502BadGateway);
+    }
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
