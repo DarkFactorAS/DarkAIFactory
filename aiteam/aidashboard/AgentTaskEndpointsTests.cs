@@ -1,6 +1,6 @@
 using AiDashboard.Tasks;
 using AiTeam.Configuration;
-using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http;
 
 namespace AiDashboard.Tests;
 
