@@ -35,8 +35,8 @@ The app does not create tables or run migrations. Run the standalone
 before starting this app, including in separate deployments.
 
 On startup, the app loads all shared Jira/GitHub values and its own
-`Jira.JiraPickupLabel`, `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`
-rows through the same loader as both agents. Missing rows fail startup.
+`GitHub.GitHubRepositoryToken` row through the same loader as both agents.
+Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.
 The app currently makes no Jira/GitHub calls; its token can remain empty.
 See the configuration guide for migrating existing credentials into the database.

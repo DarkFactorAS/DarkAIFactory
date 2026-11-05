@@ -31,13 +31,13 @@ all mapped repositories and their submodules.
 When `manager_projects` is empty, it falls back to the shared project/repository
 settings. By default, that mode watches project `DFAI` in status `Selected for Development`,
 skips epics, and only picks up issues that carry the manager's analysis label
-(`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). The manager stores the plan
+(`AnalyzedLabel` in `workflow_labels`, default `ai-analyzed`). The manager stores the plan
 in `manager_plans` before adding that label, so a gated issue always has a
 stored plan; a missing plan is logged and skipped, not replanned locally.
 In single-repository mode without mappings, set `Jira.JiraJql` to use a different query; an override replaces
 the analyzed-label gate (the worker's own pickup-label exclusion is always
 appended), which allows running the worker without a manager.
-Manager and worker `Jira.JiraAnalyzedLabel` values must match.
+Manager and worker `AnalyzedLabel` values must match.
 
 The manager only adds the analyzed label when a ticket is cleared for
 implementation. Tickets awaiting clarification or human approval, analysis-only
@@ -160,10 +160,16 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraProjectKey` | `DFAI` | Fallback project when `manager_projects` is empty |
 | `Jira.JiraStatusName` | `Selected for Development` | Status used by the default JQL |
 | `Jira.JiraJql` | generated from project/status | Optional JQL override; mapped projects retain the manager-plan gate |
-| `Jira.JiraPickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
-| `Jira.JiraFailureLabel` | `ai-agent-failed` | Label added when processing fails |
-| `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Manager handoff label required by the default query |
 | `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
 | `Jira.JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
 | `Jira.JiraAssigneeAccountId` | empty | Jira account ID the issue is assigned to when work starts; empty disables assignment. Must be a Jira accountId (not an email or username). Assignment is best-effort: failures are logged and the run continues |
 | `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |
+
+Jira labels live in the `workflow_labels` table (agent `aiworker`), created and seeded by
+dbmigration and read once at startup. A missing row fails startup; there is no fallback.
+
+| Code key | Default | Purpose |
+| --- | --- | --- |
+| `PickupLabel` | `ai-agent-picked` | Label used to avoid repeat pickup |
+| `FailureLabel` | `ai-agent-failed` | Label added when processing fails |
+| `AnalyzedLabel` | `ai-analyzed` | Manager handoff label required by the default query |

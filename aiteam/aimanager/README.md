@@ -62,7 +62,7 @@ generates a plan without changing files and removes the checkout. It saves the
 plan in `manager_plans` **before** posting to Jira, marks it as posted after all
 comments succeed, then adds the configured completion label
 (`ai-manager-planned` by default) and finally the analysis/handoff label
-(`Jira.JiraAnalyzedLabel`, default `ai-analyzed`). Long plans are split into
+(`AnalyzedLabel` in `workflow_labels`, default `ai-analyzed`). Long plans are split into
 numbered Jira comments without truncation.
 
 The manager continues scanning eligible, unclaimed issues even after they carry
@@ -208,15 +208,22 @@ All Jira/GitHub entries below are database setting names; only
 | `GitHub.GitHubRepositoryToken` | required | Read-only access to all mapped repositories |
 | `Jira.JiraStatusName` | `Selected for Development` | Eligible ticket and released sub-task status |
 | `Jira.JiraJql` | generated | Optional filter/ordering, constrained to each mapped project |
-| `Jira.JiraPickupLabel` | `ai-manager-planned` | Completion label |
-| `Jira.JiraFailureLabel` | `ai-agent-failed` | Shared failure label |
-| `Jira.JiraAnalyzedLabel` | `ai-analyzed` | Label added after the plan is posted to Jira |
-| `Jira.JiraClarificationLabel` | `ai-needs-clarification` | Optional shared setting: added when the requirements are unclear |
-| `Jira.JiraApprovalLabel` | `ai-awaiting-approval` | Optional shared setting: plan is held for human approval |
-| `Jira.JiraApprovedLabel` | `ai-approved` | Optional shared setting: a human adds it to release a held plan |
 | `Jira.JiraAnalysisOnlyStatus` | `Code Review` | Optional shared setting: status set for analysis-only tickets |
 | `Jira.JiraInReviewStatus` | `In Review` | Optional shared setting: worker handoff status; tickets here are moved to Done when all their pull requests are merged |
 | `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants, and the status set when all pull requests are merged |
 | `Jira.JiraSubtaskIssueType` | `Sub-task` | Optional shared setting: issue type used for created sub-tasks |
 | `Jira.JiraAutoApproveSmallChanges` | `true` | Optional shared setting: `false` holds small changes for approval too |
 | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |
+
+Jira labels live in the `workflow_labels` table (agent `aimanager`), created and seeded
+by dbmigration. They are read once at startup, plus the `aiworker` `PickupLabel`
+for the worker exclusion query. A missing row fails startup; there is no fallback.
+
+| Code key | Default | Purpose |
+| --- | --- | --- |
+| `PickupLabel` | `ai-manager-planned` | Completion label |
+| `FailureLabel` | `ai-agent-failed` | Failure label |
+| `AnalyzedLabel` | `ai-analyzed` | Label added after the plan is posted to Jira |
+| `ClarificationLabel` | `ai-needs-clarification` | Added when the requirements are unclear |
+| `ApprovalLabel` | `ai-awaiting-approval` | Plan is held for human approval |
+| `ApprovedLabel` | `ai-approved` | A human adds it to release a held plan |

@@ -16,6 +16,7 @@ Console.WriteLine(
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<ManagerPlanReader>();
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
@@ -28,6 +29,12 @@ Console.WriteLine(
 using var databaseScope = host.Services.CreateScope();
 var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aiworker", appSettings.PollIntervalSeconds);
+var labels = databaseScope.ServiceProvider.GetRequiredService<WorkflowLabelRepository>().Load("aiworker");
+// Fail at startup when a required label row is missing.
+foreach (var key in new[] { "PickupLabel", "FailureLabel", "AnalyzedLabel" })
+{
+    labels.Get(key);
+}
 if (settings.PollIntervalSeconds < 5)
 {
     throw new InvalidOperationException("PollIntervalSeconds must be at least 5 seconds.");
@@ -58,8 +65,8 @@ try
         using var scope = host.Services.CreateScope();
         var projects = scope.ServiceProvider.GetRequiredService<ManagerProjectRepository>().GetProjects();
         AgentConfiguration[] configurations = projects.Count == 0
-            ? [AgentConfiguration.Load(settings)]
-            : projects.Select(project => AgentConfiguration.Load(settings, project)).ToArray();
+            ? [AgentConfiguration.Load(settings, labels)]
+            : projects.Select(project => AgentConfiguration.Load(settings, labels, project)).ToArray();
         foreach (var configuration in configurations)
         {
             using var jira = new JiraClient(configuration);

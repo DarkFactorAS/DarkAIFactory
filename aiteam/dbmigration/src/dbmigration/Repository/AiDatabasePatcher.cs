@@ -75,6 +75,8 @@ public class AiDatabasePatcher : StartupDatabasePatcher
                 KEY `ix_pull_requests_jira_key` (`jira_key`)
             )
             """);
-        return _dbPatcher.Successful() && IntegrationSettingsPatcher.Run(_dbPatcher);
+        return _dbPatcher.Successful()
+            && IntegrationSettingsPatcher.Run(_dbPatcher)
+            && WorkflowLabelPatcher.Run(_dbPatcher);
     }
 }

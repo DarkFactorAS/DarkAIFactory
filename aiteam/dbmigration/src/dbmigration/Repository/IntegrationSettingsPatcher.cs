@@ -39,19 +39,12 @@ public static class IntegrationSettingsPatcher
                 ('shared', 'Jira.JiraProjectKey', 'DFAI'),
                 ('shared', 'Jira.JiraStatusName', 'Selected for Development'),
                 ('shared', 'Jira.JiraJql', ''),
-                ('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed'),
                 ('shared', 'Jira.JiraInProgressStatus', 'In Progress'),
                 ('shared', 'Jira.JiraInReviewStatus', 'In Review'),
                 ('shared', 'GitHub.AgentGitHubToken', ''),
                 ('shared', 'GitHub.TargetRepositoryUrl', ''),
-                ('aimanager', 'Jira.JiraPickupLabel', 'ai-manager-planned'),
-                ('aimanager', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aimanager', 'GitHub.GitHubRepositoryToken', ''),
-                ('aiworker', 'Jira.JiraPickupLabel', 'ai-agent-picked'),
-                ('aiworker', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aiworker', 'GitHub.GitHubRepositoryToken', ''),
-                ('aibuildpage', 'Jira.JiraPickupLabel', 'ai-build-picked'),
-                ('aibuildpage', 'Jira.JiraAnalyzedLabel', 'ai-analyzed'),
                 ('aibuildpage', 'GitHub.GitHubRepositoryToken', '')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);

@@ -15,15 +15,9 @@ public sealed class JiraSettings
     public string JiraProjectKey { get; set; } = "DFAI";
     public string JiraStatusName { get; set; } = "Selected for Development";
     public string JiraJql { get; set; } = string.Empty;
-    public string JiraPickupLabel { get; set; } = "ai-agent-picked";
-    public string JiraFailureLabel { get; set; } = "ai-agent-failed";
-    public string JiraAnalyzedLabel { get; set; } = "ai-analyzed";
     public string JiraInProgressStatus { get; set; } = "In Progress";
     public string JiraInReviewStatus { get; set; } = "In Review";
     public string JiraAssigneeAccountId { get; set; } = string.Empty;
-    public string JiraClarificationLabel { get; set; } = "ai-needs-clarification";
-    public string JiraApprovalLabel { get; set; } = "ai-awaiting-approval";
-    public string JiraApprovedLabel { get; set; } = "ai-approved";
     public string JiraAnalysisOnlyStatus { get; set; } = "Code Review";
     public string JiraDoneStatus { get; set; } = "Done";
     public string JiraSubtaskIssueType { get; set; } = "Sub-task";

@@ -11,7 +11,12 @@ public sealed class ManagerPlannerTests
     private static readonly AgentConfiguration Configuration = new(
         new Uri("https://example.atlassian.net"), "bot@example.com", "token", "gh", "repo",
         new Uri("https://github.com/owner/repo"), "project = TASK", "ai-manager-planned",
-        "ai-agent-failed", "In Progress", "In Review", TimeSpan.FromSeconds(30));
+        "ai-agent-failed", "In Progress", "In Review", TimeSpan.FromSeconds(30))
+    {
+        AnalyzedLabel = "ai-analyzed", WorkerPickupLabel = "ai-agent-picked",
+        ClarificationLabel = "ai-needs-clarification", ApprovalLabel = "ai-awaiting-approval",
+        ApprovedLabel = "ai-approved"
+    };
     private static readonly JiraIssue Issue = new("TASK-1", "Title", "Description", "Selected for Development")
     {
         UpdatedAt = "2026-11-02T13:00:00Z", Labels = ["ai-manager-planned", "ai-analyzed"]

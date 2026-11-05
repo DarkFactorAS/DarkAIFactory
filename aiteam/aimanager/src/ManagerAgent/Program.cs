@@ -22,6 +22,7 @@ builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<ManagerPlanRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<WorkflowLabelRepository>();
 
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
@@ -33,15 +34,20 @@ var pollInterval = AgentConfiguration.LoadPollInterval(appSettings.PollIntervalS
 using var databaseScope = host.Services.CreateScope();
 var settings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
     .Load("aimanager", appSettings.PollIntervalSeconds);
-var workerSettings = databaseScope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
-    .Load("aiworker", appSettings.PollIntervalSeconds);
-var managerAnalyzedLabel = string.IsNullOrWhiteSpace(settings.Jira.JiraAnalyzedLabel)
-    ? "ai-analyzed"
-    : settings.Jira.JiraAnalyzedLabel.Trim();
-var workerAnalyzedLabel = string.IsNullOrWhiteSpace(workerSettings.Jira.JiraAnalyzedLabel)
-    ? "ai-analyzed"
-    : workerSettings.Jira.JiraAnalyzedLabel.Trim();
-if (!string.Equals(managerAnalyzedLabel, workerAnalyzedLabel, StringComparison.Ordinal))
+var labelRepository = databaseScope.ServiceProvider.GetRequiredService<WorkflowLabelRepository>();
+var labels = labelRepository.Load("aimanager");
+var workerLabels = labelRepository.Load("aiworker");
+// Fail at startup when a required label row is missing.
+foreach (var key in new[]
+    { "PickupLabel", "FailureLabel", "AnalyzedLabel", "ClarificationLabel", "ApprovalLabel", "ApprovedLabel" })
+{
+    labels.Get(key);
+}
+foreach (var key in new[] { "PickupLabel", "AnalyzedLabel" })
+{
+    workerLabels.Get(key);
+}
+if (!string.Equals(labels.Get("AnalyzedLabel"), workerLabels.Get("AnalyzedLabel"), StringComparison.Ordinal))
 {
     throw new InvalidOperationException("Manager and worker analyzed labels must match for the plan handoff.");
 }
@@ -79,7 +85,7 @@ try
         foreach (var project in projects)
         {
             cancellation.Token.ThrowIfCancellationRequested();
-            var configuration = AgentConfiguration.Load(settings, project, workerSettings.Jira.JiraPickupLabel);
+            var configuration = AgentConfiguration.Load(settings, project, labels, workerLabels);
             using var jira = new JiraClient(configuration);
             var copilot = new CopilotRunner(configuration);
             if (loggedProjects.Add(project))
