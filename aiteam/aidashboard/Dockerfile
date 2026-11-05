@@ -1,6 +1,6 @@
 FROM node:22-alpine AS client
 WORKDIR /client
-COPY aiteam/aidashboard/package.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html aiteam/aidashboard/index.css aiteam/aidashboard/main.jsx aiteam/aidashboard/App.jsx ./
+COPY aiteam/aidashboard/package.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html aiteam/aidashboard/index.css aiteam/aidashboard/main.jsx aiteam/aidashboard/App.jsx aiteam/aidashboard/useApiData.js ./
 RUN npm install
 RUN npm run build
 
