@@ -65,6 +65,11 @@ internal sealed class ManagerPlanner(
                     cancellationToken);
                 return;
             }
+            if (!string.Equals(issue.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
+            {
+                await jira.TransitionToAsync(issue.Key, configuration.JiraStatusName, cancellationToken);
+                issue = await jira.GetIssueAsync(issue.Key, cancellationToken);
+            }
             plans.ReplacePlan(issue.Key, storedPlan.RequirementsHash!, hold.Plan);
             storedPlan = plans.Find(issue.Key);
             reusable = storedPlan is not null &&
