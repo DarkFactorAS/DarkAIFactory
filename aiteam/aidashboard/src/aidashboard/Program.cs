@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiDashboard.Stats;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
@@ -21,6 +22,18 @@ builder.Services.AddSingleton(services =>
     return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aidashboard");
 });
 
+builder.Services.AddScoped<WorkflowLabelRepository>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<IActiveAiTaskService>(services =>
+{
+    var repository = services.GetRequiredService<WorkflowLabelRepository>();
+    var httpClient = services.GetRequiredService<IHttpClientFactory>().CreateClient();
+    return new ActiveAiTaskService(
+        services.GetRequiredService<IntegrationSettings>(),
+        repository.Load,
+        httpClient);
+});
+
 builder.Services.AddSingleton<IJiraSolvedClient>(services =>
     new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
 
@@ -42,6 +55,22 @@ DFLogger.LogOutput(
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await service.GetActiveAsync(cancellationToken));
+    }
+    catch (Exception ex) when (
+        ex is HttpRequestException or InvalidOperationException or InvalidDataException or
+            JsonException or KeyNotFoundException ||
+        ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+    {
+        DFLogger.LogOutput(DFLogLevel.ERROR, "ActiveAiTasks", ex.Message);
+        return Results.Problem("Unable to load active AI tasks.", statusCode: StatusCodes.Status502BadGateway);
+    }
+});
 
 app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 
