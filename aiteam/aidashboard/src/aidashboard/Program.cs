@@ -10,6 +10,10 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddAuthentication(DashboardWriteAuthentication.SchemeName)
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DashboardWriteAuthentication>(
+        DashboardWriteAuthentication.SchemeName, _ => { });
+builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
@@ -36,10 +40,16 @@ builder.Services.AddScoped<IActiveAiTaskService>(services =>
         httpClient);
 });
 
+builder.Services.AddScoped<IJiraCommentClient>(services => new JiraCommentClient(
+    services.GetRequiredService<IntegrationSettings>(),
+    services.GetRequiredService<IHttpClientFactory>().CreateClient()));
+
 builder.Services.AddSingleton<IJiraSolvedClient>(services =>
     new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
 
 var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
 
 var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
 DFLogger.LogOutput(
@@ -57,6 +67,8 @@ DFLogger.LogOutput(
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/tasks/config", (IntegrationSettings settings) =>
+    Results.Ok(new { projectKey = settings.Jira.JiraProjectKey }));
 
 app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, CancellationToken cancellationToken) =>
 {
@@ -76,6 +88,7 @@ app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, Cancella
 
 app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 AgentTaskEndpoints.Map(app);
+JiraCommentEndpoint.Map(app);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

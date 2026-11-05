@@ -57,6 +57,18 @@ internal sealed class FakeTaskRepository : IAgentTaskProcessorRepository
 
     public AgentTask Create(string projectKey, string title, string description) => Add(projectKey, title, description);
 
+    public bool EditNew(long id, string title, string description)
+    {
+        var index = Tasks.FindIndex(task => task.Id == id && task.Status == AgentTaskStatus.New);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        Tasks[index] = Tasks[index] with { Title = title, Description = description };
+        return true;
+    }
+
     public AgentTask? Update(long id, string projectKey, string title, string description, string status, string? jiraKey)
     {
         var index = Tasks.FindIndex(task => task.Id == id);

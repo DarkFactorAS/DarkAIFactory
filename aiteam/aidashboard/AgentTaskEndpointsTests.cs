@@ -84,6 +84,30 @@ public sealed class AgentTaskEndpointsTests
     }
 
     [Fact]
+    public void EditNew_UpdatesOnlyEditableFieldsAndRejectsProgressedTasks()
+    {
+        var repository = new FakeRepository();
+        repository.Create("OTHER", "a", "d");
+        Assert.Equal(200, Status(AgentTaskEndpoints.EditNew(
+            repository, 1, new AgentTaskEditRequest(" edited ", " body "))));
+        Assert.Equal("edited", repository.Find(1)!.Title);
+        Assert.Equal("body", repository.Find(1)!.Description);
+        Assert.Equal("OTHER", repository.Find(1)!.ProjectKey);
+
+        repository.Update(1, "OTHER", "edited", "body", AgentTaskStatus.Created, "OTHER-1");
+        Assert.Equal(409, Status(AgentTaskEndpoints.EditNew(
+            repository, 1, new AgentTaskEditRequest("stale", "stale"))));
+        Assert.Equal(AgentTaskStatus.Created, repository.Find(1)!.Status);
+        Assert.Equal("OTHER-1", repository.Find(1)!.JiraKey);
+        Assert.Equal("edited", repository.Find(1)!.Title);
+        Assert.Equal(404, Status(AgentTaskEndpoints.EditNew(
+            repository, 99, new AgentTaskEditRequest("a", "b"))));
+        Assert.Equal(400, Status(AgentTaskEndpoints.EditNew(repository, 1, null)));
+        Assert.Equal(400, Status(AgentTaskEndpoints.EditNew(
+            repository, 1, new AgentTaskEditRequest(new string('x', 256), "b"))));
+    }
+
+    [Fact]
     public void Get_ReturnsTaskOrNotFound()
     {
         var repository = new FakeRepository();
@@ -119,6 +143,14 @@ public sealed class AgentTaskEndpointsTests
             return task;
         }
 
+        public bool EditNew(long id, string title, string description)
+        {
+            var index = Tasks.FindIndex(t => t.Id == id && t.Status == AgentTaskStatus.New);
+            if (index < 0) return false;
+            Tasks[index] = Tasks[index] with { Title = title, Description = description };
+            return true;
+        }
+
         public AgentTask? Update(
             long id, string projectKey, string title, string description, string status, string? jiraKey)
         {
@@ -138,6 +170,8 @@ public sealed class AgentTaskEndpointsTests
 
     private sealed class ThrowingRepository : IAgentTaskRepository
     {
+        public bool EditNew(long id, string title, string description) =>
+            throw new InvalidOperationException("secret");
         public IReadOnlyList<AgentTask> List(string? status = null) => throw new InvalidOperationException("secret");
         public AgentTask? Find(long id) => throw new InvalidOperationException("secret");
         public AgentTask Create(string projectKey, string title, string description) =>
