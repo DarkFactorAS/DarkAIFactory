@@ -84,10 +84,29 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
-            ("WorkflowLabels", 3)]);
+            ("WorkflowLabels", 3),
+            ("AgentTasks", 1)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
+    }
+
+    [Fact]
+    public void AgentTaskPatcher_CreatesTableIdempotentlyAndPropagatesFailure()
+    {
+        var patcher = new SettingsPatcherStub(0);
+        Assert.True(AgentTaskPatcher.Run(patcher));
+        Assert.Equal("AgentTasks", patcher.System);
+        var sql = Assert.Single(patcher.Sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", sql);
+        foreach (var column in new[]
+            { "`id`", "`project_key`", "`title`", "`description`", "`status`", "`jira_key`", "`created`", "`updated`" })
+        {
+            Assert.Contains(column, sql);
+        }
+        Assert.Contains("IN ('New', 'Created', 'Failed')", sql);
+
+        Assert.False(AgentTaskPatcher.Run(new SettingsPatcherStub(1)));
     }
 
     [Fact]
@@ -146,7 +165,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
-            ("WorkflowLabels", 3)], patcher.Executed);
+            ("WorkflowLabels", 3),
+            ("AgentTasks", 1)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -167,7 +187,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5),
             ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
             ("IntegrationSettings", 9),
-            ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3)], patcher.Executed);
+            ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3),
+            ("AgentTasks", 1)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
