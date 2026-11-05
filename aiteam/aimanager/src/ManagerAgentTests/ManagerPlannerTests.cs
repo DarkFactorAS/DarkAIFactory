@@ -137,6 +137,35 @@ public sealed class ManagerPlannerTests
     }
 
     [Fact]
+    public async Task ReportExcludedIssuesAsync_ReportsPickupAndFailureLabelsWithoutPlanning()
+    {
+        var events = new List<string>();
+        var issues = new[]
+        {
+            Issue with { Key = "TASK-CLAIMED", Labels = ["ai-agent-picked"] },
+            Issue with { Key = "TASK-FAILED", Labels = ["ai-agent-failed"] },
+            Issue with { Key = "TASK-OTHER", Labels = [] }
+        };
+        var handler = new ExcludedIssuesHandler(issues);
+        using var jira = new JiraClient(Configuration, handler);
+        var database = CreateDatabase(null, events);
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => throw new InvalidOperationException("Must not generate"));
+
+        await planner.ReportExcludedIssuesAsync("TASK", CancellationToken.None);
+
+        Assert.Equal(2, handler.PostedComments.Count);
+        Assert.Contains(handler.PostedComments, comment => comment.Contains(
+            "[AIManager] Not picked up: it already has the \"ai-agent-picked\" label, so the worker owns it.",
+            StringComparison.Ordinal));
+        Assert.Contains(handler.PostedComments, comment => comment.Contains(
+            "[AIManager] Not picked up: it has the \"ai-agent-failed\" label. Remove the label to retry.",
+            StringComparison.Ordinal));
+        Assert.Empty(database.Commands);
+        Assert.Empty(events);
+    }
+
+    [Fact]
     public async Task PlanAsync_DiscardsPlanIfIssueChangesDuringGeneration()
     {
         var events = new List<string>();
@@ -439,6 +468,52 @@ public sealed class ManagerPlannerTests
                 };
             }
             return new HttpResponseMessage(HttpStatusCode.NoContent);
+        }
+    }
+
+    private sealed class ExcludedIssuesHandler(IReadOnlyList<JiraIssue> issues) : HttpMessageHandler
+    {
+        public List<string> PostedComments { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get &&
+                request.RequestUri!.AbsolutePath == "/rest/api/3/search/jql")
+            {
+                var response = JsonSerializer.Serialize(new
+                {
+                    issues = issues.Select(issue => new
+                    {
+                        key = issue.Key,
+                        fields = new
+                        {
+                            summary = issue.Summary,
+                            description = (string?)null,
+                            status = new { name = issue.StatusName },
+                            updated = issue.UpdatedAt,
+                            labels = issue.Labels
+                        }
+                    })
+                });
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(response)
+                };
+            }
+            if (request.Method == HttpMethod.Get)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"comments":[],"total":0,"isLast":true}""")
+                };
+            }
+            if (request.Method == HttpMethod.Post)
+            {
+                PostedComments.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+                return new HttpResponseMessage(HttpStatusCode.Created);
+            }
+            throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
         }
     }
 }

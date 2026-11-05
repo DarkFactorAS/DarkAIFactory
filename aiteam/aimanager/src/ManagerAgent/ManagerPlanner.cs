@@ -216,6 +216,23 @@ internal sealed class ManagerPlanner(
         DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} stored in Jira and manager_plans.");
     }
 
+    public async Task ReportExcludedIssuesAsync(string jiraProjectKey, CancellationToken cancellationToken)
+    {
+        var issues = await jira.FindIssuesInStatusAsync(
+            jiraProjectKey, configuration.JiraStatusName, cancellationToken);
+        foreach (var issue in issues)
+        {
+            if (issue.Labels.Contains(configuration.WorkerPickupLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it already has the \"{configuration.WorkerPickupLabel}\" label, so the worker owns it.", cancellationToken);
+            }
+            else if (issue.Labels.Contains(configuration.FailureLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it has the \"{configuration.FailureLabel}\" label. Remove the label to retry.", cancellationToken);
+            }
+        }
+    }
+
     private async Task ApplyClarifyAsync(
         long projectId, JiraIssue issue, TriageResult triage, string requirementsHash, CancellationToken cancellationToken)
     {

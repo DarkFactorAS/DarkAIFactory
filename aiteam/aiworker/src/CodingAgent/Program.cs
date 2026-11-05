@@ -147,11 +147,14 @@ try
                 if (configuration.RequiresManagerPlan &&
                     (managerPlan is null || !issue.Labels.Contains(configuration.AnalyzedLabel)))
                 {
+                    var reason = managerPlan is null
+                        ? "no manager plan exists for the selected project. Waiting for the manager to plan it."
+                        : $"the manager plan exists, but the \"{configuration.AnalyzedLabel}\" handoff label is missing. Waiting for the manager to complete the handoff.";
                     DFLogger.LogOutput(
                         DFLogLevel.WARNING,
                         "Worker",
-                        $"Skipping {issue.Key}: no manager plan exists for the selected project. Verify the manager handoff labels and mapping.");
-                    await ReportIgnoredAsync(jira, issue.Key, "no manager plan exists for the selected project. Waiting for the manager to plan it.", cancellation.Token);
+                        $"Skipping {issue.Key}: {reason}");
+                    await ReportIgnoredAsync(jira, issue.Key, reason, cancellation.Token);
                     continue;
                 }
                 DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
