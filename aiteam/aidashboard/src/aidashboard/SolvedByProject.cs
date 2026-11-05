@@ -6,12 +6,14 @@ using DFCommonLib.Logger;
 
 namespace AiDashboard.Stats;
 
-public sealed record SolvedByProject(string Project, int SolvedCount);
+public sealed record SolvedByProject(string Project, int SolvedCount, int AiCount, int NonAiCount);
+
+public sealed record SolvedIssue(string ProjectKey, bool IsAi);
 
 public interface IJiraSolvedClient
 {
-    // Project key of every issue whose status category is Done.
-    Task<IReadOnlyList<string>> GetSolvedIssueProjectKeysAsync(CancellationToken cancellationToken);
+    // Project key and AI flag (any "ai-*" label) of every issue whose status category is Done.
+    Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken);
 }
 
 public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
@@ -31,10 +33,10 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-Dashboard/1.0");
     }
 
-    public async Task<IReadOnlyList<string>> GetSolvedIssueProjectKeysAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken)
     {
-        var keys = new List<string>();
-        var query = $"jql={Uri.EscapeDataString(SolvedJql)}&fields=project&maxResults=100";
+        var issues = new List<SolvedIssue>();
+        var query = $"jql={Uri.EscapeDataString(SolvedJql)}&fields=project,labels&maxResults=100";
         string? nextPageToken = null;
         do
         {
@@ -47,10 +49,11 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             foreach (var issue in document.RootElement.GetProperty("issues").EnumerateArray())
             {
-                var key = issue.GetProperty("fields").GetProperty("project").GetProperty("key").GetString();
+                var fields = issue.GetProperty("fields");
+                var key = fields.GetProperty("project").GetProperty("key").GetString();
                 if (!string.IsNullOrEmpty(key))
                 {
-                    keys.Add(key);
+                    issues.Add(new SolvedIssue(key, HasAiLabel(fields)));
                 }
             }
 
@@ -60,8 +63,15 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
         }
         while (!string.IsNullOrEmpty(nextPageToken));
 
-        return keys;
+        return issues;
     }
+
+    private static bool HasAiLabel(JsonElement fields) =>
+        fields.TryGetProperty("labels", out var labels)
+        && labels.ValueKind == JsonValueKind.Array
+        && labels.EnumerateArray().Any(label =>
+            label.ValueKind == JsonValueKind.String
+            && (label.GetString() ?? "").StartsWith("ai-", StringComparison.OrdinalIgnoreCase));
 
     public void Dispose() => _httpClient.Dispose();
 }
@@ -72,10 +82,10 @@ public static class SolvedByProjectEndpoint
     {
         try
         {
-            var keys = await client.GetSolvedIssueProjectKeysAsync(cancellationToken);
-            var result = keys
-                .GroupBy(key => key, StringComparer.Ordinal)
-                .Select(group => new SolvedByProject(group.Key, group.Count()))
+            var issues = await client.GetSolvedIssuesAsync(cancellationToken);
+            var result = issues
+                .GroupBy(issue => issue.ProjectKey, StringComparer.Ordinal)
+                .Select(group => new SolvedByProject(group.Key, group.Count(), group.Count(i => i.IsAi), group.Count(i => !i.IsAi)))
                 .OrderBy(item => item.Project, StringComparer.Ordinal)
                 .ToList();
             return Results.Ok(result);
