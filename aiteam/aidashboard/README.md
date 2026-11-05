@@ -5,7 +5,7 @@ header titled "DarkAIFactoy - AI Team workflow" (spelling taken verbatim from
 Jira DFAI-30; confirm before changing). It also exposes `GET /api/health`,
 `GET /api/tasks/active-ai`, and `GET /api/stats/solved-by-project`, which
 returns `[{"project": "DFAI", "solvedCount": 3, "aiCount": 1, "nonAiCount": 2}]`
-counting Jira issues in the Done status category per project, split into `aiCount` (any `ai-*` label, case-insensitive) and `nonAiCount` (502 with a generic error if Jira fails;
+counting Jira issues in the Done status category per project, split into `aiCount` (issues carrying a configured AI workflow pickup or analyzed label) and `nonAiCount` (502 with a generic error if Jira fails;
 credentials are never logged).
 
 `GET /api/tasks/active-ai` returns at most 3 Jira issues (`key`, `summary`,

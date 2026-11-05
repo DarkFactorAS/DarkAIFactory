@@ -29,7 +29,7 @@ export function formatPercent(value, total) {
 }
 
 export function legendLabel(name, value, total) {
-  return `${name} (${formatPercent(value, total)}%)`;
+  return `${name} (${value}, ${formatPercent(value, total)}%)`;
 }
 
 function PieWithLegend({ title, slices, testId }) {

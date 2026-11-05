@@ -31,6 +31,14 @@ public class SolvedByProjectTests
     private static HttpResponseMessage Json(string body) =>
         new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
+    private static WorkflowLabels LoadLabels(string agent) => new(
+        agent,
+        new Dictionary<string, string>
+        {
+            ["PickupLabel"] = agent == "aimanager" ? "custom-manager-planned" : "custom-worker-picked",
+            ["AnalyzedLabel"] = "custom-analyzed"
+        });
+
     [Fact]
     public async Task Groups_and_counts_solved_issues_per_project()
     {
@@ -64,14 +72,14 @@ public class SolvedByProjectTests
     }
 
     [Fact]
-    public async Task Jira_client_queries_done_category_labels_and_follows_pages()
+    public async Task Jira_client_classifies_configured_workflow_labels_but_not_ignored_marker()
     {
         var handler = new StubHandler(request => request.RequestUri!.Query.Contains("nextPageToken")
-            ? Json("""{"issues":[{"fields":{"project":{"key":"ABC"},"labels":["bug"]}}]}""")
+            ? Json("""{"issues":[{"fields":{"project":{"key":"ABC"},"labels":["custom-worker-picked"]}}]}""")
             : Json("""
                 {"issues":[
-                  {"fields":{"project":{"key":"DFAI"},"labels":["ai-review","AI-coding","x"]}},
-                  {"fields":{"project":{"key":"DFAI"},"labels":[]}},
+                  {"fields":{"project":{"key":"DFAI"},"labels":["custom-analyzed","x"]}},
+                  {"fields":{"project":{"key":"DFAI"},"labels":["ai-ignored"]}},
                   {"fields":{"project":{"key":"DFAI"}}}
                 ],"nextPageToken":"t1"}
                 """));
@@ -79,12 +87,12 @@ public class SolvedByProjectTests
         {
             Jira = new JiraSettings { JiraBaseUrl = "https://example.atlassian.net", JiraEmail = "a@b.c", JiraApiToken = "x" }
         };
-        using var client = new JiraSolvedClient(settings, handler);
+        using var client = new JiraSolvedClient(settings, LoadLabels, handler);
 
         var issues = await client.GetSolvedIssuesAsync(CancellationToken.None);
 
         Assert.Equal(
-            [new SolvedIssue("DFAI", true), new SolvedIssue("DFAI", false), new SolvedIssue("DFAI", false), new SolvedIssue("ABC", false)],
+            [new SolvedIssue("DFAI", true), new SolvedIssue("DFAI", false), new SolvedIssue("DFAI", false), new SolvedIssue("ABC", true)],
             issues);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Contains(Uri.EscapeDataString("statusCategory = Done"), handler.Requests[0].Query);

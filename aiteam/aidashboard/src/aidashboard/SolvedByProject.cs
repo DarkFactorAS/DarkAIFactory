@@ -12,19 +12,30 @@ public sealed record SolvedIssue(string ProjectKey, bool IsAi);
 
 public interface IJiraSolvedClient
 {
-    // Project key and AI flag (any "ai-*" label) of every issue whose status category is Done.
+    // Project key and AI flag (configured pickup or analyzed label) of every issue whose status category is Done.
     Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken);
 }
 
 public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
 {
     public const string SolvedJql = "statusCategory = Done";
+    private static readonly (string Agent, string CodeKey)[] AiWorkLabelKeys =
+    [
+        ("aimanager", "PickupLabel"),
+        ("aimanager", "AnalyzedLabel"),
+        ("aiworker", "PickupLabel")
+    ];
 
+    private readonly Func<string, WorkflowLabels> _loadLabels;
     private readonly HttpClient _httpClient;
 
-    public JiraSolvedClient(IntegrationSettings settings, HttpMessageHandler? handler = null)
+    public JiraSolvedClient(
+        IntegrationSettings settings,
+        Func<string, WorkflowLabels> loadLabels,
+        HttpMessageHandler? handler = null)
     {
         var jira = settings.Jira;
+        _loadLabels = loadLabels;
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
         _httpClient.BaseAddress = new Uri(jira.JiraBaseUrl);
         var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{jira.JiraEmail}:{jira.JiraApiToken}"));
@@ -36,6 +47,9 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
     public async Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken)
     {
         var issues = new List<SolvedIssue>();
+        var aiLabels = AiWorkLabelKeys
+            .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
+            .ToHashSet(StringComparer.Ordinal);
         var query = $"jql={Uri.EscapeDataString(SolvedJql)}&fields=project,labels&maxResults=100";
         string? nextPageToken = null;
         do
@@ -53,7 +67,7 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
                 var key = fields.GetProperty("project").GetProperty("key").GetString();
                 if (!string.IsNullOrEmpty(key))
                 {
-                    issues.Add(new SolvedIssue(key, HasAiLabel(fields)));
+                    issues.Add(new SolvedIssue(key, HasAiLabel(fields, aiLabels)));
                 }
             }
 
@@ -66,12 +80,12 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
         return issues;
     }
 
-    private static bool HasAiLabel(JsonElement fields) =>
+    private static bool HasAiLabel(JsonElement fields, IReadOnlySet<string> aiLabels) =>
         fields.TryGetProperty("labels", out var labels)
         && labels.ValueKind == JsonValueKind.Array
         && labels.EnumerateArray().Any(label =>
             label.ValueKind == JsonValueKind.String
-            && (label.GetString() ?? "").StartsWith("ai-", StringComparison.OrdinalIgnoreCase));
+            && aiLabels.Contains(label.GetString() ?? ""));
 
     public void Dispose() => _httpClient.Dispose();
 }
