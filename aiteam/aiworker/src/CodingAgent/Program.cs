@@ -141,15 +141,20 @@ try
                     !managerPlan.CanImplement(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl))
                 {
                     DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", $"Skipping {issue.Key}: the manager plan is stale or not yet posted. Waiting for refreshed planning.");
+                    await ReportIgnoredAsync(jira, issue.Key, "the manager plan is stale or not yet posted. Waiting for refreshed planning.", cancellation.Token);
                     continue;
                 }
                 if (configuration.RequiresManagerPlan &&
                     (managerPlan is null || !issue.Labels.Contains(configuration.AnalyzedLabel)))
                 {
+                    var reason = managerPlan is null
+                        ? "no manager plan exists for the selected project. Waiting for the manager to plan it."
+                        : $"the manager plan exists, but the \"{configuration.AnalyzedLabel}\" handoff label is missing. Waiting for the manager to complete the handoff.";
                     DFLogger.LogOutput(
                         DFLogLevel.WARNING,
                         "Worker",
-                        $"Skipping {issue.Key}: no manager plan exists for the selected project. Verify the manager handoff labels and mapping.");
+                        $"Skipping {issue.Key}: {reason}");
+                    await ReportIgnoredAsync(jira, issue.Key, reason, cancellation.Token);
                     continue;
                 }
                 DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
@@ -380,6 +385,16 @@ catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
 }
 
 static string LimitForComment(string text) => PromptBuilder.LimitForComment(text);
+
+static Task ReportIgnoredAsync(JiraClient jira, string issueKey, string reason, CancellationToken cancellationToken) =>
+    IgnoredTaskNotifier.NotifyAsync(
+        "AIWorker",
+        issueKey,
+        reason,
+        jira.GetCommentsAsync,
+        jira.AddCommentAsync,
+        message => DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", message),
+        cancellationToken);
 
 static async Task ReportFailureAsync(
     JiraClient jira,

@@ -130,6 +130,10 @@ press F5. VS Code builds the worker first and loads `aiteam/.env`.
 
 The **build aiworker** task is also available from **Terminal > Run Build Task**.
 
+## Ignored tasks
+
+When an issue is in the trigger status but the worker skips it (manager plan stale, not yet posted, or missing), it posts one comment `[AIWorker] Not picked up: <reason>`. Existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing.
+
 ## Tests
 
 Unit tests (xunit) live in `CodingAgent.Tests.csproj` and the `*Tests.cs` files

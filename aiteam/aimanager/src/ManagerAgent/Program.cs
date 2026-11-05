@@ -151,6 +151,19 @@ try
                     GitHubRepository.DeleteWorkspace(workspacePath);
                 }
             });
+            try
+            {
+                await planner.ReportExcludedIssuesAsync(project.JiraProjectKey, cancellation.Token);
+            }
+            catch (Exception exception) when (
+                !cancellation.IsCancellationRequested &&
+                exception is HttpRequestException or OperationCanceledException)
+            {
+                DFLogger.LogOutput(
+                    DFLogLevel.WARNING,
+                    "Manager",
+                    $"Could not scan for excluded issues in manager project {project.Id}: {exception.Message}. Retrying next cycle.");
+            }
             foreach (var issue in issues)
             {
                 cancellation.Token.ThrowIfCancellationRequested();

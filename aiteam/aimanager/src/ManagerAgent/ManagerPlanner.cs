@@ -14,6 +14,17 @@ internal sealed class ManagerPlanner(
     public async Task PlanAsync(long projectId, JiraIssue candidate, CancellationToken cancellationToken)
     {
         var issue = await jira.GetIssueAsync(candidate.Key, cancellationToken);
+        if (string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
+        {
+            if (issue.Labels.Contains(configuration.WorkerPickupLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it already has the \"{configuration.WorkerPickupLabel}\" label, so the worker owns it.", cancellationToken);
+            }
+            else if (issue.Labels.Contains(configuration.FailureLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it has the \"{configuration.FailureLabel}\" label. Remove the label to retry.", cancellationToken);
+            }
+        }
         if (issue.Labels.Contains(configuration.WorkerPickupLabel) ||
             issue.Labels.Contains(configuration.FailureLabel) ||
             !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
@@ -36,6 +47,7 @@ internal sealed class ManagerPlanner(
         var approvalRequired = false;
         if (storedPlan is not null && IsDependencyHold(storedPlan.Plan))
         {
+            await ReportIgnoredAsync(issue.Key, "it is waiting for its dependencies to be done.", cancellationToken);
             return;
         }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
@@ -63,11 +75,13 @@ internal sealed class ManagerPlanner(
                 approvalRequired = true;
                 if (storedPlan.PostedToJira && !hasApprovedLabel)
                 {
+                    await ReportIgnoredAsync(issue.Key, $"it is waiting for approval (add the \"{configuration.ApprovedLabel}\" label).", cancellationToken);
                     return;
                 }
             }
             else if (storedPlan.PostedToJira && issue.Labels.Contains(configuration.ClarificationLabel))
             {
+                await ReportIgnoredAsync(issue.Key, $"it is waiting for clarification (remove the \"{configuration.ClarificationLabel}\" label once answered).", cancellationToken);
                 return;
             }
             else if (!storedPlan.PostedToJira && storedDecision != TriageDecision.NeedsApproval)
@@ -202,6 +216,23 @@ internal sealed class ManagerPlanner(
         DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} stored in Jira and manager_plans.");
     }
 
+    public async Task ReportExcludedIssuesAsync(string jiraProjectKey, CancellationToken cancellationToken)
+    {
+        var issues = await jira.FindIssuesInStatusAsync(
+            jiraProjectKey, configuration.JiraStatusName, cancellationToken);
+        foreach (var issue in issues)
+        {
+            if (issue.Labels.Contains(configuration.WorkerPickupLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it already has the \"{configuration.WorkerPickupLabel}\" label, so the worker owns it.", cancellationToken);
+            }
+            else if (issue.Labels.Contains(configuration.FailureLabel))
+            {
+                await ReportIgnoredAsync(issue.Key, $"it has the \"{configuration.FailureLabel}\" label. Remove the label to retry.", cancellationToken);
+            }
+        }
+    }
+
     private async Task ApplyClarifyAsync(
         long projectId, JiraIssue issue, TriageResult triage, string requirementsHash, CancellationToken cancellationToken)
     {
@@ -295,6 +326,19 @@ internal sealed class ManagerPlanner(
         await jira.AddCommentAsync(issueKey, BuildSplitComment(state), cancellationToken);
         plans.MarkPostedToJira(issueKey, requirementsHash);
         await ReleaseSubtasksAsync(storedPlan, cancellationToken);
+    }
+
+    internal Task ReportIgnoredAsync(string issueKey, string reason, CancellationToken cancellationToken)
+    {
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Ignoring {issueKey}: {reason}");
+        return IgnoredTaskNotifier.NotifyAsync(
+            "AIManager",
+            issueKey,
+            reason,
+            jira.GetCommentsAsync,
+            jira.AddCommentAsync,
+            message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
+            cancellationToken);
     }
 
     private async Task ReleaseSubtasksAsync(string storedPlan, CancellationToken cancellationToken)

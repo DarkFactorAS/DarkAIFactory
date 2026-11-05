@@ -128,6 +128,10 @@ sub-tasks that its query matches. Released sub-tasks are placed in the shared
 `Jira.JiraStatusName` status selected by both agents. The extra settings are
 optional and default as shown; add them to the shared `settings` rows to change them.
 
+## Ignored tasks
+
+When an issue is in the trigger status but the manager skips it (worker or failure label present, dependencies not done, waiting for approval or clarification), it posts one comment `[AIManager] Not picked up: <reason>`. The issue's existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing.
+
 ## Closing merged pull requests
 
 At the start of every polling cycle for each mapped project, before new tasks are
