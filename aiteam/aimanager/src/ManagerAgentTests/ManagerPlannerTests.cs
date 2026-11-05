@@ -510,7 +510,13 @@ public sealed class ManagerPlannerTests
             }
             if (request.Method == HttpMethod.Post)
             {
-                PostedComments.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+                using var document = JsonDocument.Parse(
+                    await request.Content!.ReadAsStringAsync(cancellationToken));
+                PostedComments.Add(string.Concat(document.RootElement.GetProperty("body")
+                    .GetProperty("content").EnumerateArray()
+                    .SelectMany(paragraph => paragraph.GetProperty("content").EnumerateArray())
+                    .Where(node => node.TryGetProperty("text", out _))
+                    .Select(node => node.GetProperty("text").GetString() ?? string.Empty)));
                 return new HttpResponseMessage(HttpStatusCode.Created);
             }
             throw new InvalidOperationException($"Unexpected request: {request.Method} {request.RequestUri}");
