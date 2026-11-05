@@ -1,5 +1,8 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useState } from "react";
 import useApiData from "./useApiData.js";
+import TaskEditor from "./TaskEditor.jsx";
+import AddTextPanel from "./AddTextPanel.jsx";
 
 function Panel({ title, state, emptyText, children }) {
   const { data, loading, error } = state;
@@ -96,6 +99,7 @@ function SolvedByProjectPanel() {
 }
 
 function ActiveAiTasksPanel() {
+  const [openKey, setOpenKey] = useState(null);
   const state = useApiData("/api/tasks/active-ai");
   return (
     <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
@@ -103,6 +107,12 @@ function ActiveAiTasksPanel() {
         <ul className="space-y-3">
           {items.map((task) => (
             <li key={task.key} className="rounded border border-slate-200 p-3">
+              <button
+                type="button"
+                aria-expanded={openKey === task.key}
+                onClick={() => setOpenKey(openKey === task.key ? null : task.key)}
+                className="block w-full text-left"
+              >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">{task.key}</span>
                 <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{task.status}</span>
@@ -113,6 +123,8 @@ function ActiveAiTasksPanel() {
                   {task.description}
                 </p>
               )}
+              </button>
+              {openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
           ))}
         </ul>
@@ -131,7 +143,7 @@ export default function App() {
       </header>
       <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
         <SolvedByProjectPanel />
-        <div data-testid="center-panel" className="hidden min-h-64 lg:block" />
+        <TaskEditor />
         <ActiveAiTasksPanel />
       </main>
     </div>

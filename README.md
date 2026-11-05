@@ -53,10 +53,11 @@ with deployment branch restrictions for `main` and `develop`, containing:
 ## Deployment
 
 The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
-DBMigrator, AITechLead (`aiteam/aimanager`) and AIWorker using the reusable
+DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker and AIJiraManager
+(`aiteam/aijiramanager`) using the reusable
 `infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
-order: DBMigrator, then AITechLead, then AIWorker. Deployments are serialized.
+order: DBMigrator, then AITechLead, then AIWorker, then AIJiraManager. Deployments are serialized.
 
 The [AI dashboard](.github/workflows/aidashboard-deploy.yml) keeps its own
 separate deployment workflow.

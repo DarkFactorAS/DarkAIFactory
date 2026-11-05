@@ -20,10 +20,17 @@ public interface IAgentTaskRepository
     IReadOnlyList<AgentTask> List(string? status = null);
     AgentTask? Find(long id);
     AgentTask Create(string projectKey, string title, string description);
+    bool EditNew(long id, string title, string description);
     AgentTask? Update(long id, string projectKey, string title, string description, string status, string? jiraKey);
 }
 
-public sealed class AgentTaskRepository(IDbConnectionFactory connectionFactory) : IAgentTaskRepository
+public interface IAgentTaskProcessorRepository : IAgentTaskRepository
+{
+    bool TrySetJiraKey(long id, string expectedStatus, string jiraKey);
+    bool TrySetStatus(long id, string expectedStatus, string? expectedJiraKey, string status);
+}
+
+public sealed class AgentTaskRepository(IDbConnectionFactory connectionFactory) : IAgentTaskProcessorRepository
 {
     private const string Columns = "id, project_key, title, description, status, jira_key, created, updated";
 
@@ -75,6 +82,19 @@ public sealed class AgentTaskRepository(IDbConnectionFactory connectionFactory) 
         return Find(id) ?? throw new InvalidOperationException("Could not read back the created agent task.");
     }
 
+    public bool EditNew(long id, string title, string description)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            UPDATE agent_tasks SET title = @title, description = @description
+            WHERE id = @id AND status = 'New'
+            """);
+        command.AddParameter("@title", title);
+        command.AddParameter("@description", description);
+        command.AddParameter("@id", id);
+        return command.ExecuteNonQuery() > 0;
+    }
+
     public AgentTask? Update(
         long id, string projectKey, string title, string description, string status, string? jiraKey)
     {
@@ -95,6 +115,34 @@ public sealed class AgentTaskRepository(IDbConnectionFactory connectionFactory) 
         }
 
         return Find(id);
+    }
+
+    public bool TrySetJiraKey(long id, string expectedStatus, string jiraKey)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            UPDATE agent_tasks SET jira_key = @jira_key
+            WHERE id = @id AND status = @expected_status AND jira_key IS NULL
+            """);
+        command.AddParameter("@jira_key", jiraKey);
+        command.AddParameter("@id", id);
+        command.AddParameter("@expected_status", expectedStatus);
+        return command.ExecuteNonQuery() == 1;
+    }
+
+    public bool TrySetStatus(long id, string expectedStatus, string? expectedJiraKey, string status)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            UPDATE agent_tasks SET status = @status
+            WHERE id = @id AND status = @expected_status
+                AND ((@expected_jira_key IS NULL AND jira_key IS NULL) OR jira_key = @expected_jira_key)
+            """);
+        command.AddParameter("@status", status);
+        command.AddParameter("@id", id);
+        command.AddParameter("@expected_status", expectedStatus);
+        command.AddParameter("@expected_jira_key", expectedJiraKey);
+        return command.ExecuteNonQuery() == 1;
     }
 
     private static AgentTask Map(System.Data.IDataReader reader) => new(

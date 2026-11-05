@@ -11,6 +11,8 @@
     <Compile Include="ActiveAiTaskServiceTests.cs" />
     <Compile Include="SolvedByProjectTests.cs" />
     <Compile Include="AgentTaskEndpointsTests.cs" />
+    <Compile Include="JiraCommentEndpointTests.cs" />
+    <Compile Include="DashboardWriteAuthenticationTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />
     <Using Include="Xunit" />
