@@ -1,3 +1,4 @@
+using AiDashboard.Stats;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -20,6 +21,9 @@ builder.Services.AddSingleton(services =>
     return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aidashboard");
 });
 
+builder.Services.AddSingleton<IJiraSolvedClient>(services =>
+    new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
+
 var app = builder.Build();
 
 var appSettings = app.Services.GetRequiredService<IConfigurationHelper>().Settings;
@@ -38,6 +42,8 @@ DFLogger.LogOutput(
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
