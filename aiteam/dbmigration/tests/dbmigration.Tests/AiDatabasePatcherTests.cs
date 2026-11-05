@@ -33,7 +33,11 @@ public sealed class AiDatabasePatcherTests
                 "patch:IntegrationSettings:2", "successful",
                 "patch:IntegrationSettings:3", "successful",
                 "patch:IntegrationSettings:4", "successful",
-                "patch:IntegrationSettings:5", "successful"]);
+                "patch:IntegrationSettings:5", "successful",
+                "init:WorkflowLabels",
+                "patch:WorkflowLabels:1", "successful",
+                "patch:WorkflowLabels:2", "successful",
+                "patch:WorkflowLabels:3", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -60,10 +64,13 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("CREATE TABLE IF NOT EXISTS `settings`", dbPatcher.Sql[5]);
             Assert.Contains("CONSTRAINT `ck_settings_scope` CHECK", dbPatcher.Sql[5]);
             Assert.Contains("PRIMARY KEY (`client`, `name`)", dbPatcher.Sql[5]);
-            Assert.Contains("('shared', 'Jira.JiraFailureLabel', 'ai-agent-failed')", dbPatcher.Sql[6]);
+            Assert.DoesNotContain("Label", dbPatcher.Sql[6]);
             Assert.Contains("('shared', 'Jira.JiraAssigneeAccountId', '')", dbPatcher.Sql[7]);
             Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", dbPatcher.Sql[8]);
             Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", dbPatcher.Sql[9]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[10]);
+            Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[11]);
+            Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[12]);
         }
     }
 

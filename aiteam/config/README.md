@@ -51,13 +51,31 @@ The `settings` table has a composite primary key (`client`, `name`) and a `value
 column. Names use the former JSON section/property notation, for example
 `Jira.JiraApiToken`. A database check constraint enforces the scopes:
 
-- `shared`: every Jira/GitHub setting except the three below. All clients read
-  these same rows, including `Jira.JiraFailureLabel` (now `ai-agent-failed` for
-  both agents) and `GitHub.AgentGitHubToken`.
-- `aimanager`, `aiworker`, `aibuildpage`: exactly `Jira.JiraPickupLabel`,
-  `Jira.JiraAnalyzedLabel`, and `GitHub.GitHubRepositoryToken`.
-  Each client reads its own three rows; no fallback to another client or shared
+- `shared`: every Jira/GitHub setting except the exceptions below. All clients read
+  these same rows, including `GitHub.AgentGitHubToken`.
+- `aimanager`, `aiworker`, `aibuildpage`: exactly `GitHub.GitHubRepositoryToken`
+  (and `GitHub.AgentModel` for `aiworker`).
+  Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
+
+Jira labels are not settings. They live in the `workflow_labels` table
+(`agent_name`, `code_key`, `label_name`, `description`), created by the
+`WorkflowLabels` dbmigration patches with the former hardcoded defaults (code key =
+the name of the former code constant), and the old label rows are deleted from
+`settings`. Only `aimanager` and `aiworker` have rows; agents read them once at startup and
+fail if a row is missing. Edit `label_name` in the table to rename a label.
+
+| Agent | Code key | Default label |
+| --- | --- | --- |
+| `aimanager` | `PickupLabel` | `ai-manager-planned` |
+| `aimanager` | `FailureLabel` | `ai-agent-failed` |
+| `aimanager` | `AnalyzedLabel` | `ai-analyzed` |
+| `aimanager` | `ClarificationLabel` | `ai-needs-clarification` |
+| `aimanager` | `ApprovalLabel` | `ai-awaiting-approval` |
+| `aimanager` | `ApprovedLabel` | `ai-approved` |
+| `aiworker` | `PickupLabel` | `ai-agent-picked` |
+| `aiworker` | `FailureLabel` | `ai-agent-failed` |
+| `aiworker` | `AnalyzedLabel` | `ai-analyzed` |
 
 The standalone `dbmigration` executable owns all table creation. It retains
 `StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, adds
@@ -91,22 +109,17 @@ UPDATE settings SET value = 'https://your-company.atlassian.net'
 WHERE client = 'shared' AND name = 'Jira.JiraBaseUrl';
 UPDATE settings SET value = 'https://github.com/owner/repository.git'
 WHERE client = 'shared' AND name = 'GitHub.TargetRepositoryUrl';
-UPDATE settings SET value = 'ai-manager-planned'
-WHERE client = 'aimanager' AND name = 'Jira.JiraPickupLabel';
 ```
 
 Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraProjectKey` (`DFAI`), `Jira.JiraStatusName` (`Selected for Development`),
-`Jira.JiraJql` (empty for generated JQL), `Jira.JiraFailureLabel`
-(`ai-agent-failed`), `Jira.JiraInProgressStatus` (`In Progress`),
+`Jira.JiraJql` (empty for generated JQL), `Jira.JiraInProgressStatus` (`In Progress`),
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
 Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
 optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
 as `--model`; blank uses the CLI default.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
-`Jira.JiraClarificationLabel` (`ai-needs-clarification`), `Jira.JiraApprovalLabel`
-(`ai-awaiting-approval`), `Jira.JiraApprovedLabel` (`ai-approved`),
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),
 `Jira.JiraSubtaskIssueType` (`Sub-task`) and `Jira.JiraAutoApproveSmallChanges`
 (`true`). See the [aimanager README](../aimanager/README.md#triage-behaviour).

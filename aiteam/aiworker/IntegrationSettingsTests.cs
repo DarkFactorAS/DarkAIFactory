@@ -14,7 +14,6 @@ public sealed class IntegrationSettingsTests
         {
             // Even unexpected legacy per-client rows must not override shared settings.
             values[(client, "Jira.JiraApiToken")] = "incorrect-client-token";
-            values[(client, "Jira.JiraFailureLabel")] = "incorrect-client-label";
             values[(client, "GitHub.AgentGitHubToken")] = "incorrect-client-token";
             var settings = IntegrationSettingsRepository.FromValues(client, values, 5);
 
@@ -24,22 +23,17 @@ public sealed class IntegrationSettingsTests
             Assert.Equal("SHARED", settings.Jira.JiraProjectKey);
             Assert.Equal("Ready", settings.Jira.JiraStatusName);
             Assert.Equal("priority = High", settings.Jira.JiraJql);
-            Assert.Equal("shared-failed", settings.Jira.JiraFailureLabel);
             Assert.Equal("Doing", settings.Jira.JiraInProgressStatus);
             Assert.Equal("Review", settings.Jira.JiraInReviewStatus);
             Assert.Equal("shared-assignee", settings.Jira.JiraAssigneeAccountId);
             Assert.Equal("shared-copilot-token", settings.GitHub.AgentGitHubToken);
             Assert.Equal("https://github.com/owner/repo", settings.GitHub.TargetRepositoryUrl);
-            Assert.Equal($"{client}-picked", settings.Jira.JiraPickupLabel);
-            Assert.Equal($"{client}-analyzed", settings.Jira.JiraAnalyzedLabel);
             Assert.Equal($"{client}-repository-token", settings.GitHub.GitHubRepositoryToken);
             Assert.Equal(5, settings.PollIntervalSeconds);
         }
     }
 
     [Theory]
-    [InlineData("Jira.JiraPickupLabel")]
-    [InlineData("Jira.JiraAnalyzedLabel")]
     [InlineData("GitHub.GitHubRepositoryToken")]
     public void Load_MissingClientValueNeverFallsBackToSharedOrAnotherClient(string name)
     {
@@ -84,7 +78,6 @@ public sealed class IntegrationSettingsTests
             [("shared", "Jira.JiraProjectKey")] = "SHARED",
             [("shared", "Jira.JiraStatusName")] = "Ready",
             [("shared", "Jira.JiraJql")] = "priority = High",
-            [("shared", "Jira.JiraFailureLabel")] = "shared-failed",
             [("shared", "Jira.JiraInProgressStatus")] = "Doing",
             [("shared", "Jira.JiraInReviewStatus")] = "Review",
             [("shared", "GitHub.AgentGitHubToken")] = "shared-copilot-token",
@@ -93,8 +86,6 @@ public sealed class IntegrationSettingsTests
         };
         foreach (var client in Clients)
         {
-            values[(client, "Jira.JiraPickupLabel")] = $"{client}-picked";
-            values[(client, "Jira.JiraAnalyzedLabel")] = $"{client}-analyzed";
             values[(client, "GitHub.GitHubRepositoryToken")] = $"{client}-repository-token";
         }
 

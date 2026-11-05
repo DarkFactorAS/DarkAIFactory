@@ -17,18 +17,19 @@ internal sealed record AgentConfiguration(
     string InReviewStatus,
     TimeSpan PollInterval)
 {
-    public string AnalyzedLabel { get; init; } = "ai-analyzed";
-    public string WorkerPickupLabel { get; init; } = "ai-agent-picked";
-    public string ClarificationLabel { get; init; } = "ai-needs-clarification";
-    public string ApprovalLabel { get; init; } = "ai-awaiting-approval";
-    public string ApprovedLabel { get; init; } = "ai-approved";
+    public string AnalyzedLabel { get; init; } = string.Empty;
+    public string WorkerPickupLabel { get; init; } = string.Empty;
+    public string ClarificationLabel { get; init; } = string.Empty;
+    public string ApprovalLabel { get; init; } = string.Empty;
+    public string ApprovedLabel { get; init; } = string.Empty;
     public string AnalysisOnlyStatus { get; init; } = "Code Review";
     public string DoneStatus { get; init; } = "Done";
     public string SubtaskIssueType { get; init; } = "Sub-task";
     public string JiraStatusName { get; init; } = "Selected for Development";
     public bool AutoApproveSmallChanges { get; init; } = true;
 
-    public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject project, string workerPickupLabel = "ai-agent-picked")
+    public static AgentConfiguration Load(
+        IntegrationSettings settings, ManagerProject project, WorkflowLabels labels, WorkflowLabels workerLabels)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -57,25 +58,25 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException($"Manager project {project.Id}: jira_project_key must not be empty.");
         }
         var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
-        var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-manager-planned");
-        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
-        var analyzedLabel = Get(settings.Jira.JiraAnalyzedLabel, "ai-analyzed");
-        ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
-        ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
-        ValidateLabel(analyzedLabel, "Jira.JiraAnalyzedLabel");
-        var clarificationLabel = Get(settings.Jira.JiraClarificationLabel, "ai-needs-clarification");
-        var approvalLabel = Get(settings.Jira.JiraApprovalLabel, "ai-awaiting-approval");
-        var approvedLabel = Get(settings.Jira.JiraApprovedLabel, "ai-approved");
-        ValidateLabel(clarificationLabel, "Jira.JiraClarificationLabel");
-        ValidateLabel(approvalLabel, "Jira.JiraApprovalLabel");
-        ValidateLabel(approvedLabel, "Jira.JiraApprovedLabel");
+        var pickupLabel = labels.Get("PickupLabel");
+        var failureLabel = labels.Get("FailureLabel");
+        var analyzedLabel = labels.Get("AnalyzedLabel");
+        ValidateLabel(pickupLabel, "PickupLabel");
+        ValidateLabel(failureLabel, "FailureLabel");
+        ValidateLabel(analyzedLabel, "AnalyzedLabel");
+        var clarificationLabel = labels.Get("ClarificationLabel");
+        var approvalLabel = labels.Get("ApprovalLabel");
+        var approvedLabel = labels.Get("ApprovedLabel");
+        ValidateLabel(clarificationLabel, "ClarificationLabel");
+        ValidateLabel(approvalLabel, "ApprovalLabel");
+        ValidateLabel(approvedLabel, "ApprovedLabel");
         var autoApproveText = Get(settings.Jira.JiraAutoApproveSmallChanges, "true");
         if (!bool.TryParse(autoApproveText, out var autoApproveSmallChanges))
         {
             throw new InvalidOperationException("Jira.JiraAutoApproveSmallChanges must be true or false.");
         }
-        workerPickupLabel = Get(workerPickupLabel, "ai-agent-picked");
-        ValidateLabel(workerPickupLabel, "aiworker Jira.JiraPickupLabel");
+        var workerPickupLabel = workerLabels.Get("PickupLabel");
+        ValidateLabel(workerPickupLabel, "aiworker PickupLabel");
         if (new[]
             {
                 clarificationLabel, approvalLabel, approvedLabel, pickupLabel, analyzedLabel, failureLabel, workerPickupLabel

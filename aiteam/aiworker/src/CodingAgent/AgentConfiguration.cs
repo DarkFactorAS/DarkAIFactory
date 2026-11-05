@@ -18,13 +18,14 @@ internal sealed record AgentConfiguration(
     TimeSpan PollInterval,
     string AssigneeAccountId = "")
 {
-    public string AnalyzedLabel { get; init; } = "ai-analyzed";
+    public string AnalyzedLabel { get; init; } = string.Empty;
     public string JiraProjectKey { get; init; } = string.Empty;
     public long? ManagerProjectId { get; init; }
     public bool RequiresManagerPlan { get; init; } = true;
     public string AgentModel { get; init; } = string.Empty;
 
-    public static AgentConfiguration Load(IntegrationSettings settings, ManagerProject? project = null)
+    public static AgentConfiguration Load(
+        IntegrationSettings settings, WorkflowLabels labels, ManagerProject? project = null)
     {
         var jiraBaseUrl = Required(settings.Jira.JiraBaseUrl, "Jira.JiraBaseUrl");
         if (!Uri.TryCreate(jiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -52,12 +53,12 @@ internal sealed record AgentConfiguration(
             ? Get(settings.Jira.JiraProjectKey, "DFAI")
             : Required(project.JiraProjectKey, $"Manager project {project.Id}: jira_project_key");
         var jiraStatusName = Get(settings.Jira.JiraStatusName, "Selected for Development");
-        var pickupLabel = Get(settings.Jira.JiraPickupLabel, "ai-agent-picked");
-        var failureLabel = Get(settings.Jira.JiraFailureLabel, "ai-agent-failed");
-        var analyzedLabel = Get(settings.Jira.JiraAnalyzedLabel, "ai-analyzed");
-        ValidateLabel(pickupLabel, "Jira.JiraPickupLabel");
-        ValidateLabel(failureLabel, "Jira.JiraFailureLabel");
-        ValidateLabel(analyzedLabel, "Jira.JiraAnalyzedLabel");
+        var pickupLabel = labels.Get("PickupLabel");
+        var failureLabel = labels.Get("FailureLabel");
+        var analyzedLabel = labels.Get("AnalyzedLabel");
+        ValidateLabel(pickupLabel, "PickupLabel");
+        ValidateLabel(failureLabel, "FailureLabel");
+        ValidateLabel(analyzedLabel, "AnalyzedLabel");
 
         // The default query only picks up issues the manager has already planned
         // (the manager stores the plan before adding the analyzed label).

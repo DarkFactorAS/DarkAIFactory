@@ -19,23 +19,21 @@ public sealed class IntegrationSettingsPatcherTests
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
 
-        Assert.Equal(22, values.Count);
+        Assert.Equal(15, values.Count);
         Assert.Contains("ON DUPLICATE KEY UPDATE `value` = `settings`.`value`", patcher.Sql[4]);
         Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", patcher.Sql[3]);
         Assert.Contains("'GitHub.AgentModel'", patcher.Sql[3]);
         Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", patcher.Sql[4]);
-        Assert.Equal(12, values.Keys.Count(key => key.Client == "shared"));
-        Assert.Equal("ai-agent-failed", values[("shared", "Jira.JiraFailureLabel")]);
+        Assert.Equal(11, values.Keys.Count(key => key.Client == "shared"));
+        Assert.DoesNotContain("Label", string.Join(",", values.Keys.Select(key => key.Name)));
         Assert.Empty(values[("shared", "Jira.JiraAssigneeAccountId")]);
         Assert.Empty(values[("shared", "Jira.JiraApiToken")]);
         Assert.Empty(values[("shared", "GitHub.AgentGitHubToken")]);
         Assert.Equal("gpt-5-mini", values[("aiworker", "GitHub.AgentModel")]);
         foreach (var client in Clients)
         {
-            Assert.Equal(client == "aiworker" ? 4 : 3, values.Keys.Count(key => key.Client == client));
-            Assert.Equal("ai-analyzed", values[(client, "Jira.JiraAnalyzedLabel")]);
+            Assert.Equal(client == "aiworker" ? 2 : 1, values.Keys.Count(key => key.Client == client));
             Assert.Empty(values[(client, "GitHub.GitHubRepositoryToken")]);
-            Assert.NotEmpty(values[(client, "Jira.JiraPickupLabel")]);
         }
     }
 
@@ -75,10 +73,46 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3),
             ("IntegrationSettings", 4),
-            ("IntegrationSettings", 5)]);
+            ("IntegrationSettings", 5),
+            ("WorkflowLabels", 1),
+            ("WorkflowLabels", 2),
+            ("WorkflowLabels", 3)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
+    }
+
+    [Fact]
+    public void WorkflowLabelPatcher_CreatesTableInsertsRowsAndDeletesLabelSettings()
+    {
+        var patcher = new SettingsPatcherStub(0);
+        Assert.True(WorkflowLabelPatcher.Run(patcher));
+
+        Assert.Equal("WorkflowLabels", patcher.System);
+        Assert.Equal(3, patcher.Sql.Count);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", patcher.Sql[0]);
+        var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aibuildpage)', '([^']+)', '([^']+)', '")
+            .ToDictionary(match => (match.Groups[1].Value, match.Groups[2].Value), match => match.Groups[3].Value);
+        Assert.Equal(9, rows.Count);
+        Assert.DoesNotContain(rows.Keys, key => key.Item1 == "aibuildpage");
+        Assert.Equal("ai-manager-planned", rows[("aimanager", "PickupLabel")]);
+        Assert.Equal("ai-agent-picked", rows[("aiworker", "PickupLabel")]);
+        Assert.Equal("ai-agent-failed", rows[("aimanager", "FailureLabel")]);
+        Assert.Equal("ai-agent-failed", rows[("aiworker", "FailureLabel")]);
+        Assert.Equal("ai-analyzed", rows[("aimanager", "AnalyzedLabel")]);
+        Assert.Equal("ai-analyzed", rows[("aiworker", "AnalyzedLabel")]);
+        Assert.Equal("ai-needs-clarification", rows[("aimanager", "ClarificationLabel")]);
+        Assert.Equal("ai-awaiting-approval", rows[("aimanager", "ApprovalLabel")]);
+        Assert.Equal("ai-approved", rows[("aimanager", "ApprovedLabel")]);
+        Assert.StartsWith("DELETE FROM `settings`", patcher.Sql[2]);
+        foreach (var name in new[]
+            {
+                "JiraPickupLabel", "JiraAnalyzedLabel", "JiraFailureLabel",
+                "JiraClarificationLabel", "JiraApprovalLabel", "JiraApprovedLabel"
+            })
+        {
+            Assert.Contains($"'Jira.{name}'", patcher.Sql[2]);
+        }
     }
 
     [Fact]
@@ -97,7 +131,10 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 2),
             ("IntegrationSettings", 3),
             ("IntegrationSettings", 4),
-            ("IntegrationSettings", 5)], patcher.Executed);
+            ("IntegrationSettings", 5),
+            ("WorkflowLabels", 1),
+            ("WorkflowLabels", 2),
+            ("WorkflowLabels", 3)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -114,7 +151,9 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 1), ("IntegrationSettings", 2)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
-        Assert.Equal([("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5)], patcher.Executed);
+        Assert.Equal([
+            ("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5),
+            ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);

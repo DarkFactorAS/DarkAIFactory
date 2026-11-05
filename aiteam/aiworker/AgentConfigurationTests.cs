@@ -5,7 +5,8 @@ namespace CodingAgent.Tests;
 [Collection("Environment")]
 public sealed class AgentConfigurationTests
 {
-    private static AgentConfiguration Load() => AgentConfiguration.Load(SettingsScope.Current);
+    private static AgentConfiguration Load() =>
+        AgentConfiguration.Load(SettingsScope.Current, SettingsScope.CurrentLabels);
 
     [Fact]
     public void Load_AppliesDefaults()
@@ -35,9 +36,9 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults()
             .Set("GitHub:TargetRepositoryUrl", null)
             .Set("Jira:JiraProjectKey", "IGNORED");
-        var first = AgentConfiguration.Load(SettingsScope.Current,
+        var first = AgentConfiguration.Load(SettingsScope.Current, SettingsScope.CurrentLabels,
             new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
-        var second = AgentConfiguration.Load(SettingsScope.Current,
+        var second = AgentConfiguration.Load(SettingsScope.Current, SettingsScope.CurrentLabels,
             new ManagerProject(2, "SECOND", "https://github.com/owner/second"));
 
         Assert.Equal(1, first.ManagerProjectId);
@@ -56,6 +57,7 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults();
 
         Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            SettingsScope.CurrentLabels,
             new ManagerProject(1, key, "https://github.com/owner/repo")));
     }
 
@@ -65,6 +67,7 @@ public sealed class AgentConfigurationTests
         using var env = new SettingsScope().WithValidDefaults();
 
         Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(SettingsScope.Current,
+            SettingsScope.CurrentLabels,
             new ManagerProject(1, "FIRST", "https://gitlab.com/owner/repo")));
     }
 
@@ -75,7 +78,7 @@ public sealed class AgentConfigurationTests
     public void Load_ScopesCustomQueriesToMappedProject(string jql, string expectedPrefix)
     {
         using var env = new SettingsScope().WithValidDefaults().Set("Jira:JiraJql", jql);
-        var config = AgentConfiguration.Load(SettingsScope.Current,
+        var config = AgentConfiguration.Load(SettingsScope.Current, SettingsScope.CurrentLabels,
             new ManagerProject(1, "FIRST", "https://github.com/owner/first"));
 
         Assert.StartsWith(expectedPrefix + " AND labels in (\"ai-analyzed\") AND (labels is EMPTY", config.JiraJql);
@@ -219,14 +222,26 @@ public sealed class AgentConfigurationTests
     }
 
     [Theory]
-    [InlineData("Jira:JiraPickupLabel")]
-    [InlineData("Jira:JiraFailureLabel")]
-    [InlineData("Jira:JiraAnalyzedLabel")]
-    public void Load_RejectsLabelsWithWhitespace(string name)
+    [InlineData("PickupLabel")]
+    [InlineData("FailureLabel")]
+    [InlineData("AnalyzedLabel")]
+    public void Load_RejectsLabelsWithWhitespace(string key)
     {
-        using var env = new SettingsScope().WithValidDefaults().Set(name, "two words");
+        using var env = new SettingsScope().WithValidDefaults().SetLabel(key, "two words");
 
         Assert.Throws<InvalidOperationException>(Load);
+    }
+
+    [Theory]
+    [InlineData("PickupLabel")]
+    [InlineData("FailureLabel")]
+    [InlineData("AnalyzedLabel")]
+    public void Load_FailsWithoutFallbackWhenLabelRowIsMissing(string key)
+    {
+        using var env = new SettingsScope().WithValidDefaults().SetLabel(key, null);
+
+        var exception = Assert.Throws<InvalidOperationException>(Load);
+        Assert.Contains(key, exception.Message);
     }
 
     [Fact]
@@ -245,7 +260,7 @@ public sealed class AgentConfigurationTests
     public void Load_RequiresAnalyzedLabelInDefaultJql()
     {
         using var env = new SettingsScope().WithValidDefaults()
-            .Set("Jira:JiraAnalyzedLabel", "planned\"x");
+            .SetLabel("AnalyzedLabel", "planned\"x");
 
         var config = Load();
 

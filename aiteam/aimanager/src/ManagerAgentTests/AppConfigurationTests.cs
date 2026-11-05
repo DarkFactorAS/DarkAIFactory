@@ -25,8 +25,7 @@ public sealed class AppConfigurationTests
                   "Jira": {
                     "JiraBaseUrl": "https://example.atlassian.net",
                     "JiraEmail": "bot@example.com",
-                    "JiraApiToken": "test-only",
-                    "JiraAnalyzedLabel": "custom-analyzed"
+                    "JiraApiToken": "test-only"
                   },
                   "GitHub": {
                     "AgentGitHubToken": "test-only",

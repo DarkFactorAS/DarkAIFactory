@@ -13,7 +13,12 @@ public sealed class ManagerPlannerSplitTests
     private static readonly AgentConfiguration Configuration = new(
         new Uri("https://example.atlassian.net"), "bot@example.com", "token", "gh", "repo",
         new Uri("https://github.com/owner/repo"), "project = TASK", "ai-manager-planned",
-        "ai-agent-failed", "In Progress", "In Review", TimeSpan.FromSeconds(30));
+        "ai-agent-failed", "In Progress", "In Review", TimeSpan.FromSeconds(30))
+    {
+        AnalyzedLabel = "ai-analyzed", WorkerPickupLabel = "ai-agent-picked",
+        ClarificationLabel = "ai-needs-clarification", ApprovalLabel = "ai-awaiting-approval",
+        ApprovedLabel = "ai-approved"
+    };
 
     private const string SplitJson = """
         {"decision":"split","plan":"Implement the work.","subtasks":[

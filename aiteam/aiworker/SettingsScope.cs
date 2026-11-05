@@ -10,6 +10,12 @@ internal sealed class SettingsScope : IDisposable
 {
     private static SettingsScope? _current;
     private readonly Dictionary<string, string?> _values = [];
+    private readonly Dictionary<string, string?> _labels = new()
+    {
+        ["PickupLabel"] = "ai-agent-picked",
+        ["FailureLabel"] = "ai-agent-failed",
+        ["AnalyzedLabel"] = "ai-analyzed"
+    };
 
     public SettingsScope() => _current = this;
 
@@ -31,6 +37,16 @@ internal sealed class SettingsScope : IDisposable
         .Set("GitHub:AgentGitHubToken", "gh-token")
         .Set("GitHub:GitHubRepositoryToken", "repo-token")
         .Set("GitHub:TargetRepositoryUrl", "https://github.com/owner/repo");
+
+    public static WorkflowLabels CurrentLabels =>
+        new("aiworker", (_current ?? throw new InvalidOperationException("No test settings scope."))._labels
+            .Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value!));
+
+    public SettingsScope SetLabel(string codeKey, string? value)
+    {
+        _labels[codeKey] = value;
+        return this;
+    }
 
     public SettingsScope Set(string name, string? value)
     {
