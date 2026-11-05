@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiDashboard.Stats;
+using AiDashboard.Tasks;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -23,6 +24,7 @@ builder.Services.AddSingleton(services =>
 });
 
 builder.Services.AddScoped<WorkflowLabelRepository>();
+builder.Services.AddScoped<IAgentTaskRepository, AgentTaskRepository>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IActiveAiTaskService>(services =>
 {
@@ -73,6 +75,7 @@ app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, Cancella
 });
 
 app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
+AgentTaskEndpoints.Map(app);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
