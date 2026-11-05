@@ -20,6 +20,7 @@ public interface IAgentTaskRepository
     IReadOnlyList<AgentTask> List(string? status = null);
     AgentTask? Find(long id);
     AgentTask Create(string projectKey, string title, string description);
+    bool EditNew(long id, string title, string description);
     AgentTask? Update(long id, string projectKey, string title, string description, string status, string? jiraKey);
 }
 
@@ -73,6 +74,19 @@ public sealed class AgentTaskRepository(IDbConnectionFactory connectionFactory) 
         }
 
         return Find(id) ?? throw new InvalidOperationException("Could not read back the created agent task.");
+    }
+
+    public bool EditNew(long id, string title, string description)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            UPDATE agent_tasks SET title = @title, description = @description
+            WHERE id = @id AND status = 'New'
+            """);
+        command.AddParameter("@title", title);
+        command.AddParameter("@description", description);
+        command.AddParameter("@id", id);
+        return command.ExecuteNonQuery() > 0;
     }
 
     public AgentTask? Update(

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 
-const PROJECT_KEY = "DFAI";
-
 async function request(url, options) {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -89,6 +87,7 @@ export default function TaskEditor() {
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [projectKey, setProjectKey] = useState(null);
 
   const load = useCallback(() => {
     request("/api/agent-tasks?status=New")
@@ -100,25 +99,25 @@ export default function TaskEditor() {
   }, []);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    request("/api/tasks/config")
+      .then((data) => setProjectKey(data.projectKey))
+      .catch((e) => setError(e.message));
+  }, []);
 
   async function create({ title, description }) {
+    if (!projectKey) throw new Error("The Jira project configuration is not available.");
     await request("/api/agent-tasks", {
       method: "POST",
-      body: JSON.stringify({ projectKey: PROJECT_KEY, title, description }),
+      body: JSON.stringify({ projectKey, title, description }),
     });
     load();
   }
 
   async function update(task, { title, description }) {
     await request(`/api/agent-tasks/${task.id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        projectKey: task.projectKey,
-        title,
-        description,
-        status: task.status,
-        jiraKey: task.jiraKey,
-      }),
+      method: "PATCH",
+      body: JSON.stringify({ title, description }),
     });
     setEditingId(null);
     load();

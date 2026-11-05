@@ -61,13 +61,24 @@ Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.
 The app makes read-only Jira calls for `/api/tasks/active-ai` and
 `/api/stats/solved-by-project`, plus one write: `POST /api/tasks/{key}/comments` (`text`) appends the text
-as a new Jira comment on that issue (the description is never changed; 400 on invalid input, 502 if Jira fails); its GitHub token can remain empty.
+as a new Jira comment on that issue (the description is never changed; 400 on invalid input,
+502 if Jira fails or times out); its GitHub token can remain empty.
+Comment submissions require a bearer write token configured server-side through
+`Dashboard__WriteToken`. Set a strong secret using the deployment's secret management,
+serve the dashboard over HTTPS, and enter that token in the comment form. It is not
+stored in browser storage or returned by an API. Missing configuration disables comment
+writes (401). Only issues currently returned by the active AI task list in the configured
+Jira project are authorized (403 otherwise).
+`GET /api/tasks/config` returns only the non-secret configured `projectKey` used by task creation.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
 `GET /api/agent-tasks/{id}`, `POST /api/agent-tasks` (`projectKey`, `title`, `description`;
 created as `New`) and `PUT /api/agent-tasks/{id}` (also `status` New/Created/Failed and
 optional `jiraKey`). Invalid input returns 400, unknown ids 404.
+The dashboard editor instead uses `PATCH /api/agent-tasks/{id}` (`title`, `description`),
+which atomically edits only tasks still in `New` status, preserves workflow fields,
+and returns 409 if the task has progressed.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured

@@ -62,7 +62,8 @@ public static partial class JiraCommentEndpoint
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_]*-[0-9]+$")]
     private static partial Regex KeyPattern();
 
-    public static void Map(IEndpointRouteBuilder app) => app.MapPost("/api/tasks/{key}/comments", HandleAsync);
+    public static void Map(IEndpointRouteBuilder app) =>
+        app.MapPost("/api/tasks/{key}/comments", HandleAsync).RequireAuthorization();
 
     public static string? Validate(string key, JiraCommentRequest? request)
     {
@@ -81,7 +82,8 @@ public static partial class JiraCommentEndpoint
     }
 
     public static async Task<IResult> HandleAsync(
-        IJiraCommentClient client, string key, JiraCommentRequest? request, CancellationToken cancellationToken)
+        IJiraCommentClient client, IActiveAiTaskService activeTasks, IntegrationSettings settings,
+        string key, JiraCommentRequest? request, CancellationToken cancellationToken)
     {
         var error = Validate(key, request);
         if (error is not null)
@@ -91,10 +93,20 @@ public static partial class JiraCommentEndpoint
 
         try
         {
+            if (!key.StartsWith(settings.Jira.JiraProjectKey + "-", StringComparison.OrdinalIgnoreCase) ||
+                !(await activeTasks.GetActiveAsync(cancellationToken))
+                    .Any(task => string.Equals(task.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
             await client.AddCommentAsync(key, request!.Text!.Trim(), cancellationToken);
             return Results.Created($"/api/tasks/{key}/comments", new { key });
         }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        catch (Exception ex) when (
+            ex is HttpRequestException or InvalidOperationException or InvalidDataException or
+                JsonException or KeyNotFoundException ||
+            ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             DFLogger.LogOutput(DFLogLevel.ERROR, "JiraComment", ex.Message);
             return Results.Problem("Unable to add the comment to Jira.", statusCode: StatusCodes.Status502BadGateway);
