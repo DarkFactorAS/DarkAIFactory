@@ -29,11 +29,11 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
     public ActiveAiTaskService(
         IntegrationSettings settings,
         Func<string, WorkflowLabels> loadLabels,
-        HttpMessageHandler? handler = null)
+        HttpClient httpClient)
     {
         _settings = settings;
         _loadLabels = loadLabels;
-        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient = httpClient;
         if (Uri.TryCreate(settings.Jira.JiraBaseUrl, UriKind.Absolute, out var baseUrl))
         {
             _httpClient.BaseAddress = baseUrl;
@@ -50,7 +50,8 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
     {
         var labels = string.Join(", ", aiLabels.Select(label => $"\"{JiraQuery.EscapeJql(label)}\""));
         return $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND labels in ({labels}) " +
-               $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done ORDER BY updated DESC";
+               $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done " +
+               "ORDER BY updated DESC, key ASC";
     }
 
     public async Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken)
@@ -160,6 +161,21 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
         if (type == "hardBreak")
         {
             output.Append('\n');
+            return;
+        }
+
+        if (type is "inlineCard" or "blockCard" or "embedCard")
+        {
+            if (element.TryGetProperty("attrs", out var attributes))
+            {
+                output.Append(ReadString(attributes, "url"));
+            }
+
+            if (type is "blockCard" or "embedCard")
+            {
+                output.Append('\n');
+            }
+
             return;
         }
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiDashboard.Stats;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
@@ -22,10 +23,15 @@ builder.Services.AddSingleton(services =>
 });
 
 builder.Services.AddScoped<WorkflowLabelRepository>();
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<IActiveAiTaskService>(services =>
 {
     var repository = services.GetRequiredService<WorkflowLabelRepository>();
-    return new ActiveAiTaskService(services.GetRequiredService<IntegrationSettings>(), repository.Load);
+    var httpClient = services.GetRequiredService<IHttpClientFactory>().CreateClient();
+    return new ActiveAiTaskService(
+        services.GetRequiredService<IntegrationSettings>(),
+        repository.Load,
+        httpClient);
 });
 
 builder.Services.AddSingleton<IJiraSolvedClient>(services =>
@@ -56,7 +62,10 @@ app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, Cancella
     {
         return Results.Ok(await service.GetActiveAsync(cancellationToken));
     }
-    catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or InvalidDataException)
+    catch (Exception ex) when (
+        ex is HttpRequestException or InvalidOperationException or InvalidDataException or
+            JsonException or KeyNotFoundException ||
+        ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
     {
         DFLogger.LogOutput(DFLogLevel.ERROR, "ActiveAiTasks", ex.Message);
         return Results.Problem("Unable to load active AI tasks.", statusCode: StatusCodes.Status502BadGateway);

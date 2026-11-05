@@ -34,7 +34,7 @@ public sealed class ActiveAiTaskServiceTests
         handler = new StubHandler(body);
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
-        return new ActiveAiTaskService(settings, Labels, handler);
+        return new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
     }
 
     private static string Issue(string key, string status, string updated, string label, string description = "\"d\"") =>
@@ -42,13 +42,13 @@ public sealed class ActiveAiTaskServiceTests
         ",\"status\":{\"name\":\"" + status + "\"},\"updated\":\"" + updated + "\",\"labels\":[\"" + label + "\"]}}";
 
     [Fact]
-    public void BuildJqlFiltersLabelsAndDoneAndOrdersByUpdated()
+    public void BuildJqlFiltersLabelsAndDoneAndOrdersByUpdatedAndKey()
     {
         var jql = ActiveAiTaskService.BuildJql(["ai-analyzed"], "DFAI", "Done");
 
         Assert.Contains("labels in (\"ai-analyzed\")", jql);
         Assert.Contains("status != \"Done\"", jql);
-        Assert.EndsWith("ORDER BY updated DESC", jql);
+        Assert.EndsWith("ORDER BY updated DESC, key ASC", jql);
     }
 
     [Fact]
@@ -84,15 +84,35 @@ public sealed class ActiveAiTaskServiceTests
     }
 
     [Fact]
-    public async Task TiesAreBrokenByKey()
+    public async Task MoreThanThreeTiedIssuesReturnTheThreeLowestKeys()
     {
         var body = "{\"issues\":[" + string.Join(",",
             Issue("A-9", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
-            Issue("A-1", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed")) + "]}";
+            Issue("A-4", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-1", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-3", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed")) + "]}";
         using var service = Create(body, out _);
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
-        Assert.Equal(new[] { "A-1", "A-9" }, result.Select(task => task.Key));
+        Assert.Equal(new[] { "A-1", "A-3", "A-4" }, result.Select(task => task.Key));
+    }
+
+    [Fact]
+    public async Task ReadsUrlsFromAdfSmartLinks()
+    {
+        var adf = "{\"type\":\"doc\",\"content\":[" +
+                  "{\"type\":\"inlineCard\",\"attrs\":{\"url\":\"https://example.com/inline\"}}," +
+                  "{\"type\":\"blockCard\",\"attrs\":{\"url\":\"https://example.com/block\"}}," +
+                  "{\"type\":\"embedCard\",\"attrs\":{\"url\":\"https://example.com/embed\"}}]}";
+        var body = "{\"issues\":[" +
+                   Issue("A-1", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed", adf) + "]}";
+        using var service = Create(body, out _);
+
+        var result = await service.GetActiveAsync(CancellationToken.None);
+
+        Assert.Equal(
+            $"https://example.com/inline{Environment.NewLine}https://example.com/block{Environment.NewLine}https://example.com/embed",
+            Assert.Single(result).Description);
     }
 }
