@@ -7,6 +7,10 @@ on:
   release:
     types: [published]
   pull_request:
+    paths:
+      - .github/workflows/aidashboard-deploy.yml
+      - aiteam/aidashboard/**
+      - aiteam/shared/**
     types: [closed]
     branches: ["master", "main"]
   workflow_dispatch:
@@ -14,10 +18,9 @@ on:
       environment:
         description: Environment to deploy to
         required: true
-        default: staging
+        default: production
         type: choice
         options:
-          - staging
           - production
 
 concurrency:
@@ -25,21 +28,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  staging:
-    if: github.event.pull_request.merged == true || inputs.environment == 'staging' || inputs.environment == 'production' || github.event_name == 'release'
-    name: Deploy to Staging
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
-    with:
-      environment: staging
-      external_port: ${{ fromJSON(vars.AIDASHBOARD_STAGING_PORT) }}
-      project_path: aiteam/aidashboard
-      project_name: aidashboard
-    secrets: inherit
-
   production:
     if: github.event.pull_request.merged == true || inputs.environment == 'production' || github.event_name == 'release'
     name: Deploy to Production
-    needs: [staging]
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
     with:
       environment: production

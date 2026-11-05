@@ -63,6 +63,29 @@ services:
     cap_drop:
       - ALL
 
+  aidashboard:
+    build:
+      context: ..
+      dockerfile: aiteam/aidashboard/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      dbmigration:
+        condition: service_completed_successfully
+    volumes:
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+    ports:
+      - "127.0.0.1:${AIDASHBOARD_PORT:-8281}:8080"
+    restart: unless-stopped
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   adminer:
     image: adminer:latest
     restart: unless-stopped
