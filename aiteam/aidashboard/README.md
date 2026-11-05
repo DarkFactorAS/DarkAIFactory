@@ -59,8 +59,9 @@ On startup, the app loads all shared Jira/GitHub values and its own
 `GitHub.GitHubRepositoryToken` row through the same loader as both agents.
 Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.
-The app only makes read-only Jira calls for `/api/tasks/active-ai` and
-`/api/stats/solved-by-project`; its GitHub token can remain empty.
+The app makes read-only Jira calls for `/api/tasks/active-ai` and
+`/api/stats/solved-by-project`, plus one write: `POST /api/tasks/{key}/comments` (`text`) appends the text
+as a new Jira comment on that issue (the description is never changed; 400 on invalid input, 502 if Jira fails); its GitHub token can remain empty.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,

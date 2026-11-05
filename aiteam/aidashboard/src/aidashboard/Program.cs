@@ -36,6 +36,10 @@ builder.Services.AddScoped<IActiveAiTaskService>(services =>
         httpClient);
 });
 
+builder.Services.AddScoped<IJiraCommentClient>(services => new JiraCommentClient(
+    services.GetRequiredService<IntegrationSettings>(),
+    services.GetRequiredService<IHttpClientFactory>().CreateClient()));
+
 builder.Services.AddSingleton<IJiraSolvedClient>(services =>
     new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
 
@@ -76,6 +80,7 @@ app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, Cancella
 
 app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 AgentTaskEndpoints.Map(app);
+JiraCommentEndpoint.Map(app);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
