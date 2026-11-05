@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiTeam.Configuration;
+using DFCommonLib.Logger;
 using ManagerAgent.Repository;
 
 namespace ManagerAgent;
@@ -104,7 +105,7 @@ internal sealed class ManagerPlanner(
                 !string.Equals(latest.StatusName, issue.StatusName, StringComparison.Ordinal) ||
                 ManagerPlan.Fingerprint(latest.Summary, latest.Description, configuration.GitHubRepositoryUrl) != requirementsHash)
             {
-                Console.WriteLine($"Discarding plan for {issue.Key}: the issue changed or was claimed during planning.");
+                DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Discarding plan for {issue.Key}: the issue changed or was claimed during planning.");
                 return;
             }
 
@@ -171,7 +172,7 @@ internal sealed class ManagerPlanner(
 
         if ((approvalRequired || hasApprovalLabel) && !hasApprovedLabel)
         {
-            Console.WriteLine($"Plan for {issue.Key} is awaiting human approval.");
+            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} is awaiting human approval.");
             return;
         }
 
@@ -181,7 +182,7 @@ internal sealed class ManagerPlanner(
             !string.Equals(beforeHandoff.StatusName, issue.StatusName, StringComparison.Ordinal) ||
             !storedPlan.IsCurrent(beforeHandoff.Summary, beforeHandoff.Description, configuration.GitHubRepositoryUrl))
         {
-            Console.WriteLine($"Deferring handoff for {issue.Key}: the issue changed or was claimed.");
+            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Deferring handoff for {issue.Key}: the issue changed or was claimed.");
             return;
         }
         if (configuration.PickupLabel != configuration.AnalyzedLabel)
@@ -198,7 +199,7 @@ internal sealed class ManagerPlanner(
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovedLabel, cancellationToken);
         }
-        Console.WriteLine($"Plan for {issue.Key} stored in Jira and manager_plans.");
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} stored in Jira and manager_plans.");
     }
 
     private async Task ApplyClarifyAsync(
@@ -214,7 +215,7 @@ internal sealed class ManagerPlanner(
             cancellationToken);
         plans.MarkPostedToJira(issue.Key, requirementsHash);
         await jira.AddLabelAsync(issue.Key, configuration.ClarificationLabel, cancellationToken);
-        Console.WriteLine($"Requested clarification for {issue.Key}.");
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Requested clarification for {issue.Key}.");
     }
 
     private async Task ApplyAnalysisOnlyAsync(
@@ -228,7 +229,7 @@ internal sealed class ManagerPlanner(
         }
         plans.MarkPostedToJira(issue.Key, requirementsHash);
         await jira.TransitionToAsync(issue.Key, configuration.AnalysisOnlyStatus, cancellationToken);
-        Console.WriteLine($"Analysis for {issue.Key} posted; moved to {configuration.AnalysisOnlyStatus}.");
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Analysis for {issue.Key} posted; moved to {configuration.AnalysisOnlyStatus}.");
     }
 
     private async Task ApplySplitAsync(
@@ -271,7 +272,7 @@ internal sealed class ManagerPlanner(
                 }
                 catch (HttpRequestException exception)
                 {
-                    Console.Error.WriteLine($"Could not link {dependency} as blocking {key}: {exception.Message}");
+                    DFLogger.LogOutput(DFLogLevel.ERROR, "Planner", $"Could not link {dependency} as blocking {key}: {exception.Message}");
                 }
             }
         }
@@ -284,7 +285,7 @@ internal sealed class ManagerPlanner(
         SaveTriaged(projectId, issue, TriageDecision.Split, JsonSerializer.Serialize(state), requirementsHash);
         await CompleteSplitAsync(
             issue.Key, ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)), requirementsHash, cancellationToken);
-        Console.WriteLine($"Split {issue.Key} into {keys.Length} sub-tasks.");
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Split {issue.Key} into {keys.Length} sub-tasks.");
     }
 
     private async Task CompleteSplitAsync(
@@ -353,7 +354,7 @@ internal sealed class ManagerPlanner(
                 await jira.AddLabelAsync(subtask.Key, configuration.PickupLabel, cancellationToken);
             }
             await jira.AddLabelAsync(subtask.Key, configuration.AnalyzedLabel, cancellationToken);
-            Console.WriteLine($"Released sub-task {subtask.Key} to the worker.");
+            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Released sub-task {subtask.Key} to the worker.");
         }
     }
 

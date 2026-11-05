@@ -8,9 +8,6 @@ using Microsoft.Extensions.Hosting;
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
-Console.WriteLine(
-    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
-    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
 new DFServices(builder.Services)
     .SetupLogger()
@@ -19,8 +16,15 @@ new DFServices(builder.Services)
 builder.Services.AddTransient<IStartupDatabasePatcher, AiDatabasePatcher>();
 
 using var host = builder.Build();
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Startup",
+    $"Loading configuration for environment '{builder.Environment.EnvironmentName}': " +
+    $"Config/appsettings.{builder.Environment.EnvironmentName}.json");
 var settings = host.Services.GetRequiredService<IConfigurationHelper>().Settings;
-Console.WriteLine(
+DFLogger.LogOutput(
+    DFLogLevel.INFO,
+    "Migration",
     $"Connecting to database '{settings.DatabaseConnection.Database}' " +
     $"at {settings.DatabaseConnection.Server}:{settings.DatabaseConnection.Port}.");
 using var scope = host.Services.CreateScope();

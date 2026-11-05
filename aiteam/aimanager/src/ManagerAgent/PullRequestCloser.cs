@@ -1,3 +1,4 @@
+using DFCommonLib.Logger;
 using ManagerAgent.Repository;
 
 namespace ManagerAgent;
@@ -42,7 +43,7 @@ internal sealed class PullRequestCloser(
 
                 await jira.TransitionToAsync(issue.Key, configuration.DoneStatus, cancellationToken);
                 closed.Add(issue.Key);
-                Console.WriteLine($"Moved {issue.Key} to {configuration.DoneStatus}: all pull requests are merged.");
+                DFLogger.LogOutput(DFLogLevel.INFO, "Closer", $"Moved {issue.Key} to {configuration.DoneStatus}: all pull requests are merged.");
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -50,7 +51,7 @@ internal sealed class PullRequestCloser(
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine($"Could not check pull requests for {issue.Key}: {exception.Message}");
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Closer", $"Could not check pull requests for {issue.Key}: {exception.Message}");
             }
         }
 
