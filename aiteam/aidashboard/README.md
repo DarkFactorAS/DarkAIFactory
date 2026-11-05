@@ -2,8 +2,11 @@
 
 ASP.NET Core web project serving a React + Tailwind (Vite) dashboard shell with a
 header titled "DarkAIFactoy - AI Team workflow" (spelling taken verbatim from
-Jira DFAI-30; confirm before changing). It also exposes `GET /api/health` and
-`GET /api/tasks/active-ai`.
+Jira DFAI-30; confirm before changing). It also exposes `GET /api/health`,
+`GET /api/tasks/active-ai`, and `GET /api/stats/solved-by-project`, which
+returns `[{"project": "DFAI", "solvedCount": 3}]`
+counting Jira issues in the Done status category per project (502 with a generic error if Jira fails;
+credentials are never logged).
 
 `GET /api/tasks/active-ai` returns at most 3 Jira issues (`key`, `summary`,
 `status`, `description`) that carry an AI workflow label (the `PickupLabel` and
@@ -56,7 +59,8 @@ On startup, the app loads all shared Jira/GitHub values and its own
 `GitHub.GitHubRepositoryToken` row through the same loader as both agents.
 Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.
-The app only calls Jira (read-only) for `/api/tasks/active-ai`; its GitHub token can remain empty.
+The app only makes read-only Jira calls for `/api/tasks/active-ai` and
+`/api/stats/solved-by-project`; its GitHub token can remain empty.
 See the configuration guide for migrating existing credentials into the database.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).

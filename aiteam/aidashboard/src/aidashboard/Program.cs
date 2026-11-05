@@ -1,3 +1,4 @@
+using AiDashboard.Stats;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -26,6 +27,9 @@ builder.Services.AddScoped<IActiveAiTaskService>(services =>
     var repository = services.GetRequiredService<WorkflowLabelRepository>();
     return new ActiveAiTaskService(services.GetRequiredService<IntegrationSettings>(), repository.Load);
 });
+
+builder.Services.AddSingleton<IJiraSolvedClient>(services =>
+    new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
 
 var app = builder.Build();
 
@@ -58,6 +62,8 @@ app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, Cancella
         return Results.Problem("Unable to load active AI tasks.", statusCode: StatusCodes.Status502BadGateway);
     }
 });
+
+app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

@@ -100,7 +100,7 @@ public sealed class ManagerPlannerSplitTests
 
         Assert.DoesNotContain("[triage:dependency_hold]", new ManagerPlanRepository(database).Find(dependentKey)!.Plan);
         Assert.Equal("Selected for Development", handler.GetIssue(dependentKey).StatusName);
-        Assert.Contains("ai-agent-picked", handler.GetIssue(dependentKey).Labels);
+        Assert.Contains("ai-manager-planned", handler.GetIssue(dependentKey).Labels);
         Assert.Contains("ai-analyzed", handler.GetIssue(dependentKey).Labels);
     }
 
