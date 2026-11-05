@@ -1,7 +1,7 @@
 # dbmigration
 
 Standalone .NET 10 executable that creates/upgrades the database used by
-aimanager, aiworker and aibuildpage. Clients only read/write data; none creates
+aimanager, aiworker and aidashboard. Clients only read/write data; none creates
 tables or applies migrations.
 
 ## Configuration and local execution
