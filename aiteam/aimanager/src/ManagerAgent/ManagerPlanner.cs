@@ -77,6 +77,10 @@ internal sealed class ManagerPlanner(
         }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
         {
+            if (storedDecision is TriageDecision.AnalysisOnly or TriageDecision.Split)
+            {
+                await ClearIgnoredLabelAsync(issue, cancellationToken);
+            }
             if (!storedPlan.PostedToJira && storedDecision == TriageDecision.Split)
             {
                 await CompleteSplitAsync(issue.Key, storedPlan.Plan, storedPlan.RequirementsHash!, cancellationToken);
@@ -118,6 +122,8 @@ internal sealed class ManagerPlanner(
                 reusable = false;
             }
         }
+
+        await ClearIgnoredLabelAsync(issue, cancellationToken);
 
         if (!reusable)
         {
@@ -362,9 +368,18 @@ internal sealed class ManagerPlanner(
             reason,
             jira.GetCommentsAsync,
             jira.AddCommentAsync,
+            jira.AddLabelAsync,
             message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
             cancellationToken);
     }
+
+    private Task ClearIgnoredLabelAsync(JiraIssue issue, CancellationToken cancellationToken) =>
+        IgnoredTaskNotifier.ClearAsync(
+            issue.Key,
+            issue.Labels,
+            jira.RemoveLabelAsync,
+            message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
+            cancellationToken);
 
     private async Task ReleaseSubtasksAsync(string storedPlan, CancellationToken cancellationToken)
     {

@@ -130,7 +130,7 @@ optional and default as shown; add them to the shared `settings` rows to change 
 
 ## Ignored tasks
 
-When an issue is in the trigger status but the manager skips it (worker or failure label present, dependencies not done, waiting for approval or clarification), it posts one comment `[AIManager] Not picked up: <reason>`. The issue's existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing.
+When an issue is in the trigger status but the manager skips it (worker or failure label present, dependencies not done, waiting for approval or clarification), it posts one comment `[AIManager] Not picked up: <reason>`. The issue's existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing. The issue is also given the generic `ai-ignored` label (added in addition to all other labels, regardless of reason, purely as a visual marker on the Jira dashboard). The label is added on every skip, even when the comment already exists, and is removed once the manager picks the task up for planning. Label failures are logged as warnings.
 
 ## Closing merged pull requests
 
