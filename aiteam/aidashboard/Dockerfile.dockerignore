@@ -3,5 +3,7 @@
 **/.vs
 **/bin
 **/obj
+**/node_modules
+**/dist
 **/UserSettings
 **/config/**/appsettings.*.json
