@@ -324,7 +324,7 @@ public sealed class ManagerPlannerTests
                 return Task.FromResult("Unexpected plan");
             });
         await renamedApprovalLabel.PlanAsync(1, handler.Current, CancellationToken.None);
-        Assert.Empty(events);
+        Assert.Equal(["add:ai-ignored", "add:ai-ignored"], events);
         Assert.DoesNotContain("ai-analyzed", handler.Current.Labels);
 
         handler.Current = handler.Current with { Labels = [.. handler.Current.Labels, "ai-approved"] };
