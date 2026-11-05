@@ -1,17 +1,17 @@
-# aibuildpage
+# aidashboard
 
 Minimal ASP.NET Core web project that serves a blank page titled "DarkFactor AI Team".
 
-Build: `dotnet build aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj`
+Build: `dotnet build aiteam/aidashboard/src/aidashboard/aidashboard.csproj`
 
-Run: `dotnet run --project aiteam/aibuildpage/src/aibuildpage/aibuildpage.csproj`
+Run: `dotnet run --project aiteam/aidashboard/src/aidashboard/aidashboard.csproj`
 
 ## Docker and deployment
 
 Build from the repository root with `NUGET_USERNAME` and `NUGET_TOKEN` set:
 
 ```sh
-docker build . --file aiteam/aibuildpage/Dockerfile --tag aibuildpage \
+docker build . --file aiteam/aidashboard/Dockerfile --tag aidashboard \
   --secret id=nuget_username,env=NUGET_USERNAME \
   --secret id=nuget_token,env=NUGET_TOKEN
 ```

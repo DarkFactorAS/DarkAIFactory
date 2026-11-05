@@ -17,7 +17,7 @@ builder.Services.AddScoped<IntegrationSettingsRepository>();
 builder.Services.AddSingleton(services =>
 {
     using var scope = services.CreateScope();
-    return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aibuildpage");
+    return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aidashboard");
 });
 
 var app = builder.Build();
