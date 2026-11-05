@@ -77,6 +77,43 @@ internal sealed class JiraClient : IDisposable
         return ReadIssue(document.RootElement);
     }
 
+    public async Task<IReadOnlyList<string>> GetCommentsAsync(string issueKey, CancellationToken cancellationToken)
+    {
+        var comments = new List<string>();
+        var startAt = 0;
+        while (true)
+        {
+            using var response = await _httpClient.GetAsync(
+                $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/comment?startAt={startAt}&maxResults=100",
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = document.RootElement;
+            var page = root.GetProperty("comments");
+            var count = page.GetArrayLength();
+            foreach (var comment in page.EnumerateArray())
+            {
+                comments.Add(ReadAdfText(comment, "body"));
+            }
+
+            var isLast = root.TryGetProperty("isLast", out var last) && last.ValueKind == JsonValueKind.True;
+            int? totalCount = root.TryGetProperty("total", out var total) && total.TryGetInt32(out var parsedTotal)
+                ? parsedTotal
+                : null;
+            if (count == 0 || isLast ||
+                (totalCount.HasValue && startAt + count >= totalCount.Value) ||
+                (!totalCount.HasValue && count < 100))
+            {
+                break;
+            }
+
+            startAt += count;
+        }
+
+        return comments;
+    }
+
     private static JiraIssue ReadIssue(JsonElement issue)
     {
         var fields = issue.GetProperty("fields");
