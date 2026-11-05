@@ -63,6 +63,28 @@ services:
     cap_drop:
       - ALL
 
+  jira-manager-agent:
+    build:
+      context: ..
+      dockerfile: aiteam/aijiramanager/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      dbmigration:
+        condition: service_completed_successfully
+    volumes:
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+    restart: unless-stopped
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      HOME: /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   aidashboard:
     build:
       context: ..
