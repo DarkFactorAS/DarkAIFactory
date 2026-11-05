@@ -10,6 +10,7 @@ on:
     paths:
       - .github/workflows/aidashboard-deploy.yml
       - aiteam/aidashboard/**
+      - aiteam/shared/**
     types: [closed]
     branches: ["master", "main"]
   workflow_dispatch:
