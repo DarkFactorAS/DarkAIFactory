@@ -41,6 +41,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `StartupDatabasePatcher` | 5 | `pull_requests` (Jira key, repository, PR number, unique PR URL), written by aiworker and read by AITechLead |
 | `IntegrationSettings` | 1 | `settings` with shared/client scope constraint |
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
+| `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database

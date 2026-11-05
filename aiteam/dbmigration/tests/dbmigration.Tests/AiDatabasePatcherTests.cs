@@ -41,7 +41,9 @@ public sealed class AiDatabasePatcherTests
                 "init:WorkflowLabels",
                 "patch:WorkflowLabels:1", "successful",
                 "patch:WorkflowLabels:2", "successful",
-                "patch:WorkflowLabels:3", "successful"]);
+                "patch:WorkflowLabels:3", "successful",
+                "init:AgentTasks",
+                "patch:AgentTasks:1", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -79,6 +81,7 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[14]);
             Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[15]);
             Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[16]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[17]);
         }
     }
 

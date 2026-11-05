@@ -63,6 +63,11 @@ The app only makes read-only Jira calls for `/api/tasks/active-ai` and
 `/api/stats/solved-by-project`; its GitHub token can remain empty.
 See the configuration guide for migrating existing credentials into the database.
 
+Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
+`GET /api/agent-tasks/{id}`, `POST /api/agent-tasks` (`projectKey`, `title`, `description`;
+created as `New`) and `PUT /api/agent-tasks/{id}` (also `status` New/Created/Failed and
+optional `jiraKey`). Invalid input returns 400, unknown ids 404.
+
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
 for restore to succeed.
