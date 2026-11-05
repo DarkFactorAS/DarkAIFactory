@@ -1,6 +1,16 @@
 # aidashboard
 
-Minimal ASP.NET Core web project that serves a blank page titled "DarkFactor AI Team".
+ASP.NET Core web project serving a React + Tailwind (Vite) dashboard shell with a
+header titled "DarkAIFactoy - AI Team workflow" (spelling taken verbatim from
+Jira DFAI-30; confirm before changing). It also exposes `GET /api/health`.
+
+The frontend sources sit directly in `aiteam/aidashboard` (`package.json`,
+`vite.config.js`, `index.html`, `main.jsx`, `App.jsx`, `index.css`). The Dockerfile builds them
+(`npm install && npm run build`) and copies the output to `/app/wwwroot`, which
+ASP.NET Core serves as static files with an SPA fallback to `index.html`
+(unknown `/api/*` routes return 404). For local frontend work run
+`npm install && npm run dev` in `aiteam/aidashboard` (proxies `/api` to localhost:5000).
+Without a built `wwwroot`, a plain HTML fallback page with the title is served.
 
 Build: `dotnet build aiteam/aidashboard/src/aidashboard/aidashboard.csproj`
 

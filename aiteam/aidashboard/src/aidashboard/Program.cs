@@ -3,7 +3,7 @@ using DFCommonLib.Config;
 using DFCommonLib.Logger;
 using DFCommonLib.Utils;
 
-const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>DarkFactor AI Team</title></head><body></body></html>";
+const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>DarkAIFactoy - AI Team workflow</title></head><body><h1>DarkAIFactoy - AI Team workflow</h1></body></html>";
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +37,29 @@ DFLogger.LogOutput(
 // Load credentials server-side only; never expose them in page responses.
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
-app.MapGet("/", () => Results.Content(Html, "text/html"));
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+// SPA fallback; unknown /api routes stay 404.
+app.MapFallback(context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return Task.CompletedTask;
+    }
+
+    var index = app.Environment.WebRootFileProvider.GetFileInfo("index.html");
+    if (!index.Exists)
+    {
+        context.Response.ContentType = "text/html";
+        return context.Response.WriteAsync(Html);
+    }
+
+    context.Response.ContentType = "text/html";
+    return context.Response.SendFileAsync(index);
+});
 
 app.Run();
