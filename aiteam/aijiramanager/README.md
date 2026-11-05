@@ -4,7 +4,7 @@ AIJiraManager polls the `agent_tasks` table (created by [dbmigration](../dbmigra
 filled by the [aidashboard](../aidashboard/README.md) task API) for rows with status `New`. For each row it:
 
 1. creates a Jira issue in the row's `project_key` with the row's title and description,
-2. transitions the issue to the shared `Jira.JiraInProgressStatus` (default `In Progress`) so the
+2. transitions the issue to the shared `Jira.JiraStatusName` (default `Selected for Development`) so the
    AITechLead agent ([aimanager](../aimanager/README.md)) picks it up,
 3. stores the Jira key in `jira_key` and sets the status to `Created`.
 
@@ -18,7 +18,8 @@ duplicate issue. A failing task is retried on the next poll; after 3 failed atte
   (see [App configuration](../config/README.md)).
 - Jira credentials come from the shared `settings` table (`client = 'shared'`):
   `Jira.JiraBaseUrl`, `Jira.JiraEmail` and `Jira.JiraApiToken` are required;
-  `Jira.JiraInProgressStatus` and `Jira.JiraTaskIssueType` (default `Task`) are optional.
+  `Jira.JiraStatusName` (default `Selected for Development`) and
+  `Jira.JiraTaskIssueType` (default `Task`) are optional.
   Settings are read once at startup; missing required settings stop startup.
 
 The agent does not create tables or run migrations. Run dbmigration first.

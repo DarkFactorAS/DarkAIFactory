@@ -5,7 +5,7 @@ namespace JiraManagerAgent.Tests;
 public sealed class AgentTaskProcessorTests
 {
     private static AgentTaskProcessor Create(FakeTaskRepository tasks, FakeJiraClient jira, int maxAttempts = 3) =>
-        new(tasks, jira, "In Progress", maxAttempts);
+        new(tasks, jira, "Selected for Development", maxAttempts);
 
     [Fact]
     public async Task NewTask_CreatesIssue_TransitionsAndMarksCreated()
@@ -17,7 +17,7 @@ public sealed class AgentTaskProcessorTests
         await Create(tasks, jira).ProcessNewTasksAsync(CancellationToken.None);
 
         Assert.Equal(("DFAI", "Build page", "Details"), Assert.Single(jira.Created));
-        Assert.Equal(("DFAI-1", "In Progress"), Assert.Single(jira.Transitions));
+        Assert.Equal(("DFAI-1", "Selected for Development"), Assert.Single(jira.Transitions));
         var task = tasks.Get(1);
         Assert.Equal(AgentTaskStatus.Created, task.Status);
         Assert.Equal("DFAI-1", task.JiraKey);
@@ -69,6 +69,61 @@ public sealed class AgentTaskProcessorTests
         await processor.ProcessNewTasksAsync(CancellationToken.None);
         Assert.Single(jira.Created);
         Assert.Equal(AgentTaskStatus.Created, tasks.Get(1).Status);
+    }
+
+    [Fact]
+    public async Task DashboardEditsDuringProcessing_ArePreserved()
+    {
+        var tasks = new FakeTaskRepository();
+        tasks.Add();
+        var jira = new FakeJiraClient
+        {
+            OnCreate = () => tasks.Tasks[0] = tasks.Tasks[0] with { Title = "Edited in dashboard" },
+            OnTransition = () => tasks.Tasks[0] = tasks.Tasks[0] with { Description = "Updated description" }
+        };
+
+        await Create(tasks, jira).ProcessNewTasksAsync(CancellationToken.None);
+
+        var task = tasks.Get(1);
+        Assert.Equal("Edited in dashboard", task.Title);
+        Assert.Equal("Updated description", task.Description);
+        Assert.Equal(AgentTaskStatus.Created, task.Status);
+        Assert.Equal("DFAI-1", task.JiraKey);
+    }
+
+    [Fact]
+    public async Task DashboardStatusChangeDuringProcessing_IsNotOverwritten()
+    {
+        var tasks = new FakeTaskRepository();
+        tasks.Add();
+        var jira = new FakeJiraClient
+        {
+            OnTransition = () => tasks.Tasks[0] = tasks.Tasks[0] with { Status = AgentTaskStatus.Failed }
+        };
+
+        await Create(tasks, jira).ProcessNewTasksAsync(CancellationToken.None);
+
+        Assert.Equal(AgentTaskStatus.Failed, tasks.Get(1).Status);
+    }
+
+    [Fact]
+    public async Task TerminalTransitionFailure_PreservesPersistedJiraKey()
+    {
+        var tasks = new FakeTaskRepository();
+        tasks.Add();
+        var jira = new FakeJiraClient();
+        jira.CreateFailures.Enqueue(new HttpRequestException("first create failed"));
+        jira.CreateFailures.Enqueue(new HttpRequestException("second create failed"));
+        jira.TransitionFailures.Enqueue(new InvalidOperationException("no transition"));
+        var processor = Create(tasks, jira);
+
+        await processor.ProcessNewTasksAsync(CancellationToken.None);
+        await processor.ProcessNewTasksAsync(CancellationToken.None);
+        await processor.ProcessNewTasksAsync(CancellationToken.None);
+
+        Assert.Equal(AgentTaskStatus.Failed, tasks.Get(1).Status);
+        Assert.Equal("DFAI-1", tasks.Get(1).JiraKey);
+        Assert.Single(jira.Created);
     }
 
     [Fact]

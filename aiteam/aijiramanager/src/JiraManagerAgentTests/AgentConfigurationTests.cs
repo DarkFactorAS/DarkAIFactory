@@ -15,9 +15,21 @@ public sealed class AgentConfigurationTests
         var configuration = AgentConfiguration.FromValues(Valid(), 30);
 
         Assert.Equal("bot@example.com", configuration.JiraEmail);
-        Assert.Equal("In Progress", configuration.InProgressStatus);
+        Assert.Equal("Selected for Development", configuration.JiraStatusName);
         Assert.Equal("Task", configuration.IssueType);
         Assert.Equal(TimeSpan.FromSeconds(30), configuration.PollInterval);
+    }
+
+    [Fact]
+    public void FromValues_UsesConfiguredPickupStatus()
+    {
+        var values = Valid();
+        values["Jira.JiraStatusName"] = " Ready ";
+        values["Jira.JiraInProgressStatus"] = "Doing";
+
+        var configuration = AgentConfiguration.FromValues(values, 30);
+
+        Assert.Equal("Ready", configuration.JiraStatusName);
     }
 
     [Theory]

@@ -78,4 +78,19 @@ public sealed class JiraClientTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             client.TransitionToAsync("DFAI-1", "In Progress", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task TransitionToAsync_SucceedsWhenIssueAlreadyHasTargetStatus()
+    {
+        var handler = new StubHandler((request, _) => request.RequestUri!.AbsolutePath.EndsWith("/transitions", StringComparison.Ordinal)
+            ? Json("""{"transitions":[]}""")
+            : Json("""{"fields":{"status":{"name":"In Progress"}}}"""));
+        using var client = new JiraClient(Configuration(), handler);
+
+        await client.TransitionToAsync("DFAI-1", "In Progress", CancellationToken.None);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Get, handler.Requests[1].Method);
+        Assert.EndsWith("/DFAI-1", handler.Requests[1].Path);
+    }
 }

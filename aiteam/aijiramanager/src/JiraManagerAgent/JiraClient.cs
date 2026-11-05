@@ -82,6 +82,22 @@ internal sealed class JiraClient : IJiraClient, IDisposable
         var transitionId = destinationTransitionId ?? nameTransitionId;
         if (string.IsNullOrEmpty(transitionId))
         {
+            using (var response = await _httpClient.GetAsync(
+                       $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}?fields=status", cancellationToken))
+            {
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                var currentStatus = document.RootElement.TryGetProperty("fields", out var fields) &&
+                    fields.TryGetProperty("status", out var status)
+                    ? ReadString(status, "name")
+                    : string.Empty;
+                if (string.Equals(currentStatus, statusName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
             throw new InvalidOperationException(
                 $"Jira issue {issueKey} has no transition to \"{statusName}\". " +
                 $"Available transitions: {(available.Count == 0 ? "none" : string.Join(", ", available))}.");

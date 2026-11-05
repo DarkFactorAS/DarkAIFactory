@@ -15,7 +15,7 @@ new DFServices(builder.Services)
     .SetupMySql()
     .LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<SharedSettingsRepository>();
-builder.Services.AddScoped<IAgentTaskRepository, AgentTaskRepository>();
+builder.Services.AddScoped<IAgentTaskProcessorRepository, AgentTaskRepository>();
 
 using var host = builder.Build();
 DFLogger.LogOutput(
@@ -66,8 +66,8 @@ try
         {
             using var scope = host.Services.CreateScope();
             await new AgentTaskProcessor(
-                    scope.ServiceProvider.GetRequiredService<IAgentTaskRepository>(),
-                    jira, configuration.InProgressStatus, configuration.MaxAttempts, attempts)
+                    scope.ServiceProvider.GetRequiredService<IAgentTaskProcessorRepository>(),
+                    jira, configuration.JiraStatusName, configuration.MaxAttempts, attempts)
                 .ProcessNewTasksAsync(cancellation.Token);
         }
         catch (Exception exception) when (!cancellation.IsCancellationRequested)

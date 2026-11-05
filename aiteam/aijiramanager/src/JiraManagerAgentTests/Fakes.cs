@@ -8,6 +8,8 @@ internal sealed class FakeJiraClient : IJiraClient
     public List<(string Key, string Status)> Transitions { get; } = [];
     public Queue<Exception> CreateFailures { get; } = new();
     public Queue<Exception> TransitionFailures { get; } = new();
+    public Action? OnCreate { get; init; }
+    public Action? OnTransition { get; init; }
 
     public Task<string> CreateIssueAsync(string projectKey, string title, string description, CancellationToken cancellationToken)
     {
@@ -17,6 +19,7 @@ internal sealed class FakeJiraClient : IJiraClient
         }
 
         Created.Add((projectKey, title, description));
+        OnCreate?.Invoke();
         return Task.FromResult($"{projectKey}-{Created.Count}");
     }
 
@@ -28,11 +31,12 @@ internal sealed class FakeJiraClient : IJiraClient
         }
 
         Transitions.Add((issueKey, statusName));
+        OnTransition?.Invoke();
         return Task.CompletedTask;
     }
 }
 
-internal sealed class FakeTaskRepository : IAgentTaskRepository
+internal sealed class FakeTaskRepository : IAgentTaskProcessorRepository
 {
     public List<AgentTask> Tasks { get; } = [];
 
@@ -61,5 +65,31 @@ internal sealed class FakeTaskRepository : IAgentTaskRepository
             ProjectKey = projectKey, Title = title, Description = description, Status = status, JiraKey = jiraKey
         };
         return Tasks[index];
+    }
+
+    public bool TrySetJiraKey(long id, string expectedStatus, string jiraKey)
+    {
+        var index = Tasks.FindIndex(task =>
+            task.Id == id && task.Status == expectedStatus && task.JiraKey is null);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        Tasks[index] = Tasks[index] with { JiraKey = jiraKey };
+        return true;
+    }
+
+    public bool TrySetStatus(long id, string expectedStatus, string? expectedJiraKey, string status)
+    {
+        var index = Tasks.FindIndex(task =>
+            task.Id == id && task.Status == expectedStatus && task.JiraKey == expectedJiraKey);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        Tasks[index] = Tasks[index] with { Status = status };
+        return true;
     }
 }

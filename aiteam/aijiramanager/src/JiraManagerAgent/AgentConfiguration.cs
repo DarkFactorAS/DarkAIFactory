@@ -4,7 +4,7 @@ internal sealed record AgentConfiguration(
     Uri JiraBaseUrl,
     string JiraEmail,
     string JiraApiToken,
-    string InProgressStatus,
+    string JiraStatusName,
     string IssueType,
     TimeSpan PollInterval,
     int MaxAttempts)
@@ -32,7 +32,7 @@ internal sealed record AgentConfiguration(
             jiraUri,
             Required(sharedValues, "Jira.JiraEmail"),
             Required(sharedValues, "Jira.JiraApiToken"),
-            Optional(sharedValues, "Jira.JiraInProgressStatus", "In Progress"),
+            Optional(sharedValues, "Jira.JiraStatusName", "Selected for Development"),
             Optional(sharedValues, "Jira.JiraTaskIssueType", "Task"),
             LoadPollInterval(pollSeconds),
             maxAttempts);
