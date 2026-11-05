@@ -121,7 +121,7 @@ public sealed class ManagerPlannerTests
     [Theory]
     [InlineData("ai-agent-picked")]
     [InlineData("ai-agent-failed")]
-    public async Task PlanAsync_DoesNotPlanOrMutateClaimedOrFailedIssues(string label)
+    public async Task PlanAsync_DoesNotPlanClaimedOrFailedIssuesAndMarksThemIgnored(string label)
     {
         var events = new List<string>();
         var database = CreateDatabase(CurrentPlan(), events);
@@ -133,7 +133,8 @@ public sealed class ManagerPlannerTests
         await planner.PlanAsync(1, Issue, CancellationToken.None);
 
         Assert.Empty(database.Commands);
-        Assert.Empty(events);
+        Assert.Equal(["add:ai-ignored"], events);
+        Assert.Contains("ai-ignored", handler.Current.Labels);
     }
 
     [Fact]
@@ -263,7 +264,7 @@ public sealed class ManagerPlannerTests
         await planner.PlanAsync(1, handler.Current, CancellationToken.None);
 
         Assert.Equal(1, paidRuns);
-        Assert.Empty(events);
+        Assert.Equal(["add:ai-ignored"], events);
     }
 
     [Fact]
@@ -309,7 +310,7 @@ public sealed class ManagerPlannerTests
 
         events.Clear();
         await planner.PlanAsync(1, handler.Current, CancellationToken.None);
-        Assert.Empty(events);
+        Assert.Equal(["add:ai-ignored"], events);
 
         handler.Current = handler.Current with
         {
