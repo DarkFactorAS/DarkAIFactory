@@ -107,8 +107,12 @@ include the exact requirements fingerprint and source Jira update timestamp,
 so reviewers can trace the delegated plan version. Audit metadata and delivery
 details are retained even when long implementation output is truncated.
 If the agent made no changes, no pull request is created and the
-status is left unchanged. Copilot cannot execute shell commands, so it cannot run tests; validate
-the pushed branch separately. The worker follows repository Markdown
+status is left unchanged. Shell execution is enabled for the implementation agent because the worker runs
+inside Docker (`git push` and `gh` are denied; the worker pushes itself). The agent must run
+the unit tests of all test projects (worker, manager, dbmigration) before completing, whatever
+project it changed. Failing tests that are a deliberate consequence of the change are fixed;
+unintentional breakages are reported in the task result. Planning runs keep shell disabled.
+The worker follows repository Markdown
 instructions, including applicable `AGENTS.md` and Git workflow rules.
 
 Issues retain the `ai-agent-picked` label after processing. If processing fails,

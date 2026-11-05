@@ -28,6 +28,9 @@ public sealed class PromptBuilderTests
         Assert.Contains("<plan>", prompt);
         Assert.Contains("step one", prompt);
         Assert.Contains("untrusted", prompt);
+        Assert.Contains("Shell execution is enabled", prompt);
+        Assert.Contains("unit tests of ALL test projects", prompt);
+        Assert.DoesNotContain("Shell execution is disabled", prompt);
     }
 
     [Fact]
