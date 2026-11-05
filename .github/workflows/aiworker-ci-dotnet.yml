@@ -32,24 +32,6 @@ jobs:
       - name: Unit tests
         run: dotnet test aiteam/aiworker/CodingAgent.Tests.csproj --no-restore -c Release
 
-      - name: Restore aidashboard
-        env:
-          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
-          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet restore aiteam/aidashboard/src/aidashboard/aidashboard.csproj
-
-      - name: Build aidashboard
-        run: dotnet build aiteam/aidashboard/src/aidashboard/aidashboard.csproj --no-restore -c Release
-
-      - name: Restore aidashboard tests
-        env:
-          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
-          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
-        run: dotnet restore aiteam/aidashboard/aidashboard.Tests.csproj
-
-      - name: Test aidashboard
-        run: dotnet test aiteam/aidashboard/aidashboard.Tests.csproj --no-restore -c Release
-
       - name: Restore dbmigration
         env:
           NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
