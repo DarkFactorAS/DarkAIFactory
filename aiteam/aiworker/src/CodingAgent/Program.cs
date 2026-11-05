@@ -157,6 +157,12 @@ try
                     await ReportIgnoredAsync(jira, issue.Key, reason, cancellation.Token);
                     continue;
                 }
+                await IgnoredTaskNotifier.ClearAsync(
+                    issue.Key,
+                    issue.Labels,
+                    jira.RemoveLabelAsync,
+                    message => DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", message),
+                    cancellation.Token);
                 DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
 
                 string? workspacePath = null;
@@ -393,6 +399,7 @@ static Task ReportIgnoredAsync(JiraClient jira, string issueKey, string reason, 
         reason,
         jira.GetCommentsAsync,
         jira.AddCommentAsync,
+        jira.AddLabelAsync,
         message => DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", message),
         cancellationToken);
 

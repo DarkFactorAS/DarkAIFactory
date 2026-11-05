@@ -132,7 +132,7 @@ The **build aiworker** task is also available from **Terminal > Run Build Task**
 
 ## Ignored tasks
 
-When an issue is in the trigger status but the worker skips it (manager plan stale, not yet posted, or missing), it posts one comment `[AIWorker] Not picked up: <reason>`. Existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing.
+When an issue is in the trigger status but the worker skips it (manager plan stale, not yet posted, or missing), it posts one comment `[AIWorker] Not picked up: <reason>`. Existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing. The issue is also given the generic `ai-ignored` label (added in addition to all other labels, regardless of reason, purely as a visual marker on the Jira dashboard). The label is added on every skip, even when the comment already exists, and is removed once the worker claims the task. Label failures are logged as warnings.
 
 ## Tests
 

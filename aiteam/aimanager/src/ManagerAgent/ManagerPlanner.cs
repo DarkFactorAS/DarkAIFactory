@@ -119,6 +119,13 @@ internal sealed class ManagerPlanner(
             }
         }
 
+        await IgnoredTaskNotifier.ClearAsync(
+            issue.Key,
+            issue.Labels,
+            jira.RemoveLabelAsync,
+            message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
+            cancellationToken);
+
         if (!reusable)
         {
             await jira.RemoveLabelAsync(issue.Key, configuration.AnalyzedLabel, cancellationToken);
@@ -362,6 +369,7 @@ internal sealed class ManagerPlanner(
             reason,
             jira.GetCommentsAsync,
             jira.AddCommentAsync,
+            jira.AddLabelAsync,
             message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
             cancellationToken);
     }
