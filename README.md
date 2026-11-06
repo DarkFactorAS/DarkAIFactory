@@ -34,7 +34,7 @@ flowchart LR
     end
 
     MIG -->|"1. create/upgrade schema (migrations)"| DB
-    DB -->|"credentials, labels, project mappings"| JM
+    DB -->|"Jira connection, credentials, status, issue type (settings)"| JM
     DB -->|"credentials, labels, project mappings"| TL
     DB -->|"credentials, labels, project mappings"| W
 
