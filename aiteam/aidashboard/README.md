@@ -1,8 +1,8 @@
 # aidashboard
 
 ASP.NET Core web project serving a React + Tailwind (Vite) dashboard shell with a
-header titled "DarkAIFactoy - AI Team workflow" (spelling taken verbatim from
-Jira DFAI-30; confirm before changing). It also exposes `GET /api/health`,
+header titled "DarkAIFactory - AI Team workflow" (the earlier
+"DarkAIFactoy" typo from DFAI-30 was fixed in DFAI-49), centred. It also exposes `GET /api/health`,
 `GET /api/tasks/active-ai`, and `GET /api/stats/solved-by-project`, which
 returns `[{"project": "DFAI", "solvedCount": 3, "aiCount": 1, "nonAiCount": 2}]`
 counting Jira issues in the Done status category per project, split into `aiCount` (issues carrying a configured AI workflow pickup or analyzed label) and `nonAiCount` (502 with a generic error if Jira fails;
