@@ -1,9 +1,9 @@
 FROM node:22-alpine AS client
 WORKDIR /client
-COPY aiteam/aidashboard/package.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html ./
+COPY aiteam/aidashboard/package.json aiteam/aidashboard/package-lock.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html ./
 COPY aiteam/aidashboard/js/ ./js/
 COPY aiteam/aidashboard/css/ ./css/
-RUN npm install
+RUN npm ci
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
