@@ -7,7 +7,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/aijiramanager-ci-docker.yml"
+      - "aiteam/aijiramanager/**"
+      - "aiteam/shared/**"
   pull_request:
+    paths:
+      - ".github/workflows/aijiramanager-ci-docker.yml"
+      - "aiteam/aijiramanager/**"
+      - "aiteam/shared/**"
 
 jobs:
   build:

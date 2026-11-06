@@ -7,7 +7,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/aidashboard-ci-docker.yml"
+      - "aiteam/aidashboard/**"
+      - "aiteam/shared/**"
   pull_request:
+    paths:
+      - ".github/workflows/aidashboard-ci-docker.yml"
+      - "aiteam/aidashboard/**"
+      - "aiteam/shared/**"
 
 jobs:
   build:
