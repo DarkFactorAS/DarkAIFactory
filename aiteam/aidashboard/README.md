@@ -38,9 +38,22 @@ docker build . --file aiteam/aidashboard/Dockerfile --tag aidashboard \
 ```
 
 The image listens on port 8080 and runs as the non-root `app` user. Runtime
-configuration is excluded from the image; mount the configured directory
-read-only at `/app/Config` using the same `aiteam/config` directory as the other
-clients and dbmigration, and provide access to the configured database.
+configuration is excluded from the image; Compose mounts the separate
+`aiteam/aidashboard/config` directory read-only at `/app/Config`. To configure
+it for Compose, create the runtime file from the template and set its database
+values to match `aiteam/.env`:
+
+```sh
+mkdir -p aiteam/aidashboard/config
+cp aiteam/aidashboard/src/aidashboard/Config/appsettings.template.json \
+  aiteam/aidashboard/config/appsettings.Production.json
+```
+
+Set `DatabaseConnection.Server` to `aiteam_database` and set the database,
+username and password to `MARIADB_DATABASE`, `MARIADB_USER` and
+`MARIADB_PASSWORD`. Set `AIDASHBOARD_CONFIG_PATH` in `aiteam/.env` to override
+the default runtime-config directory. Runtime JSON files in that directory are
+ignored by Git.
 See [deployment setup and Infrastructure blockers](../../README.md#deployment)
 before running the GitHub deployment workflow.
 
