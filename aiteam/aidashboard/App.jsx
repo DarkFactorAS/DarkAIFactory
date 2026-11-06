@@ -1,4 +1,4 @@
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
@@ -66,6 +66,46 @@ function PieWithLegend({ title, slices, testId }) {
   );
 }
 
+function AiShareBarChart({ items }) {
+  const data = items.map((item) => {
+    const aiCount = item.aiCount ?? 0;
+    const nonAiCount = item.nonAiCount ?? 0;
+    const total = aiCount + nonAiCount;
+    return {
+      project: item.project,
+      aiCount,
+      nonAiCount,
+      aiPercent: formatPercent(aiCount, total),
+      nonAiPercent: total > 0 ? 100 - formatPercent(aiCount, total) : 0,
+    };
+  });
+  const hasData = data.some((row) => row.aiCount + row.nonAiCount > 0);
+  const tooltipFormatter = (value, name, entry) => {
+    const row = entry.payload;
+    const count = name === "% AI" ? row.aiCount : row.nonAiCount;
+    return [`${value}% (${count})`, name];
+  };
+  return (
+    <div data-testid="solved-ai-chart" className="mb-4">
+      <h3 className="mb-1 text-sm font-semibold">AI vs non-AI per project</h3>
+      {!hasData ? (
+        <p className="text-sm text-slate-500">No solved tasks.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={data}>
+            <XAxis dataKey="project" />
+            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+            <Tooltip formatter={tooltipFormatter} />
+            <Legend />
+            <Bar dataKey="aiPercent" name="% AI" stackId="share" fill={AI_COLORS.ai} />
+            <Bar dataKey="nonAiPercent" name="% non-AI" stackId="share" fill={AI_COLORS.nonAi} />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
+
 function SolvedByProjectPanel() {
   const state = useApiData("/api/stats/solved-by-project");
   return (
@@ -81,17 +121,7 @@ function SolvedByProjectPanel() {
               color: PROJECT_COLORS[index % PROJECT_COLORS.length],
             }))}
           />
-          {items.map((item) => (
-            <PieWithLegend
-              key={item.project}
-              testId={`solved-ai-chart-${item.project}`}
-              title={`${item.project}: AI vs non-AI`}
-              slices={[
-                { name: "AI", value: item.aiCount ?? 0, color: AI_COLORS.ai },
-                { name: "Non-AI", value: item.nonAiCount ?? 0, color: AI_COLORS.nonAi },
-              ]}
-            />
-          ))}
+          <AiShareBarChart items={items} />
         </div>
       )}
     </Panel>
