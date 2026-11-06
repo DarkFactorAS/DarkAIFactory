@@ -96,7 +96,7 @@ services:
       dbmigration:
         condition: service_completed_successfully
     volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+      - ./aidashboard/src/aidashboard/Config:/app/Config:ro
     ports:
       - "127.0.0.1:${AIDASHBOARD_PORT:-8281}:8080"
     restart: unless-stopped

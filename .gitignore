@@ -2,3 +2,6 @@
 **/bin/
 **/obj/
 aiteam/config/**/appsettings.*.json
+aiteam/aidashboard/src/aidashboard/Config/appsettings.*.json
+!aiteam/aidashboard/src/aidashboard/Config/appsettings.Production.json
+!aiteam/aidashboard/src/aidashboard/Config/appsettings.template.json

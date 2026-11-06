@@ -1,6 +1,9 @@
 # App configuration
 
-All three apps use the BotWebServer pattern: `IConfigurationHelper` registered
+aidashboard no longer uses this folder; see
+`aiteam/aidashboard/src/aidashboard/Config/README.md`.
+
+The agents and dbmigration use the BotWebServer pattern: `IConfigurationHelper` registered
 as `ConfigurationHelper<AgentSettings>` for the agents and
 `ConfigurationHelper<AppSettings>` for aidashboard and dbmigration, reading
 `Config/appsettings.<environment>.json`. JSON contains app/database settings and
