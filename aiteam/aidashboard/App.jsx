@@ -88,6 +88,15 @@ function AiShareBarChart({ items }) {
   return (
     <div data-testid="solved-ai-chart" className="mb-4">
       <h3 className="mb-1 text-sm font-semibold">AI vs non-AI per project</h3>
+      {hasData && (
+        <ul className="mb-2 text-sm">
+          {data.map((row) => (
+            <li key={row.project}>
+              {row.project}: AI ({row.aiCount}, {row.aiPercent}%); non-AI ({row.nonAiCount}, {row.nonAiPercent}%).
+            </li>
+          ))}
+        </ul>
+      )}
       {!hasData ? (
         <p className="text-sm text-slate-500">No solved tasks.</p>
       ) : (
