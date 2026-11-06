@@ -6,7 +6,7 @@ using DFCommonLib.Config;
 using DFCommonLib.Logger;
 using DFCommonLib.Utils;
 
-const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>DarkAIFactoy - AI Team workflow</title></head><body><h1>DarkAIFactoy - AI Team workflow</h1></body></html>";
+const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>DarkAIFactory - AI Team workflow</title></head><body><h1 style=\"text-align:center\">DarkAIFactory - AI Team workflow</h1></body></html>";
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
