@@ -97,8 +97,8 @@ services:
     depends_on:
       dbmigration:
         condition: service_completed_successfully
-    volumes:
-      - ${AIDASHBOARD_CONFIG_PATH:-./aidashboard/runtime-config}:/app/Config:ro
+#    volumes:
+#      - ${AIDASHBOARD_CONFIG_PATH:-./aidashboard/Config}:/app/Config:ro
     ports:
       - "127.0.0.1:${AIDASHBOARD_PORT:-8281}:8080"
     restart: unless-stopped

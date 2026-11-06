@@ -13,6 +13,7 @@ COPY aiteam/aidashboard/aidashboard.csproj ./
 RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
     --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
     dotnet restore aidashboard.csproj
+
 COPY aiteam/aidashboard/ ./
 COPY aiteam/shared/ /src/shared/
 RUN dotnet publish aidashboard.csproj --configuration Release --no-restore --output /app/publish

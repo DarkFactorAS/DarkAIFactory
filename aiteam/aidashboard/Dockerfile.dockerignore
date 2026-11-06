@@ -8,4 +8,4 @@
 **/UserSettings
 **/config/**/appsettings.*.json
 **/runtime-config/**/appsettings.*.json
-aiteam/aidashboard/Config/appsettings.*.json
+#aiteam/aidashboard/Config/appsettings.*.json
