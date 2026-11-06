@@ -1,3 +1,4 @@
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
@@ -20,19 +21,78 @@ function Panel({ title, state, emptyText, children }) {
   );
 }
 
+const PROJECT_COLORS = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
+const AI_COLORS = { ai: "#8b5cf6", nonAi: "#94a3b8" };
+
+export function formatPercent(value, total) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+export function legendLabel(name, value, total) {
+  return `${name} (${value}, ${formatPercent(value, total)}%)`;
+}
+
+function PieWithLegend({ title, slices, testId }) {
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const visible = slices.filter((slice) => slice.value > 0);
+  return (
+    <div data-testid={testId} className="mb-4">
+      <h3 className="mb-1 text-sm font-semibold">{title}</h3>
+      {total === 0 ? (
+        <p className="text-sm text-slate-500">No solved tasks.</p>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={160}>
+            <PieChart>
+              <Pie data={visible} dataKey="value" nameKey="name" outerRadius={70}>
+                {visible.map((slice) => (
+                  <Cell key={slice.name} fill={slice.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {slices.map((slice) => (
+              <li key={slice.name} className="flex items-center gap-1">
+                <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: slice.color }} />
+                {legendLabel(slice.name, slice.value, total)}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 function SolvedByProjectPanel() {
   const state = useApiData("/api/stats/solved-by-project");
   return (
     <Panel title="Tasks solved per project" state={state} emptyText="No solved tasks yet.">
       {(items) => (
-        <ul className="divide-y divide-slate-200">
+        <div>
+          <PieWithLegend
+            testId="solved-total-chart"
+            title="Solved tasks per project"
+            slices={items.map((item, index) => ({
+              name: item.project,
+              value: item.solvedCount,
+              color: PROJECT_COLORS[index % PROJECT_COLORS.length],
+            }))}
+          />
           {items.map((item) => (
-            <li key={item.project} className="flex justify-between py-2">
-              <span className="font-medium">{item.project}</span>
-              <span className="text-slate-600">{item.solvedCount}</span>
-            </li>
+            <PieWithLegend
+              key={item.project}
+              testId={`solved-ai-chart-${item.project}`}
+              title={`${item.project}: AI vs non-AI`}
+              slices={[
+                { name: "AI", value: item.aiCount ?? 0, color: AI_COLORS.ai },
+                { name: "Non-AI", value: item.nonAiCount ?? 0, color: AI_COLORS.nonAi },
+              ]}
+            />
           ))}
-        </ul>
+        </div>
       )}
     </Panel>
   );
@@ -81,7 +141,7 @@ export default function App() {
           DarkAIFactoy - AI Team workflow
         </h1>
       </header>
-      <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_2fr_1fr]">
+      <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
         <SolvedByProjectPanel />
         <TaskEditor />
         <ActiveAiTasksPanel />

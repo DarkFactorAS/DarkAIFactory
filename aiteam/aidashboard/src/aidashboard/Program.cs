@@ -44,8 +44,13 @@ builder.Services.AddScoped<IJiraCommentClient>(services => new JiraCommentClient
     services.GetRequiredService<IntegrationSettings>(),
     services.GetRequiredService<IHttpClientFactory>().CreateClient()));
 
-builder.Services.AddSingleton<IJiraSolvedClient>(services =>
-    new JiraSolvedClient(services.GetRequiredService<IntegrationSettings>()));
+builder.Services.AddScoped<IJiraSolvedClient>(services =>
+{
+    var repository = services.GetRequiredService<WorkflowLabelRepository>();
+    return new JiraSolvedClient(
+        services.GetRequiredService<IntegrationSettings>(),
+        repository.Load);
+});
 
 var app = builder.Build();
 app.UseAuthentication();
