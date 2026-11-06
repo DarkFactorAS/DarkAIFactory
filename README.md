@@ -14,6 +14,65 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
 - **dbmigration** — a one-shot executable that creates and upgrades the shared
   database before clients start. See [the migration README](aiteam/dbmigration/README.md).
 
+## Architecture / Dataflow
+
+```mermaid
+flowchart LR
+    subgraph EXT["External systems"]
+        Jira[("Jira")]
+        GH[("GitHub<br/>repository + PR")]
+        CLI[["GitHub Copilot CLI"]]
+        DB[("MariaDB<br/>agent_tasks, settings, manager_projects,<br/>manager_plans, pull_requests")]
+    end
+
+    subgraph SYS["DarkAIFactory services"]
+        MIG["dbmigration<br/>(one-shot)"]
+        DASH["aidashboard"]
+        JM["AIJiraManager<br/>(aijiramanager)"]
+        TL["AITechLead<br/>(aiteam/aimanager)"]
+        W["AIWorker<br/>(aiworker)"]
+    end
+
+    MIG -->|"1. create/upgrade schema (migrations)"| DB
+    DB -->|"Jira connection, credentials, status, issue type (settings)"| JM
+    DB -->|"credentials, labels, project mappings"| TL
+    DB -->|"credentials, labels, project mappings"| W
+
+    DASH <-->|"read: agent_tasks, settings, workflow labels / write: create/update agent_tasks"| DB
+    DASH <-->|"read: issue stats and active AI tasks / write: user comments"| Jira
+
+    JM -->|"poll agent_tasks with status New"| DB
+    JM -->|"create issue, move to Selected for Development"| Jira
+    JM -->|"Jira key, status Created/Failed"| DB
+
+    Jira -->|"issues, requirements, status"| TL
+    TL -->|"repo clone + prompt (read-only)"| CLI
+    CLI -->|"triage result / plan"| TL
+    TL -->|"plan comments, labels, status changes"| Jira
+    TL -->|"save plan, requirements hash"| DB
+    GH -->|"read-only clone"| TL
+
+    Jira -->|"analyzed issues, requirements"| W
+    DB -->|"stored plan (manager_plans)"| W
+    GH -->|"clone repo + submodules"| W
+    W -->|"repo + plan + prompt"| CLI
+    CLI -->|"code changes"| W
+    W -->|"push branch, create PR"| GH
+    W -->|"PR link/result comment, status"| Jira
+    W -->|"record PR (pull_requests)"| DB
+```
+
+Notes:
+
+- The AITechLead *is* the `aimanager` project; its folder, DB client key and
+  file names still say `aimanager`.
+- Jira, GitHub, Copilot CLI and MariaDB are external; the other nodes are
+  services in this repository.
+- Arrows show the direction of the data; the label is its content. Run
+  dbmigration before starting any other service.
+- The triage result reaches the worker through MariaDB (`manager_plans`) and
+  Jira labels, not through a direct call.
+
 ## Agent skills
 
 Shared agent skills are provided by the `.agents/skills` Git submodule. Clone
