@@ -38,8 +38,8 @@ flowchart LR
     DB -->|"credentials, labels, project mappings"| TL
     DB -->|"credentials, labels, project mappings"| W
 
-    DASH <-->|"read: tasks, plans, PRs / write: new agent_tasks"| DB
-    DASH -->|"read: issue stats and active AI tasks"| Jira
+    DASH <-->|"read: agent_tasks, settings, workflow labels / write: create/update agent_tasks"| DB
+    DASH <-->|"read: issue stats and active AI tasks / write: user comments"| Jira
 
     JM -->|"poll agent_tasks with status New"| DB
     JM -->|"create issue, move to Selected for Development"| Jira
