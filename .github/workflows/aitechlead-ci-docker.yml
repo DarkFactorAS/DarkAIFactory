@@ -7,7 +7,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/aitechlead-ci-docker.yml"
+      - "aiteam/aimanager/**"
+      - "aiteam/shared/**"
   pull_request:
+    paths:
+      - ".github/workflows/aitechlead-ci-docker.yml"
+      - "aiteam/aimanager/**"
+      - "aiteam/shared/**"
 
 jobs:
   build:
