@@ -1,19 +1,22 @@
 FROM node:22-alpine AS client
 WORKDIR /client
-COPY aiteam/aidashboard/package.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html aiteam/aidashboard/index.css aiteam/aidashboard/main.jsx aiteam/aidashboard/App.jsx aiteam/aidashboard/TaskEditor.jsx aiteam/aidashboard/AddTextPanel.jsx aiteam/aidashboard/useApiData.js ./
-RUN npm install
+COPY aiteam/aidashboard/package.json aiteam/aidashboard/package-lock.json aiteam/aidashboard/vite.config.js aiteam/aidashboard/index.html ./
+COPY aiteam/aidashboard/js/ ./js/
+COPY aiteam/aidashboard/css/ ./css/
+RUN npm ci
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
+WORKDIR /src/aidashboard
 COPY aiteam/aidashboard/NuGet.config ./
-COPY aiteam/aidashboard/src/aidashboard/aidashboard.csproj src/aidashboard/
+COPY aiteam/aidashboard/aidashboard.csproj ./
 RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
     --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
-    dotnet restore src/aidashboard/aidashboard.csproj
-COPY aiteam/aidashboard/src/aidashboard/ src/aidashboard/
-COPY aiteam/shared/ /shared/
-RUN dotnet publish src/aidashboard/aidashboard.csproj --configuration Release --no-restore --output /app/publish
+    dotnet restore aidashboard.csproj
+
+COPY aiteam/aidashboard/ ./
+COPY aiteam/shared/ /src/shared/
+RUN dotnet publish aidashboard.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

@@ -170,4 +170,4 @@ there before running them:
 
 The dashboard now has a [Dockerfile](aiteam/aidashboard/Dockerfile) using the
 same NuGet BuildKit secrets as the agents. It requires a runtime config mount
-at `/app/Config` (aidashboard uses its own `aiteam/aidashboard/src/aidashboard/Config` folder) and database access, just like local deployment.
+at `/app/Config` (aidashboard uses its own `aiteam/aidashboard/Config` folder) and database access, just like local deployment.

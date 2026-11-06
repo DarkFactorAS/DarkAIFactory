@@ -80,7 +80,7 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/aiteam/aidashboard/src/aidashboard/aidashboard.csproj",
+        "${workspaceFolder}/aiteam/aidashboard/aidashboard.csproj",
         "--configuration",
         "Debug"
       ],
@@ -94,7 +94,7 @@
       "args": [
         "run",
         "--project",
-        "${workspaceFolder}/aiteam/aidashboard/src/aidashboard/aidashboard.csproj"
+        "${workspaceFolder}/aiteam/aidashboard/aidashboard.csproj"
       ],
       "problemMatcher": "$msCompile"
     }
