@@ -40,7 +40,7 @@ contributors working in this repository.
 ## Project Conventions
 
 - Configuration files are in the config folder, except aidashboard, which has its own
-  `aiteam/aidashboard/src/aidashboard/Config` folder.
+  `aiteam/aidashboard/Config` folder.
 - Controllers, Providers, and Repositories are separated by folder.
 - Use tasks defined in tasks.json for build and run operations.
 

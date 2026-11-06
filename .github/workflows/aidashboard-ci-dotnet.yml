@@ -25,11 +25,11 @@ jobs:
           NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
         run: |
-          dotnet restore aiteam/aidashboard/src/aidashboard/aidashboard.csproj
-          dotnet restore aiteam/aidashboard/aidashboard.Tests.csproj
+          dotnet restore aiteam/aidashboard/aidashboard.csproj
+          dotnet restore aiteam/aidashboard/tests/aidashboard.Tests.csproj
 
       - name: Build
-        run: dotnet build aiteam/aidashboard/src/aidashboard/aidashboard.csproj --no-restore -c Release
+        run: dotnet build aiteam/aidashboard/aidashboard.csproj --no-restore -c Release
 
       - name: Unit tests
-        run: dotnet test aiteam/aidashboard/aidashboard.Tests.csproj --no-restore -c Release
+        run: dotnet test aiteam/aidashboard/tests/aidashboard.Tests.csproj --no-restore -c Release

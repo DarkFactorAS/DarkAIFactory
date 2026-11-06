@@ -13,19 +13,21 @@ credentials are never logged).
 `AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
 `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
-Jira failures return 502. Tests: `dotnet test aiteam/aidashboard/aidashboard.Tests.csproj`.
+Jira failures return 502. Tests: `dotnet test aiteam/aidashboard/tests/aidashboard.Tests.csproj`.
 
-The frontend sources sit directly in `aiteam/aidashboard` (`package.json`,
-`vite.config.js`, `index.html`, `main.jsx`, `App.jsx`, `index.css`). The Dockerfile builds them
+The frontend sources live in `aiteam/aidashboard` (`package.json`,
+`vite.config.js`, `index.html`) with the JavaScript/JSX sources in `js/`
+(`main.jsx`, `App.jsx`, `TaskEditor.jsx`, `AddTextPanel.jsx`, `useApiData.js`) and the
+stylesheets in `css/` (`index.css`). The Dockerfile builds them
 (`npm install && npm run build`) and copies the output to `/app/wwwroot`, which
 ASP.NET Core serves as static files with an SPA fallback to `index.html`
 (unknown `/api/*` routes return 404). For local frontend work run
 `npm install && npm run dev` in `aiteam/aidashboard` (proxies `/api` to localhost:5000).
 Without a built `wwwroot`, a plain HTML fallback page with the title is served.
 
-Build: `dotnet build aiteam/aidashboard/src/aidashboard/aidashboard.csproj`
+Build: `dotnet build aiteam/aidashboard/aidashboard.csproj`
 
-Run: `dotnet run --project aiteam/aidashboard/src/aidashboard/aidashboard.csproj`
+Run: `dotnet run --project aiteam/aidashboard/aidashboard.csproj`
 
 ## Docker and deployment
 
@@ -39,14 +41,14 @@ docker build . --file aiteam/aidashboard/Dockerfile --tag aidashboard \
 
 The image listens on port 8080 and runs as the non-root `app` user. Runtime
 configuration is excluded from the image; Compose mounts the separate
-`aiteam/aidashboard/config` directory read-only at `/app/Config`. To configure
+`aiteam/aidashboard/runtime-config` directory read-only at `/app/Config`. To configure
 it for Compose, create the runtime file from the template and set its database
 values to match `aiteam/.env`:
 
 ```sh
-mkdir -p aiteam/aidashboard/config
-cp aiteam/aidashboard/src/aidashboard/Config/appsettings.template.json \
-  aiteam/aidashboard/config/appsettings.Production.json
+mkdir -p aiteam/aidashboard/runtime-config
+cp aiteam/aidashboard/Config/appsettings.template.json \
+  aiteam/aidashboard/runtime-config/appsettings.Production.json
 ```
 
 Set `DatabaseConnection.Server` to `aiteam_database` and set the database,

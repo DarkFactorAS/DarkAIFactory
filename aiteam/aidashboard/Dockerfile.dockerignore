@@ -7,4 +7,5 @@
 **/dist
 **/UserSettings
 **/config/**/appsettings.*.json
-aiteam/aidashboard/src/aidashboard/Config/appsettings.*.json
+**/runtime-config/**/appsettings.*.json
+aiteam/aidashboard/Config/appsettings.*.json
