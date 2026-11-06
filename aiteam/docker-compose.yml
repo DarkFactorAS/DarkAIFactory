@@ -35,6 +35,8 @@ services:
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      NUGET_USERNAME: ${NUGET_USERNAME}
+      NUGET_TOKEN: ${NUGET_TOKEN}
       HOME: /tmp
     security_opt:
       - no-new-privileges:true
