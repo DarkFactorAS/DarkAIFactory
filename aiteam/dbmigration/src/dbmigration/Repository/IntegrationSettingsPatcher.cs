@@ -143,6 +143,42 @@ public static class IntegrationSettingsPatcher
                          'GitHub.AgentModel'))
                 )
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // Add the aiclaudeworker client (Claude Code CLI worker) with its Claude credentials and model.
+        patcher.Patch(system, 10,
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                    OR
+                    (`client` = 'aiclaudeworker' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                )
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 11,
+            """
+            INSERT INTO `settings` (`client`, `name`, `value`) VALUES
+                ('aiclaudeworker', 'GitHub.GitHubRepositoryToken', ''),
+                ('aiclaudeworker', 'Claude.AnthropicApiKey', ''),
+                ('aiclaudeworker', 'Claude.AgentModel', 'claude-sonnet-5-5')
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
+            """);
         return patcher.Successful();
     }
 }

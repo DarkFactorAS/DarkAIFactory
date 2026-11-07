@@ -1,7 +1,7 @@
 # dbmigration
 
 Standalone .NET 10 executable that creates/upgrades the database used by
-aimanager, aiworker and aidashboard. Clients only read/write data; none creates
+aimanager, aiworker, aiclaudeworker and aidashboard. Clients only read/write data; none creates
 tables or applies migrations.
 
 ## Configuration and local execution
@@ -41,6 +41,9 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `StartupDatabasePatcher` | 5 | `pull_requests` (Jira key, repository, PR number, unique PR URL), written by aiworker and read by AITechLead |
 | `IntegrationSettings` | 1 | `settings` with shared/client scope constraint |
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
+| `IntegrationSettings` | 10 | Scope constraint allows the `aiclaudeworker` client (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`, `Claude.AgentModel`) |
+| `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
+| `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
 
 Existing databases reuse their migration history. Already applied patches are

@@ -19,7 +19,7 @@ public sealed class IntegrationSettingsPatcherTests
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
 
-        Assert.Equal(15, values.Count);
+        Assert.Equal(18, values.Count);
         Assert.Contains("ON DUPLICATE KEY UPDATE `value` = `settings`.`value`", patcher.Sql[4]);
         Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", patcher.Sql[3]);
         Assert.Contains("'GitHub.AgentModel'", patcher.Sql[3]);
@@ -30,6 +30,12 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Empty(values[("shared", "Jira.JiraApiToken")]);
         Assert.Empty(values[("shared", "GitHub.AgentGitHubToken")]);
         Assert.Equal("gpt-5-mini", values[("aiworker", "GitHub.AgentModel")]);
+        Assert.Equal(3, values.Keys.Count(key => key.Client == "aiclaudeworker"));
+        Assert.Empty(values[("aiclaudeworker", "GitHub.GitHubRepositoryToken")]);
+        Assert.Empty(values[("aiclaudeworker", "Claude.AnthropicApiKey")]);
+        Assert.Equal("claude-sonnet-5-5", values[("aiclaudeworker", "Claude.AgentModel")]);
+        Assert.Contains("`client` = 'aiclaudeworker' AND `name` IN", patcher.Sql[9]);
+        Assert.Contains("'Claude.AnthropicApiKey'", patcher.Sql[9]);
         foreach (var client in Clients)
         {
             Assert.Equal(client == "aiworker" ? 2 : 1, values.Keys.Count(key => key.Client == client));
@@ -38,7 +44,7 @@ public sealed class IntegrationSettingsPatcherTests
     }
 
     [Theory]
-    [InlineData(0, true, 9)]
+    [InlineData(0, true, 11)]
     [InlineData(1, false, 1)]
     [InlineData(2, false, 2)]
     [InlineData(3, false, 3)]
@@ -48,6 +54,8 @@ public sealed class IntegrationSettingsPatcherTests
     [InlineData(7, false, 7)]
     [InlineData(8, false, 8)]
     [InlineData(9, false, 9)]
+    [InlineData(10, false, 10)]
+    [InlineData(11, false, 11)]
     public void Patcher_CreatesAndSeedsSettingsAndPropagatesFailures(
         int failingPatch, bool expected, int patchCount)
     {
@@ -82,9 +90,12 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 7),
             ("IntegrationSettings", 8),
             ("IntegrationSettings", 9),
+            ("IntegrationSettings", 10),
+            ("IntegrationSettings", 11),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
+            ("WorkflowLabels", 4),
             ("AgentTasks", 1)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -116,7 +127,7 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.True(WorkflowLabelPatcher.Run(patcher));
 
         Assert.Equal("WorkflowLabels", patcher.System);
-        Assert.Equal(3, patcher.Sql.Count);
+        Assert.Equal(4, patcher.Sql.Count);
         Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", patcher.Sql[0]);
         var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aidashboard)', '([^']+)', '([^']+)', '")
             .ToDictionary(match => (match.Groups[1].Value, match.Groups[2].Value), match => match.Groups[3].Value);
@@ -140,6 +151,14 @@ public sealed class IntegrationSettingsPatcherTests
         {
             Assert.Contains($"'Jira.{name}'", patcher.Sql[2]);
         }
+
+        var claudeRows = Regex.Matches(patcher.Sql[3], @"\('aiclaudeworker', '([^']+)', '([^']+)', '")
+            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
+        Assert.Equal(3, claudeRows.Count);
+        Assert.Equal(rows[("aiworker", "PickupLabel")], claudeRows["PickupLabel"]);
+        Assert.Equal(rows[("aiworker", "FailureLabel")], claudeRows["FailureLabel"]);
+        Assert.Equal(rows[("aiworker", "AnalyzedLabel")], claudeRows["AnalyzedLabel"]);
+        Assert.Contains("ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`", patcher.Sql[3]);
     }
 
     [Fact]
@@ -163,9 +182,12 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 7),
             ("IntegrationSettings", 8),
             ("IntegrationSettings", 9),
+            ("IntegrationSettings", 10),
+            ("IntegrationSettings", 11),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
+            ("WorkflowLabels", 4),
             ("AgentTasks", 1)], patcher.Executed);
 
         patcher.Executed.Clear();
@@ -186,8 +208,8 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Equal([
             ("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5),
             ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
-            ("IntegrationSettings", 9),
-            ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3),
+            ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
+            ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
             ("AgentTasks", 1)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());

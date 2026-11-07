@@ -64,6 +64,30 @@
       "group": "test"
     },
     {
+      "label": "build aiclaudeworker",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/aiteam/aiclaudeworker/src/ClaudeCodingAgent/ClaudeCodingAgent.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "test aiclaudeworker",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/aiteam/aiclaudeworker/ClaudeCodingAgent.Tests.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
       "label": "test aitechlead",
       "type": "process",
       "command": "dotnet",

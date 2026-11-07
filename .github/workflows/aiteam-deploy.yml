@@ -43,9 +43,20 @@ jobs:
       project_name: CodingAgent
     secrets: inherit
 
+  aiclaudeworker:
+    name: Deploy AIClaudeWorker
+    needs: [aiworker]
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/aiclaudeworker
+      project_name: ClaudeCodingAgent
+    secrets: inherit
+
   aijiramanager:
     name: Deploy AIJiraManager
-    needs: [aiworker]
+    needs: [aiclaudeworker]
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
     with:
       environment: production
