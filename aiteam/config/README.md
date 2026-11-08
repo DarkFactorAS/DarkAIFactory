@@ -59,7 +59,7 @@ column. Names use the former JSON section/property notation, for example
 - `aimanager`, `aiworker`, `aidashboard`: exactly `GitHub.GitHubRepositoryToken`
   (and `GitHub.AgentModel` for `aiworker`).
 - `aiclaudeworker`: exactly `GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`
-  (Anthropic API key or Claude Code OAuth token) and `Claude.AgentModel`
+  (optional; empty uses the Claude Code CLI login) and `Claude.AgentModel`
   (seeded as `claude-sonnet-5-5`). `Claude.*` names are never allowed on `shared`.
   Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
@@ -128,7 +128,8 @@ Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
 optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
 as `--model`; blank uses the CLI default. The `aiclaudeworker` client uses
 `Claude.AgentModel` (seeded as `claude-sonnet-5-5`) for the Claude Code CLI instead,
-and authenticates with `Claude.AnthropicApiKey` rather than `GitHub.AgentGitHubToken`.
+and runs `claude -p` with the CLI's own login (`claude auth login`, stored in a Docker
+volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitHub.AgentGitHubToken`.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),

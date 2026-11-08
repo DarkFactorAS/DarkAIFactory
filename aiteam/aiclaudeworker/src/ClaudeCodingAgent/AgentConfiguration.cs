@@ -70,7 +70,8 @@ internal sealed record AgentConfiguration(
             $"AND labels in (\"{EscapeJql(analyzedLabel)}\") " +
             "ORDER BY priority DESC, created ASC";
 
-        var anthropicApiKey = Required(settings.Claude.AnthropicApiKey, "aiclaudeworker: Claude.AnthropicApiKey");
+        // Optional: empty means the Claude Code CLI uses its own login (claude /login or setup-token).
+        var anthropicApiKey = Get(settings.Claude.AnthropicApiKey, string.Empty);
         var pollSeconds = settings.PollIntervalSeconds;
         if (pollSeconds < 5)
         {

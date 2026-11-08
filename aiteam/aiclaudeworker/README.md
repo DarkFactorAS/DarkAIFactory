@@ -1,7 +1,7 @@
 # Jira Claude Coding Agent (aiclaudeworker)
 
 AIClaudeWorker is a copy of [AIWorker](../aiworker/README.md) that uses the
-[Claude Code CLI](https://docs.claude.com/en/docs/claude-code) (`claude --print`)
+[Claude Code CLI](https://docs.claude.com/en/docs/claude-code) (`claude -p`)
 instead of GitHub Copilot CLI. Jira handling, manager-plan gating, branches,
 pull requests and recovery behave exactly as in AIWorker. It reads the database
 settings client and `workflow_labels` agent `aiclaudeworker`.
@@ -68,11 +68,25 @@ Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
-3. Set the `aiclaudeworker` row `Claude.AnthropicApiKey` to an Anthropic API key
-   (`sk-ant-api...`, from the Claude Console), or a Claude Code OAuth token
-   (`sk-ant-oat...`, created with `claude setup-token`). API keys are passed as
-   `ANTHROPIC_API_KEY`, OAuth tokens as `CLAUDE_CODE_OAUTH_TOKEN`. The Claude worker
-   does not use `GitHub.AgentGitHubToken`.
+3. Log the Claude Code CLI in once. The worker runs `claude -p`, which uses the
+   CLI's own login; no API key is needed. From the `aiteam` directory:
+
+   ```sh
+   docker compose --env-file .env -f docker-compose.yml run --rm -it --entrypoint claude claude-coding-agent auth login
+   ```
+
+   Open the printed URL, sign in with your Claude account and paste the code back.
+   The login is stored in `CLAUDE_CONFIG_DIR=/claude-config`, which Compose mounts
+   from the `aiteam_claude_config` volume (`CLAUDE_CONFIG_VOLUME_NAME` overrides
+   the name), so it survives rebuilds and restarts. Check it with
+   `... --entrypoint claude claude-coding-agent auth status`. At startup the worker
+   runs `claude auth status` and stops with an explanatory error if nobody is logged in.
+
+   Optional: instead of the CLI login you can set the `aiclaudeworker` row
+   `Claude.AnthropicApiKey` to an Anthropic API key (`sk-ant-api...`, passed as
+   `ANTHROPIC_API_KEY`) or a token from `claude setup-token` (`sk-ant-oat...`, passed
+   as `CLAUDE_CODE_OAUTH_TOKEN`). Leave it empty to use the CLI login. The Claude
+   worker does not use `GitHub.AgentGitHubToken`.
 4. Set the `aiclaudeworker` row `GitHub.GitHubRepositoryToken` to a separate fine-grained token with
    **Contents: read and write** and **Pull requests: read and write**
    permissions for all mapped repositories. The worker uses this token only to
@@ -181,7 +195,7 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraBaseUrl` | required | HTTPS Jira Cloud base URL |
 | `Jira.JiraEmail` | required | Jira account email |
 | `Jira.JiraApiToken` | required | Jira API token |
-| `Claude.AnthropicApiKey` | required (`aiclaudeworker` row) | Anthropic API key or Claude Code OAuth token |
+| `Claude.AnthropicApiKey` | empty (`aiclaudeworker` row) | Optional API key or `setup-token` token; empty uses the `claude auth login` session in the `claude_config` volume |
 | `Claude.AgentModel` | `claude-sonnet-5-5` (seeded, `aiclaudeworker` row) | Claude Code model (`--model`); blank uses the CLI default |
 | `GitHub.GitHubRepositoryToken` | required | Fine-grained token with Contents and Pull requests read/write access to the target repository |
 | `GitHub.TargetRepositoryUrl` | required without mappings | Fallback HTTPS repository URL when `manager_projects` is empty |

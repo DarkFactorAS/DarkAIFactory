@@ -3,7 +3,8 @@ using System.Diagnostics;
 namespace ClaudeCodingAgent;
 
 /// <summary>
-/// Runs the Claude Code CLI (<c>claude</c>) in headless print mode inside a cloned workspace.
+/// Runs the Claude Code CLI as <c>claude -p</c> (headless print mode) inside a cloned workspace.
+/// Authentication comes from the CLI's own login unless a credential is configured.
 /// </summary>
 internal sealed class ClaudeRunner
 {
@@ -27,23 +28,47 @@ internal sealed class ClaudeRunner
 
     public async Task CheckAvailableAsync(CancellationToken cancellationToken)
     {
+        var (exitCode, _, stderr) = await RunCliAsync(["--version"], cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Claude Code CLI version check failed with exit code {exitCode}. " +
+                (stderr.Length == 0 ? string.Empty : Limit(stderr, 2_000)));
+        }
+
+        if (_configuration.AnthropicApiKey.Length > 0)
+        {
+            return;
+        }
+
+        // Without a configured credential, `claude -p` relies on the CLI's own login.
+        var (statusExitCode, statusOutput, _) = await RunCliAsync(["auth", "status"], cancellationToken);
+        if (statusExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                "The Claude Code CLI is not logged in. Log in once with " +
+                "`docker compose run --rm -it --entrypoint claude claude-coding-agent auth login` " +
+                "(the login is kept in the claude_config volume), or set the aiclaudeworker " +
+                "Claude.AnthropicApiKey setting. " + Limit(statusOutput, 500));
+        }
+    }
+
+    private async Task<(int ExitCode, string Output, string Error)> RunCliAsync(
+        IEnumerable<string> arguments, CancellationToken cancellationToken)
+    {
         var startInfo = CreateStartInfo(Path.GetTempPath());
-        startInfo.ArgumentList.Add("--version");
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start the Claude Code CLI.");
         process.StandardInput.Close();
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
-        await stdoutTask;
-        var stderr = await stderrTask;
-        if (process.ExitCode != 0)
-        {
-            var detail = stderr.Trim();
-            throw new InvalidOperationException(
-                $"Claude Code CLI version check failed with exit code {process.ExitCode}. " +
-                (detail.Length == 0 ? string.Empty : Limit(detail, 2_000)));
-        }
+        return (process.ExitCode, (await stdoutTask).Trim(), (await stderrTask).Trim());
     }
 
     public async Task<string> RunAsync(
@@ -96,7 +121,7 @@ internal sealed class ClaudeRunner
 
     internal static IReadOnlyList<string> BuildArguments(string model, bool allowChanges)
     {
-        var arguments = new List<string> { "--print", "--output-format", "text" };
+        var arguments = new List<string> { "-p", "--output-format", "text" };
         if (model.Length > 0)
         {
             arguments.Add("--model");
@@ -142,15 +167,20 @@ internal sealed class ClaudeRunner
         environment["TERM"] = "dumb";
         environment["DISABLE_AUTOUPDATER"] = "1";
         environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1";
-        environment.Remove("ANTHROPIC_API_KEY");
-        environment.Remove("CLAUDE_CODE_OAUTH_TOKEN");
-        environment.Remove("ANTHROPIC_AUTH_TOKEN");
-        if (anthropicCredential.StartsWith(OAuthTokenPrefix, StringComparison.Ordinal))
+        if (anthropicCredential.Length == 0)
         {
+            // No configured credential: the CLI uses the login stored in CLAUDE_CONFIG_DIR.
+        }
+        else if (anthropicCredential.StartsWith(OAuthTokenPrefix, StringComparison.Ordinal))
+        {
+            environment.Remove("ANTHROPIC_API_KEY");
+            environment.Remove("ANTHROPIC_AUTH_TOKEN");
             environment["CLAUDE_CODE_OAUTH_TOKEN"] = anthropicCredential;
         }
         else
         {
+            environment.Remove("CLAUDE_CODE_OAUTH_TOKEN");
+            environment.Remove("ANTHROPIC_AUTH_TOKEN");
             environment["ANTHROPIC_API_KEY"] = anthropicCredential;
         }
 

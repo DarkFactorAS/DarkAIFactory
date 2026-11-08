@@ -7,7 +7,7 @@ public sealed class ClaudeRunnerTests
     {
         var arguments = ClaudeRunner.BuildArguments("claude-sonnet-5-5", allowChanges: false);
 
-        Assert.Equal(["--print", "--output-format", "text", "--model", "claude-sonnet-5-5"], arguments.Take(5));
+        Assert.Equal(["-p", "--output-format", "text", "--model", "claude-sonnet-5-5"], arguments.Take(5));
         Assert.Equal("default", ValueAfter(arguments, "--permission-mode"));
         Assert.DoesNotContain("bypassPermissions", arguments);
         var allowed = ValuesOf(arguments, "--allowedTools");
@@ -68,6 +68,25 @@ public sealed class ClaudeRunnerTests
 
         Assert.Equal("sk-ant-oat01-token", environment["CLAUDE_CODE_OAUTH_TOKEN"]);
         Assert.False(environment.ContainsKey("ANTHROPIC_API_KEY"));
+    }
+
+    [Fact]
+    public void ApplyEnvironment_WithoutCredentialLeavesCliLoginAndStillStripsSecrets()
+    {
+        var environment = new Dictionary<string, string?>
+        {
+            ["GH_TOKEN"] = "gh",
+            ["JIRA_API_TOKEN"] = "jira",
+            ["CLAUDE_CONFIG_DIR"] = "/claude-config"
+        };
+
+        ClaudeRunner.ApplyEnvironment(environment, string.Empty);
+
+        Assert.False(environment.ContainsKey("ANTHROPIC_API_KEY"));
+        Assert.False(environment.ContainsKey("CLAUDE_CODE_OAUTH_TOKEN"));
+        Assert.False(environment.ContainsKey("GH_TOKEN"));
+        Assert.False(environment.ContainsKey("JIRA_API_TOKEN"));
+        Assert.Equal("/claude-config", environment["CLAUDE_CONFIG_DIR"]);
     }
 
     private static string ValueAfter(IReadOnlyList<string> arguments, string flag) =>

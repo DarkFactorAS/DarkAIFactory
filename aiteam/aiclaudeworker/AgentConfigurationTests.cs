@@ -104,12 +104,11 @@ public sealed class AgentConfigurationTests
     }
 
     [Fact]
-    public void Load_RequiresAnthropicApiKey()
+    public void Load_AnthropicApiKeyIsOptionalSoTheCliLoginIsUsed()
     {
         using var env = new SettingsScope().WithValidDefaults().Set("Claude:AnthropicApiKey", null);
 
-        var exception = Assert.Throws<InvalidOperationException>(Load);
-        Assert.Contains("Claude.AnthropicApiKey", exception.Message);
+        Assert.Equal(string.Empty, Load().AnthropicApiKey);
     }
 
     [Fact]
