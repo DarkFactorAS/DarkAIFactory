@@ -53,7 +53,7 @@ internal static class ClaudeRunnerServer
         {
             try
             {
-                var workspacePath = ValidateWorkspacePath(request.WorkspacePath);
+                var workspacePath = ResolveWorkspacePath(request.WorkspaceId);
                 var (exitCode, output, error) = await RunCliAsync(
                     ClaudeRunner.BuildArguments(request.Model, request.AllowChanges),
                     workspacePath,
@@ -80,19 +80,17 @@ internal static class ClaudeRunnerServer
         await app.RunAsync();
     }
 
-    private static string ValidateWorkspacePath(string workspacePath)
+    private static string ResolveWorkspacePath(string workspaceId)
     {
-        var fullPath = Path.GetFullPath(workspacePath);
-        var workspacePrefix = WorkspaceRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(
-                workspacePrefix,
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
-            !Directory.Exists(fullPath))
+        if (!Guid.TryParseExact(workspaceId, "N", out var parsedId))
         {
-            throw new InvalidOperationException("The Claude CLI workspace must be an existing directory under /workspaces.");
+            throw new InvalidOperationException("The Claude CLI workspace ID is invalid.");
         }
 
-        return fullPath;
+        var workspacePath = Path.Combine(WorkspaceRoot, parsedId.ToString("N"), "checkout");
+        return Directory.Exists(workspacePath)
+            ? workspacePath
+            : throw new InvalidOperationException("The Claude CLI workspace does not exist.");
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> RunCliAsync(
@@ -179,7 +177,7 @@ internal static class ClaudeRunnerServer
         text.Length <= maximumLength ? text : text[..maximumLength] + "...";
 
     internal sealed record RunnerRequest(
-        string WorkspacePath = "",
+        string WorkspaceId = "",
         string Prompt = "",
         string Model = "",
         bool AllowChanges = false,

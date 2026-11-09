@@ -12,19 +12,20 @@ internal static partial class GitHubRepository
         var workspaceBasePath = Environment.GetEnvironmentVariable("CLAUDE_WORKSPACE_ROOT");
         if (string.IsNullOrWhiteSpace(workspaceBasePath))
         {
-            workspaceBasePath = null;
+            workspaceBasePath = Path.GetTempPath();
         }
 
-        if (workspaceBasePath is not null)
+        Directory.CreateDirectory(workspaceBasePath);
+        var workspaceRoot = Directory.CreateDirectory(Path.Combine(
+            workspaceBasePath,
+            Guid.NewGuid().ToString("N")));
+        if (!OperatingSystem.IsWindows())
         {
-            Directory.CreateDirectory(workspaceBasePath);
+            File.SetUnixFileMode(
+                workspaceRoot.FullName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
-        var workspaceRoot = workspaceBasePath is null
-            ? Directory.CreateTempSubdirectory("aiclaudeworker-")
-            : Directory.CreateDirectory(Path.Combine(
-                workspaceBasePath,
-                $"aiclaudeworker-{Guid.NewGuid():N}"));
         var workspacePath = Path.Combine(workspaceRoot.FullName, "checkout");
         Directory.CreateDirectory(workspacePath);
         var hooksPath = Path.Combine(workspaceRoot.FullName, "disabled-hooks");

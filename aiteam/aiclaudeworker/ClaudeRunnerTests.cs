@@ -49,13 +49,17 @@ public sealed class ClaudeRunnerTests
         var handler = new RunnerHandler("""{"output":"implemented"}""");
         using var runner = new ClaudeRunner(Configuration, handler, new Uri("http://runner:8080"));
 
-        var output = await runner.RunAsync("/workspaces/task/checkout", "Implement this", true, CancellationToken.None);
+        var output = await runner.RunAsync(
+            "/workspaces/00000000000000000000000000000001/checkout",
+            "Implement this",
+            true,
+            CancellationToken.None);
 
         Assert.Equal("implemented", output);
         Assert.Equal(HttpMethod.Post, handler.Request!.Method);
         Assert.Equal("http://runner:8080/run", handler.Request.RequestUri!.AbsoluteUri);
         using var body = JsonDocument.Parse(handler.Body!);
-        Assert.Equal("/workspaces/task/checkout", body.RootElement.GetProperty("workspacePath").GetString());
+        Assert.Equal("00000000000000000000000000000001", body.RootElement.GetProperty("workspaceId").GetString());
         Assert.Equal("Implement this", body.RootElement.GetProperty("prompt").GetString());
         Assert.Equal("anthropic-key", body.RootElement.GetProperty("anthropicCredential").GetString());
         Assert.DoesNotContain("jira-token", handler.Body);

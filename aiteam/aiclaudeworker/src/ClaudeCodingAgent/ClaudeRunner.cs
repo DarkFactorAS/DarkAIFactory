@@ -49,7 +49,11 @@ internal sealed class ClaudeRunner : IDisposable
         using var response = await _httpClient.PostAsJsonAsync(
             "/run",
             new ClaudeRunnerServer.RunnerRequest(
-                workspacePath, prompt, _configuration.AgentModel, allowChanges, _configuration.AnthropicApiKey),
+                WorkspaceId(workspacePath),
+                prompt,
+                _configuration.AgentModel,
+                allowChanges,
+                _configuration.AnthropicApiKey),
             cancellationToken);
         await EnsureRunnerSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<ClaudeRunnerServer.RunnerResponse>(
@@ -71,6 +75,17 @@ internal sealed class ClaudeRunner : IDisposable
         throw new InvalidOperationException(
             $"The isolated Claude runner returned status {(int)response.StatusCode}. " +
             (body.Length <= 2_000 ? body : body[..2_000] + "..."));
+    }
+
+    private static string WorkspaceId(string workspacePath)
+    {
+        var workspaceId = Directory.GetParent(workspacePath)?.Name;
+        if (!Guid.TryParseExact(workspaceId, "N", out var parsedId))
+        {
+            throw new InvalidOperationException("The Claude CLI workspace has an invalid workspace ID.");
+        }
+
+        return parsedId.ToString("N");
     }
 
     internal static IReadOnlyList<string> BuildArguments(string model, bool allowChanges)
