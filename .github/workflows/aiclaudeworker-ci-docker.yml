@@ -20,7 +20,7 @@ on:
 jobs:
   build:
     name: Build Docker Image
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-ci.yml@v1.8
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-docker-ci.yml@v1.8
     with:
       project_path: "aiteam/aiclaudeworker"
       project_name: "ClaudeCodingAgent"
