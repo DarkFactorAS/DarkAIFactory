@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Net.Http.Json;
 
 namespace ClaudeCodingAgent;
 
@@ -6,7 +6,7 @@ namespace ClaudeCodingAgent;
 /// Runs the Claude Code CLI as <c>claude -p</c> (headless print mode) inside a cloned workspace.
 /// Authentication comes from the CLI's own login unless a credential is configured.
 /// </summary>
-internal sealed class ClaudeRunner
+internal sealed class ClaudeRunner : IDisposable
 {
     internal const string OAuthTokenPrefix = "sk-ant-oat";
 
@@ -20,55 +20,24 @@ internal sealed class ClaudeRunner
     private static readonly string[] AlwaysDeniedTools = ["Bash(git push:*)", "Bash(gh:*)"];
 
     private readonly AgentConfiguration _configuration;
+    private readonly HttpClient _httpClient;
 
-    public ClaudeRunner(AgentConfiguration configuration)
+    public ClaudeRunner(AgentConfiguration configuration, HttpMessageHandler? handler = null, Uri? runnerUrl = null)
     {
         _configuration = configuration;
+        _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        _httpClient.BaseAddress = runnerUrl ?? new Uri(
+            Environment.GetEnvironmentVariable("CLAUDE_RUNNER_URL") ?? "http://claude-cli:8080");
+        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
     }
 
     public async Task CheckAvailableAsync(CancellationToken cancellationToken)
     {
-        var (exitCode, _, stderr) = await RunCliAsync(["--version"], cancellationToken);
-        if (exitCode != 0)
-        {
-            throw new InvalidOperationException(
-                $"Claude Code CLI version check failed with exit code {exitCode}. " +
-                (stderr.Length == 0 ? string.Empty : Limit(stderr, 2_000)));
-        }
-
-        if (_configuration.AnthropicApiKey.Length > 0)
-        {
-            return;
-        }
-
-        // Without a configured credential, `claude -p` relies on the CLI's own login.
-        var (statusExitCode, statusOutput, _) = await RunCliAsync(["auth", "status"], cancellationToken);
-        if (statusExitCode != 0)
-        {
-            throw new InvalidOperationException(
-                "The Claude Code CLI is not logged in. Log in once with " +
-                "`docker compose run --rm -it --entrypoint claude claude-coding-agent auth login` " +
-                "(the login is kept in the claude_config volume), or set the aiclaudeworker " +
-                "Claude.AnthropicApiKey setting. " + Limit(statusOutput, 500));
-        }
-    }
-
-    private async Task<(int ExitCode, string Output, string Error)> RunCliAsync(
-        IEnumerable<string> arguments, CancellationToken cancellationToken)
-    {
-        var startInfo = CreateStartInfo(Path.GetTempPath());
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Claude Code CLI.");
-        process.StandardInput.Close();
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-        return (process.ExitCode, (await stdoutTask).Trim(), (await stderrTask).Trim());
+        using var response = await _httpClient.PostAsJsonAsync(
+            "/check",
+            new ClaudeRunnerServer.RunnerRequest(AnthropicCredential: _configuration.AnthropicApiKey),
+            cancellationToken);
+        await EnsureRunnerSuccessAsync(response, cancellationToken);
     }
 
     public async Task<string> RunAsync(
@@ -77,46 +46,31 @@ internal sealed class ClaudeRunner
         bool allowChanges,
         CancellationToken cancellationToken)
     {
-        var startInfo = CreateStartInfo(workspacePath);
-        foreach (var argument in BuildArguments(_configuration.AgentModel, allowChanges))
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the Claude Code CLI.");
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        try
-        {
-            // The prompt goes through stdin so it is not visible in the process list.
-            await process.StandardInput.WriteAsync(prompt.AsMemory(), cancellationToken);
-            process.StandardInput.Close();
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-
-            throw;
-        }
-
-        var output = (await stdoutTask).Trim();
-        var error = (await stderrTask).Trim();
-        if (process.ExitCode != 0)
-        {
-            var detail = error.Length == 0
-                ? output.Length == 0 ? string.Empty : $" Details: {Limit(output, 2_000)}"
-                : $" Details: {Limit(error, 2_000)}";
-            throw new InvalidOperationException($"Claude Code CLI failed with exit code {process.ExitCode}.{detail}");
-        }
-
-        return output.Length > 0
-            ? output
+        using var response = await _httpClient.PostAsJsonAsync(
+            "/run",
+            new ClaudeRunnerServer.RunnerRequest(
+                workspacePath, prompt, _configuration.AgentModel, allowChanges, _configuration.AnthropicApiKey),
+            cancellationToken);
+        await EnsureRunnerSuccessAsync(response, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<ClaudeRunnerServer.RunnerResponse>(
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException("The isolated Claude runner returned no response.");
+        return result.Output.Length > 0
+            ? result.Output
             : throw new InvalidOperationException("Claude Code CLI returned no response.");
+    }
+
+    private static async Task EnsureRunnerSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        throw new InvalidOperationException(
+            $"The isolated Claude runner returned status {(int)response.StatusCode}. " +
+            (body.Length <= 2_000 ? body : body[..2_000] + "..."));
     }
 
     internal static IReadOnlyList<string> BuildArguments(string model, bool allowChanges)
@@ -197,22 +151,5 @@ internal sealed class ClaudeRunner
         }
     }
 
-    private ProcessStartInfo CreateStartInfo(string workspacePath)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "claude",
-            WorkingDirectory = workspacePath,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        ApplyEnvironment(startInfo.Environment, _configuration.AnthropicApiKey);
-        return startInfo;
-    }
-
-    private static string Limit(string text, int maximumLength) =>
-        text.Length <= maximumLength ? text : text[..maximumLength] + "...";
+    public void Dispose() => _httpClient.Dispose();
 }

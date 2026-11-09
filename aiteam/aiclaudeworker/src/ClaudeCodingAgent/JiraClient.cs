@@ -30,8 +30,10 @@ internal sealed class JiraClient : IDisposable
 
     public Task<IReadOnlyList<JiraIssue>> FindPullRequestTrackingIssuesAsync(CancellationToken cancellationToken) =>
         SearchAsync(
-            $"project = \"{EscapeJql(_configuration.JiraProjectKey)}\" " +
-            $"AND labels in (\"{EscapeJql(PullRequestRecordRecovery.PendingLabel)}\") ORDER BY updated ASC",
+            (_configuration.ManagerProjectId.HasValue
+                ? $"project = \"{EscapeJql(_configuration.JiraProjectKey)}\" AND "
+                : string.Empty) +
+            $"labels in (\"{EscapeJql(PullRequestRecordRecovery.PendingLabel)}\") ORDER BY updated ASC",
             cancellationToken);
 
     private async Task<IReadOnlyList<JiraIssue>> SearchAsync(string jql, CancellationToken cancellationToken)

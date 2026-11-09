@@ -8,6 +8,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
 
+if (args is ["--claude-runner-server"])
+{
+    await ClaudeRunnerServer.RunAsync();
+    return;
+}
+
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
@@ -17,6 +23,7 @@ builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<ManagerPlanReader>();
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
+builder.Services.AddScoped<JiraIssueClaimRepository>();
 using var host = builder.Build();
 DFLogger.LogOutput(
     DFLogLevel.INFO,
@@ -74,7 +81,7 @@ try
         foreach (var configuration in configurations)
         {
             using var jira = new JiraClient(configuration);
-            var claude = new ClaudeRunner(configuration);
+            using var claude = new ClaudeRunner(configuration);
             var pullRequests = scope.ServiceProvider.GetRequiredService<PullRequestRepository>();
             try
             {
@@ -163,6 +170,14 @@ try
                     jira.RemoveLabelAsync,
                     message => DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", message),
                     cancellation.Token);
+                using var issueClaim = scope.ServiceProvider.GetRequiredService<JiraIssueClaimRepository>()
+                    .TryAcquire(issue.Key);
+                if (issueClaim is null)
+                {
+                    DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Another worker is already processing {issue.Key}.");
+                    continue;
+                }
+
                 DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
 
                 string? workspacePath = null;
@@ -170,6 +185,7 @@ try
                 string? pushedBranchName = null;
                 string? pullRequestUrl = null;
                 var inProgressTransitionAttempted = false;
+                var inProgressTransitionCompleted = false;
                 var resultCommentPosted = false;
                 try
                 {
@@ -204,6 +220,7 @@ try
                     {
                         inProgressTransitionAttempted = true;
                         await jira.TransitionToAsync(issue.Key, configuration.InProgressStatus, cancellation.Token);
+                        inProgressTransitionCompleted = true;
                     }
                     catch (Exception exception) when (!cancellation.IsCancellationRequested)
                     {
@@ -237,6 +254,8 @@ try
                             issue.Key,
                             cancellation.Token);
                         branchName = createdBranchName;
+                        var initialRevision = await GitHubRepository.GetCurrentRevisionAsync(
+                            configuration, workspacePath, cancellation.Token);
                         string plan;
                         if (managerPlan is not null)
                         {
@@ -270,6 +289,7 @@ try
                             createdBranchName,
                             issue.Key,
                             issue.Summary,
+                            initialRevision,
                             cancellation.Token);
                         pushedBranchName = pushResult.PushedBranchName;
                         var message = pushResult.Message;
@@ -315,6 +335,16 @@ try
                         }
                         else
                         {
+                            if (inProgressTransitionCompleted &&
+                                issue.StatusName.Length > 0 &&
+                                !string.Equals(
+                                    issue.StatusName,
+                                    configuration.InProgressStatus,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                await jira.TransitionToAsync(issue.Key, issue.StatusName, cancellation.Token);
+                            }
+
                             message += " No pull request was created and the issue status was left unchanged.";
                         }
 

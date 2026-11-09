@@ -1,7 +1,67 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+
 namespace ClaudeCodingAgent.Tests;
 
 public sealed class ClaudeRunnerTests
 {
+    private static AgentConfiguration Configuration => new(
+        new Uri("https://example.atlassian.net"),
+        "bot@example.com",
+        "jira-token",
+        "agent-token",
+        "repo-token",
+        new Uri("https://github.com/owner/repo"),
+        "project = X",
+        "picked",
+        "failed",
+        "In Progress",
+        "In Review",
+        TimeSpan.FromSeconds(30))
+    {
+        AnthropicApiKey = "anthropic-key"
+    };
+
+    private sealed class RunnerHandler(string responseBody) : HttpMessageHandler
+    {
+        public HttpRequestMessage? Request { get; private set; }
+        public string? Body { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            Body = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_SendsPromptToIsolatedRunnerAndReturnsItsOutput()
+    {
+        var handler = new RunnerHandler("""{"output":"implemented"}""");
+        using var runner = new ClaudeRunner(Configuration, handler, new Uri("http://runner:8080"));
+
+        var output = await runner.RunAsync("/workspaces/task/checkout", "Implement this", true, CancellationToken.None);
+
+        Assert.Equal("implemented", output);
+        Assert.Equal(HttpMethod.Post, handler.Request!.Method);
+        Assert.Equal("http://runner:8080/run", handler.Request.RequestUri!.AbsoluteUri);
+        using var body = JsonDocument.Parse(handler.Body!);
+        Assert.Equal("/workspaces/task/checkout", body.RootElement.GetProperty("workspacePath").GetString());
+        Assert.Equal("Implement this", body.RootElement.GetProperty("prompt").GetString());
+        Assert.Equal("anthropic-key", body.RootElement.GetProperty("anthropicCredential").GetString());
+        Assert.DoesNotContain("jira-token", handler.Body);
+        Assert.DoesNotContain("repo-token", handler.Body);
+    }
+
     [Fact]
     public void BuildArguments_PlanningIsReadOnlyAndHeadless()
     {

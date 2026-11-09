@@ -8,6 +8,7 @@ internal sealed class DatabaseStub : IDbConnectionFactory
     public DataTable Rows { get; } = new();
     public List<Command> Commands { get; } = [];
     public int AffectedRows { get; set; } = 1;
+    public object? ScalarResult { get; set; }
     public Func<Command, int>? OnNonQuery { get; set; }
     public Func<Command, IDataReader>? OnReader { get; set; }
 
@@ -30,7 +31,7 @@ internal sealed class DatabaseStub : IDbConnectionFactory
         public IDataParameterCollection Parameters => throw new NotSupportedException();
         public int ExecuteNonQuery() => database.OnNonQuery?.Invoke(this) ?? database.AffectedRows;
         public IDataReader ExecuteReader() => database.OnReader?.Invoke(this) ?? database.Rows.CreateDataReader();
-        public object ExecuteScalar() => throw new NotSupportedException();
+        public object ExecuteScalar() => database.ScalarResult!;
         public TReturnType ExecuteScalar<TReturnType>() => throw new NotSupportedException();
         public void Prepare() => throw new NotSupportedException();
         public IDbDataParameter AddParameter(string name, DbType dbType) => throw new NotSupportedException();
@@ -43,6 +44,7 @@ internal sealed class DatabaseStub : IDbConnectionFactory
         public IDbDataParameter AddParameter(string name, object value, DbType dbType, ParameterDirection direction) =>
             throw new NotSupportedException();
         public void AddClobParameter(string name, object value) => throw new NotSupportedException();
-        public void Dispose() { }
+        public bool IsDisposed { get; private set; }
+        public void Dispose() => IsDisposed = true;
     }
 }

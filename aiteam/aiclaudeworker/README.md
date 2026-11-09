@@ -68,19 +68,22 @@ Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
 2. In the database `settings` table, set shared `Jira.JiraBaseUrl`, `Jira.JiraEmail`, and `Jira.JiraApiToken`.
-3. Log the Claude Code CLI in once. The worker runs `claude -p`, which uses the
-   CLI's own login; no API key is needed. From the `aiteam` directory:
+3. Log the Claude Code CLI in once. The isolated `claude-cli` service runs
+   `claude -p`, which uses the CLI's own login; no API key is needed. From the
+   `aiteam` directory:
 
    ```sh
-   docker compose --env-file .env -f docker-compose.yml run --rm -it --entrypoint claude claude-coding-agent auth login
+   docker compose --env-file .env -f docker-compose.yml run --rm -it --entrypoint claude claude-cli auth login
    ```
 
    Open the printed URL, sign in with your Claude account and paste the code back.
    The login is stored in `CLAUDE_CONFIG_DIR=/claude-config`, which Compose mounts
    from the `aiteam_claude_config` volume (`CLAUDE_CONFIG_VOLUME_NAME` overrides
    the name), so it survives rebuilds and restarts. Check it with
-   `... --entrypoint claude claude-coding-agent auth status`. At startup the worker
-   runs `claude auth status` and stops with an explanatory error if nobody is logged in.
+   `... --entrypoint claude claude-cli auth status`. The CLI runs in a separate
+   container that receives the checkout volume and login, but not the worker's
+   `/app/Config` database settings. At startup the worker checks the isolated CLI
+   and stops with an explanatory error if nobody is logged in.
 
    Optional: instead of the CLI login you can set the `aiclaudeworker` row
    `Claude.AnthropicApiKey` to an Anthropic API key (`sk-ant-api...`, passed as
@@ -113,9 +116,12 @@ Run [dbmigration](../dbmigration/README.md) before starting the worker.
 
 The Compose file and `.env` are in `aiteam/`; the Docker build context is
 the repository root (the Dockerfile is `aiteam/aiclaudeworker/Dockerfile`, as used by CI).
-The image installs the Claude Code CLI globally with npm; the Compose service is `claude-coding-agent`.
-To start only the Claude worker: `docker compose --env-file .env -f docker-compose.yml up --build -d claude-coding-agent`.
-Compose runs dbmigration successfully before starting the worker.
+The image installs the Claude Code CLI globally with npm; Compose runs the worker
+as `claude-coding-agent` and its isolated CLI service as `claude-cli`. The CLI
+service shares only the checkout and login volumes with the worker and connects
+over a dedicated Compose network. To start only the Claude worker and its
+dependencies: `docker compose --env-file .env -f docker-compose.yml up --build -d claude-coding-agent`.
+Compose runs dbmigration and waits for the isolated CLI before starting the worker.
 For initial setup, run the migration service separately and populate its seeded
 settings before starting the worker, as described in the configuration guide.
 For each issue, the worker clones the repository to an

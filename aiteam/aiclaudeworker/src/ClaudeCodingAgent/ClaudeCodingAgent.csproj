@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Include="../../../shared/*.cs" Link="Configuration/%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="ClaudeCodingAgent.Tests" />
     <PackageReference Include="DarkFactor.Common.Lib" Version="1.6.6" />

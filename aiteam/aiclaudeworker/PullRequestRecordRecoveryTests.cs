@@ -105,11 +105,25 @@ public sealed class PullRequestRecordRecoveryTests
         Assert.Equal(42L, command.Values["@pr_number"]);
         Assert.Contains(handler.Requests, request =>
             request.Path == "/rest/api/3/search/jql" &&
-            request.Query.Contains("project = \"TASK\"", StringComparison.Ordinal) &&
+            !request.Query.Contains("project =", StringComparison.Ordinal) &&
             request.Query.Contains(PullRequestRecordRecovery.PendingLabel, StringComparison.Ordinal));
         Assert.Contains(handler.Requests, request =>
             request.Method == HttpMethod.Put &&
             request.Body!.Contains("\"remove\":\"ai-pr-tracking-pending\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FindPullRequestTrackingIssuesAsync_RestrictsManagerProjectMappings()
+    {
+        var configuration = Configuration with { ManagerProjectId = 7 };
+        var handler = new RecoveryHandler("https://github.com/owner/repo/pull/42");
+        using var jira = new JiraClient(configuration, handler);
+
+        await jira.FindPullRequestTrackingIssuesAsync(CancellationToken.None);
+
+        Assert.Contains(handler.Requests, request =>
+            request.Path == "/rest/api/3/search/jql" &&
+            request.Query.Contains("project = \"TASK\"", StringComparison.Ordinal));
     }
 
     [Fact]

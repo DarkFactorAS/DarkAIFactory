@@ -58,10 +58,11 @@ public static class WorkflowLabelPatcher
         // exclusion and the dashboard keep working whichever worker picks an issue up.
         patcher.Patch(system, 4,
             """
-            INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`) VALUES
-                ('aiclaudeworker', 'PickupLabel', 'ai-agent-picked', 'Added by the Claude worker agent when it picks up a Jira issue, to avoid repeated pickup. Keep equal to the aiworker PickupLabel so the manager query excludes it.'),
-                ('aiclaudeworker', 'FailureLabel', 'ai-agent-failed', 'Added by the Claude worker agent when processing a Jira issue fails; issues with this label are excluded from polling.'),
-                ('aiclaudeworker', 'AnalyzedLabel', 'ai-analyzed', 'Manager handoff label required by the Claude worker default query; the worker only processes issues that have it.')
+            INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`)
+            SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`
+            FROM `workflow_labels`
+            WHERE `agent_name` = 'aiworker'
+                AND `code_key` IN ('PickupLabel', 'FailureLabel', 'AnalyzedLabel')
             ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
             """);
         return patcher.Successful();

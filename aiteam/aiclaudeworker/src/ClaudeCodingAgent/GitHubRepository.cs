@@ -9,7 +9,22 @@ internal static partial class GitHubRepository
 {
     public static string CreateWorkspacePath()
     {
-        var workspaceRoot = Directory.CreateTempSubdirectory("aiclaudeworker-");
+        var workspaceBasePath = Environment.GetEnvironmentVariable("CLAUDE_WORKSPACE_ROOT");
+        if (string.IsNullOrWhiteSpace(workspaceBasePath))
+        {
+            workspaceBasePath = null;
+        }
+
+        if (workspaceBasePath is not null)
+        {
+            Directory.CreateDirectory(workspaceBasePath);
+        }
+
+        var workspaceRoot = workspaceBasePath is null
+            ? Directory.CreateTempSubdirectory("aiclaudeworker-")
+            : Directory.CreateDirectory(Path.Combine(
+                workspaceBasePath,
+                $"aiclaudeworker-{Guid.NewGuid():N}"));
         var workspacePath = Path.Combine(workspaceRoot.FullName, "checkout");
         Directory.CreateDirectory(workspacePath);
         var hooksPath = Path.Combine(workspaceRoot.FullName, "disabled-hooks");
@@ -62,6 +77,7 @@ internal static partial class GitHubRepository
         string branchName,
         string issueKey,
         string summary,
+        string initialRevision,
         CancellationToken cancellationToken)
     {
         var status = await RunGitAsync(
@@ -71,9 +87,9 @@ internal static partial class GitHubRepository
             cancellationToken);
         if (string.IsNullOrWhiteSpace(status.StandardOutput))
         {
-            return new PushResult(
-                "The agent made no repository changes, so nothing was committed or pushed.",
-                null);
+            return await PushAgentCommitsAsync(
+                configuration, workspacePath, branchName, initialRevision, cancellationToken)
+                ?? new PushResult("The agent made no repository changes, so nothing was committed or pushed.", null);
         }
 
         await RunGitAsync(
@@ -101,9 +117,11 @@ internal static partial class GitHubRepository
             allowExitCodeOne: true);
         if (stagedChanges.ExitCode == 0)
         {
-            return new PushResult(
-                "The agent made no committable repository changes, so nothing was committed or pushed.",
-                null);
+            return await PushAgentCommitsAsync(
+                configuration, workspacePath, branchName, initialRevision, cancellationToken)
+                ?? new PushResult(
+                    "The agent made no committable repository changes, so nothing was committed or pushed.",
+                    null);
         }
 
         var commitSummary = SummaryForCommit().Replace(summary, " ").Trim();
@@ -123,10 +141,12 @@ internal static partial class GitHubRepository
                 "Co-authored-by: Claude <noreply@anthropic.com>"
             ],
             cancellationToken);
+        await EnsureNoUserSettingsChangesAsync(
+            configuration, workspacePath, initialRevision, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
-            ["push", "--quiet", "origin", branchName],
+            ["push", "--quiet", "origin", $"HEAD:refs/heads/{branchName}"],
             cancellationToken,
             requiresGitHubCredentials: true);
 
@@ -134,6 +154,16 @@ internal static partial class GitHubRepository
             $"Changes were committed and pushed to branch `{branchName}`.",
             branchName);
     }
+
+    public static async Task<string> GetCurrentRevisionAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        CancellationToken cancellationToken) =>
+        (await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["rev-parse", "--verify", "HEAD"],
+            cancellationToken)).StandardOutput.Trim();
 
     public static (string Owner, string RepositoryName) ParseOwnerAndRepository(Uri gitHubRepositoryUrl)
     {
@@ -321,6 +351,51 @@ internal static partial class GitHubRepository
         if (value is not null)
         {
             startInfo.Environment[name] = value;
+        }
+    }
+
+    private static async Task<PushResult?> PushAgentCommitsAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string branchName,
+        string initialRevision,
+        CancellationToken cancellationToken)
+    {
+        var currentRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
+        if (string.Equals(currentRevision, initialRevision, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        await EnsureNoUserSettingsChangesAsync(
+            configuration, workspacePath, initialRevision, cancellationToken);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["push", "--quiet", "origin", $"HEAD:refs/heads/{branchName}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        return new PushResult(
+            $"The agent's commits were pushed to branch `{branchName}`.",
+            branchName);
+    }
+
+    private static async Task EnsureNoUserSettingsChangesAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string initialRevision,
+        CancellationToken cancellationToken)
+    {
+        var changedPaths = await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["diff", "--name-only", "-z", initialRevision, "HEAD"],
+            cancellationToken);
+        if (changedPaths.StandardOutput.Split('\0').Any(path =>
+                path.Equals("UserSettings", StringComparison.Ordinal) ||
+                path.StartsWith("UserSettings/", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Refusing to push commits that modify files under UserSettings/.");
         }
     }
 

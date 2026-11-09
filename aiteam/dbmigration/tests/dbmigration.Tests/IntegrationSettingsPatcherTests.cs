@@ -152,12 +152,10 @@ public sealed class IntegrationSettingsPatcherTests
             Assert.Contains($"'Jira.{name}'", patcher.Sql[2]);
         }
 
-        var claudeRows = Regex.Matches(patcher.Sql[3], @"\('aiclaudeworker', '([^']+)', '([^']+)', '")
-            .ToDictionary(match => match.Groups[1].Value, match => match.Groups[2].Value);
-        Assert.Equal(3, claudeRows.Count);
-        Assert.Equal(rows[("aiworker", "PickupLabel")], claudeRows["PickupLabel"]);
-        Assert.Equal(rows[("aiworker", "FailureLabel")], claudeRows["FailureLabel"]);
-        Assert.Equal(rows[("aiworker", "AnalyzedLabel")], claudeRows["AnalyzedLabel"]);
+        Assert.Contains("SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`", patcher.Sql[3]);
+        Assert.Contains("FROM `workflow_labels`", patcher.Sql[3]);
+        Assert.Contains("WHERE `agent_name` = 'aiworker'", patcher.Sql[3]);
+        Assert.Contains("('PickupLabel', 'FailureLabel', 'AnalyzedLabel')", patcher.Sql[3]);
         Assert.Contains("ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`", patcher.Sql[3]);
     }
 
