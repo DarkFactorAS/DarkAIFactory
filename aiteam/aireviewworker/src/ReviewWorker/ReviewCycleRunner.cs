@@ -43,10 +43,10 @@ internal static class ReviewCycleRunner
         foreach (var pullRequest in open)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var comments = await client.GetActionableCommentsAsync(pullRequest, cancellationToken);
+            var scan = await client.ScanCommentsAsync(pullRequest, cancellationToken);
+            var comments = scan.Actionable;
             total += comments.Count;
-            Log($"Cycle {cycle}: PR #{pullRequest.Number} ({pullRequest.JiraKey}) has {comments.Count} actionable " +
-                $"comment(s) from '{configuration.ReviewerLogin}'.");
+            LogScan(cycle, pullRequest, configuration.ReviewerLogin, scan);
             if (comments.Count == 0)
             {
                 continue;
@@ -112,6 +112,25 @@ internal static class ReviewCycleRunner
                 DFLogger.LogOutput(DFLogLevel.WARNING, Category,
                     $"Cycle {cycle}: could not delete workspace '{workspacePath}': {exception.Message}");
             }
+        }
+    }
+
+    private static void LogScan(long cycle, TrackedPullRequest pullRequest, string reviewerLogin, ReviewCommentScan scan)
+    {
+        var prefix = $"Cycle {cycle}: PR #{pullRequest.Number} ({pullRequest.JiraKey})";
+        if (scan.OpenComments == 0)
+        {
+            Log($"{prefix} has no unresolved review comments.");
+            return;
+        }
+
+        Log($"{prefix} has {scan.OpenComments} unresolved review comment(s); {scan.Actionable.Count} actionable " +
+            $"from '{reviewerLogin}'" +
+            (scan.HandledComments > 0 ? $", {scan.HandledComments} from '{reviewerLogin}' already handled." : "."));
+        if (scan.OtherAuthors.Count > 0)
+        {
+            var authors = string.Join(", ", scan.OtherAuthors.Select(author => $"{author.Key} ({author.Value})"));
+            Log($"{prefix}: ignoring comment(s) not from '{reviewerLogin}'. Reviewers found: {authors}.");
         }
     }
 

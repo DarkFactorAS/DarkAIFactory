@@ -155,6 +155,37 @@ public sealed class GitHubReviewClientTests
     }
 
     [Fact]
+    public async Task ScanCountsOtherAuthorsAndHandledComments()
+    {
+        HandledIds = [14];
+        var handler = new Handler(_ => Page("OPEN",
+            string.Join(",",
+                Thread(10, "Copilot"), Thread(11, "someone"), Thread(12, "alice", resolved: true),
+                Thread(13, "Someone", outdated: false), Thread(14, "Copilot"), Thread(16, "bob"))));
+        var (client, _) = Create(handler);
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Equal([10L], scan.Actionable.Select(c => c.Id));
+        Assert.Equal(5, scan.OpenComments);
+        Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(new Dictionary<string, int> { ["bob"] = 1, ["someone"] = 2 }, scan.OtherAuthors);
+    }
+
+    [Fact]
+    public async Task ScanIsEmptyWhenThereAreNoComments()
+    {
+        HandledIds = [];
+        var (client, _) = Create(new Handler(_ => Page("OPEN", string.Empty)));
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Equal(0, scan.OpenComments);
+        Assert.Empty(scan.Actionable);
+        Assert.Empty(scan.OtherAuthors);
+    }
+
+    [Fact]
     public async Task FollowsPagination()
     {
         HandledIds = [];
