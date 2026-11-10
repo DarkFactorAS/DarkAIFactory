@@ -45,6 +45,16 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
+| `AgentConfig` | 1 | `agents` (unique `name`, `role`, `behavior_prompt` generic task/behavior prompt, `language_model`, `enabled`, created/updated) |
+| `AgentConfig` | 2 | `agent_capabilities` (PK `agent_id`, `capability`, `language_model`; `enabled` flag per capability and per language model; cascades with agent) |
+| `AgentConfig` | 3 | `agent_task_metrics`: one row per task run (`agent_id`, optional `agent_task_id`/`jira_key`, `language_model`, `input_tokens`, `output_tokens`, `tool_calls`, `duration_ms`, `succeeded`, `started`, `finished`) |
+| `AgentConfig` | 4 | `agent_metrics_totals`: per-agent running totals (tokens, tool calls, `total_duration_ms`, `tasks_succeeded`, `tasks_failed`) |
+| `AgentConfig` | 5-7 | Seed `sample-agent` (role Software developer, model `claude-sonnet-5-5`), its capabilities (`read_files`, `edit_files`, `run_shell` on; `web_search` off) and an empty totals row. Seeding is guarded so reruns do not duplicate or overwrite rows |
+
+The `AgentConfig` patches only create new tables (`CREATE TABLE IF NOT EXISTS`,
+guarded seeds), so they apply on an empty database and on an existing one without
+altering existing tables or data. `agent_task_id` in the metrics table intentionally has
+no foreign key to `agent_tasks`, leaving that table unchanged.
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database
