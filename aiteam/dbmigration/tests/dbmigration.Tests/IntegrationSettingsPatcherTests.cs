@@ -103,7 +103,11 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)]);
+            ("AgentConfig", 7),
+            ("AgentConfig", 8),
+            ("AgentConfig", 9),
+            ("AgentConfig", 10),
+            ("AgentConfig", 11)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -200,7 +204,11 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 7),
+            ("AgentConfig", 8),
+            ("AgentConfig", 9),
+            ("AgentConfig", 10),
+            ("AgentConfig", 11)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -229,7 +237,11 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 7),
+            ("AgentConfig", 8),
+            ("AgentConfig", 9),
+            ("AgentConfig", 10),
+            ("AgentConfig", 11)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);

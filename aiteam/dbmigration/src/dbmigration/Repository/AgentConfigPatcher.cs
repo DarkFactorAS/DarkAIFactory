@@ -132,6 +132,49 @@ public static class AgentConfigPatcher
             INSERT IGNORE INTO `agent_metrics_totals` (`agent_id`)
             SELECT `id` FROM `agents` WHERE `name` = 'sample-agent'
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // Token counts are unknown for some runs, so they must be nullable (NULL = not reported).
+        patcher.Patch(system, 8,
+            """
+            ALTER TABLE `agent_task_metrics`
+                MODIFY COLUMN `input_tokens` BIGINT NULL DEFAULT NULL,
+                MODIFY COLUMN `output_tokens` BIGINT NULL DEFAULT NULL
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 9,
+            """
+            ALTER TABLE `agent_task_metrics`
+                ADD COLUMN IF NOT EXISTS `status` ENUM('success', 'failed') NULL
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 10,
+            """
+            UPDATE `agent_task_metrics`
+            SET `status` = IF(`succeeded`, 'success', 'failed')
+            WHERE `status` IS NULL
+            """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 11,
+            """
+            ALTER TABLE `agent_task_metrics`
+                MODIFY COLUMN `status` ENUM('success', 'failed') NOT NULL
+            """);
         return patcher.Successful();
     }
 }

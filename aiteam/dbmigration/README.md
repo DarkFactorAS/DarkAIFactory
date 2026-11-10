@@ -49,6 +49,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `AgentConfig` | 2 | `agent_capabilities` (PK `agent_id`, `capability`, `language_model`; `enabled` flag per capability and per language model; cascades with agent) |
 | `AgentConfig` | 3 | `agent_task_metrics`: one row per task run (`agent_id`, optional `agent_task_id`/`jira_key`, `language_model`, `input_tokens`, `output_tokens`, `tool_calls`, `duration_ms`, `succeeded`, `started`, `finished`) |
 | `AgentConfig` | 4 | `agent_metrics_totals`: per-agent running totals (tokens, tool calls, `total_duration_ms`, `tasks_succeeded`, `tasks_failed`) |
+| `AgentConfig` | 8-11 | `agent_task_metrics`: `input_tokens`/`output_tokens` become nullable (NULL = not reported); new `status` (`success`/`failed`) column, backfilled from `succeeded` |
 | `AgentConfig` | 5-7 | Seed `sample-agent` (role Software developer, model `claude-sonnet-5-5`), its capabilities (`read_files`, `edit_files`, `run_shell` on; `web_search` off) and an empty totals row. Seeding is guarded so reruns do not duplicate or overwrite rows |
 
 The `AgentConfig` patches only create new tables (`CREATE TABLE IF NOT EXISTS`,
