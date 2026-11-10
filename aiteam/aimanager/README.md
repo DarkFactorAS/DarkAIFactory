@@ -118,7 +118,14 @@ legacy plan and handed off. Decisions:
 | `analysis_only` | Only analysis requested: the analysis is written to Jira and the issue is moved to `Jira.JiraAnalysisOnlyStatus` (`Code Review`, in Jira, not GitHub). No code, branch, pull request or handoff label. |
 | `small` | Handed off directly with the normal plan flow (no human approval). |
 | `needs_approval` | Authentication, database or architecture changes: the plan is posted and `Jira.JiraApprovalLabel` is added. The worker is not triggered until a human adds `Jira.JiraApprovedLabel`; the manager then hands off and removes both labels. |
-| `split` | Large ticket: sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraStatusName` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
+| `split` | Large ticket: the detailed plan and the full, cleartext description of every proposed sub-task are posted on the parent and `Jira.JiraApprovalLabel` is added. Nothing is created until a human adds `Jira.JiraApprovedLabel` (a split is always held for approval). After approval the sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows; both the description and the stored plan of each sub-task contain the branch and pull-request instructions below. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraStatusName` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
+
+### Rules for multi-step plans, blockers and feedback
+
+- **Branches:** the main task uses the branch `ai-agent/<PARENT-KEY>`. Every sub-task works on a branch created off it, and its pull request targets it (not the default branch). The worker creates `ai-agent/<PARENT-KEY>` from the default branch when the first sub-task starts. Each sub-task description states this in cleartext.
+- **Approval:** the full plan is written in the parent task and approved before any sub-task is created or implemented.
+- **Blocked by:** a task is never handed to the worker (labels) or moved to `Jira.JiraStatusName` (for held sub-tasks) while any "is blocked by" link points to an issue that is not in `Jira.JiraDoneStatus`. This applies to every task, including links added by people. Blocked tasks are still triaged and planned, and can be approved, so the tech design is ready; the handoff is withheld with an `[AIManager] Not picked up` comment until all blockers are done.
+- **Feedback:** the triage prompt tells the manager to ask for clarification only when it is critical and to decide smaller matters itself, recording its assumptions in the plan.
 
 Triage outcomes are stored in `manager_plans` with a `[triage:<decision>]` first
 line, so no schema change is needed and they are never handed off. If sub-task

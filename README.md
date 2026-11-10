@@ -12,6 +12,10 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
 - **Jira Claude Coding Agent** — the same worker using the Claude Code CLI
   instead of Copilot (`aiteam/aiclaudeworker`). See
   [the AI Claude worker README](aiteam/aiclaudeworker/README.md).
+- **Review Worker** — a polling scaffold that loads and validates configuration
+  (`aiteam/aireviewworker`). Review fetching, Copilot fixes, pushes and attempt
+  persistence shown below are planned, not active service behavior. See
+  [the review worker README](aiteam/aireviewworker/README.md).
 - **aidashboard** — a minimal ASP.NET Core application.
   See [the aidashboard README](aiteam/aidashboard/README.md).
 - **dbmigration** — a one-shot executable that creates and upgrades the shared
@@ -36,6 +40,7 @@ flowchart LR
         TL["AITechLead<br/>(aiteam/aimanager)"]
         W["AIWorker<br/>(aiworker)"]
         CW["AIClaudeWorker<br/>(aiclaudeworker)"]
+        RW["AIReviewWorker<br/>(aireviewworker)"]
     end
 
     MIG -->|"1. create/upgrade schema (migrations)"| DB
@@ -69,6 +74,12 @@ flowchart LR
     CW -->|"repo + plan + prompt"| CCLI
     CCLI -->|"code changes"| CW
     CW -->|"push branch, create PR"| GH
+    DB -->|"credentials, settings, review_comment_attempts"| RW
+    GH -->|"read review comments, clone PR branch"| RW
+    RW -->|"repo + review comments + prompt"| CLI
+    CLI -->|"code fixes"| RW
+    RW -->|"push fixes to PR branch"| GH
+    RW -->|"record attempts (review_comment_attempts)"| DB
     W -->|"PR link/result comment, status"| Jira
     W -->|"record PR (pull_requests)"| DB
 ```
@@ -106,6 +117,20 @@ workflows in [.github/workflows](.github/workflows). The worker .NET workflow
 also builds aidashboard and builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
+### Review worker setup
+
+The review worker (compose service `review-worker`) runs after `dbmigration`
+and reads the same `aiteam/config/appsettings.<Environment>.json` as the other
+workers (`PollIntervalSeconds`, `ReviewerLogin`, `MaxAttemptsPerPullRequest`; see
+[its README](aiteam/aireviewworker/README.md)). Export `NUGET_USERNAME` and
+`NUGET_TOKEN` (see `aiteam/.env.example`) and start it with
+`docker compose -f aiteam/docker-compose.yml up -d review-worker`.
+The GitHub token stored in the `settings` table needs these permissions on the
+target repository:
+
+- Contents: write (clone and push fixes to the PR branch)
+- Pull requests: read (read review comments)
+
 ### AI auto-approve
 
 `.github/workflows/ai-approve.yml` uses GitHub's built-in CLI and REST API to
@@ -124,11 +149,11 @@ with deployment branch restrictions for `main` and `develop`, containing:
 
 The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
 DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker, AIClaudeWorker
-(`aiteam/aiclaudeworker`) and AIJiraManager
+(`aiteam/aiclaudeworker`), AIReviewWorker (`aiteam/aireviewworker`) and AIJiraManager
 (`aiteam/aijiramanager`) using the reusable
 `infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
-order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIJiraManager. Deployments are serialized.
+order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIReviewWorker, then AIJiraManager. Deployments are serialized.
 
 The [AI dashboard](.github/workflows/aidashboard-deploy.yml) keeps its own
 separate deployment workflow.

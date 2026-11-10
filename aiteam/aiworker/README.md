@@ -95,7 +95,7 @@ recovery; their paths are written to the worker log, and Jira failure comments
 identify any branch that was already pushed. When work starts, the worker moves
 the issue to `In Progress` (a failure to do so is logged and commented, and work
 continues). After pushing, it opens a pull request against the repository's
-default branch, links it in the Jira result comment and moves the issue to
+default branch (see sub-tasks below), links it in the Jira result comment and moves the issue to
 `In Review`. Every pull request is also recorded in the `pull_requests` table
 (idempotent by PR URL). If that database write fails, the worker stores a Jira
 recovery marker and retries the record-only operation on later polling cycles;
@@ -106,6 +106,16 @@ worker planning. Manager-sourced results
 include the exact requirements fingerprint and source Jira update timestamp,
 so reviewers can trace the delegated plan version. Audit metadata and delivery
 details are retained even when long implementation output is truncated.
+**Sub-tasks:** when the issue is a Jira sub-task, the worker creates its branch off the parent
+task's branch `ai-agent/<PARENT-KEY>` (creating that branch from the default branch and pushing it
+if it does not exist yet), and opens the pull request with that branch as the base, so it merges
+into the parent branch instead of the default branch. The prompt tells the agent about this.
+Issues without a sub-task parent behave as before.
+
+**Blocked issues:** the worker never starts an issue that has an open "is blocked by" link. A
+blocker is open until it is in `Jira.JiraDoneStatus`. Such an issue is skipped with an
+`[AIWorker]` ("not picked up") comment and is retried on later polls.
+
 If the agent made no changes, no pull request is created and the
 status is left unchanged. Shell execution is enabled for the implementation agent because the worker runs
 inside Docker (`git push` and `gh` are denied; the worker pushes itself). The agent must run
@@ -169,6 +179,7 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraStatusName` | `Selected for Development` | Status used by the default JQL |
 | `Jira.JiraJql` | generated from project/status | Optional JQL override; mapped projects retain the manager-plan gate |
 | `Jira.JiraInProgressStatus` | `In Progress` | Status the issue is moved to when work starts |
+| `Jira.JiraDoneStatus` | `Done` | Status a blocking issue must have before an issue it blocks is started |
 | `Jira.JiraInReviewStatus` | `In Review` | Status the issue is moved to after the pull request is created |
 | `Jira.JiraAssigneeAccountId` | empty | Jira account ID the issue is assigned to when work starts; empty disables assignment. Must be a Jira accountId (not an email or username). Assignment is best-effort: failures are logged and the run continues |
 | `PollIntervalSeconds` | `30` | Poll interval (minimum 5 seconds) |

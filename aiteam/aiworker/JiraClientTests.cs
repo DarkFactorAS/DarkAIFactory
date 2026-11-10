@@ -133,6 +133,67 @@ public sealed class JiraClientTests
         Assert.Equal("DFAI-3: Do thing", body.RootElement.GetProperty("title").GetString());
     }
 
+    [Fact]
+    public async Task CreatePullRequestAsync_UsesGivenBaseBranchWithoutLookingUpTheDefaultBranch()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.Created, """{"html_url":"https://github.com/owner/repo/pull/8"}"""));
+
+        var url = await GitHubRepository.CreatePullRequestAsync(
+            CreateConfiguration(),
+            "ai-agent/DFAI-3-x",
+            "DFAI-3",
+            "Do thing",
+            CancellationToken.None,
+            handler,
+            baseBranch: "ai-agent/DFAI-2");
+
+        Assert.Equal("https://github.com/owner/repo/pull/8", url);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal("/repos/owner/repo/pulls", request.Request.RequestUri!.AbsolutePath);
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("ai-agent/DFAI-2", body.RootElement.GetProperty("base").GetString());
+        Assert.Equal("ai-agent/DFAI-3-x", body.RootElement.GetProperty("head").GetString());
+    }
+
+    [Fact]
+    public async Task GetIssueAsync_ReadsSubtaskParentAndBlockedByLinks()
+    {
+        var handler = new SequenceHandler((HttpStatusCode.OK, """
+            {"key":"DFAI-3","fields":{"summary":"S","status":{"name":"To Do"},
+              "issuetype":{"name":"Sub-task","subtask":true},
+              "parent":{"key":"DFAI-2"},
+              "issuelinks":[
+                {"type":{"name":"Blocks","inward":"is blocked by","outward":"blocks"},
+                 "inwardIssue":{"key":"DFAI-1","fields":{"status":{"name":"In Progress"}}}},
+                {"type":{"name":"Blocks","inward":"is blocked by","outward":"blocks"},
+                 "outwardIssue":{"key":"DFAI-4","fields":{"status":{"name":"To Do"}}}}]}}
+            """));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("DFAI-3", CancellationToken.None);
+
+        Assert.Equal("DFAI-2", issue.ParentKey);
+        var blocker = Assert.Single(issue.Blockers);
+        Assert.Equal(("DFAI-1", "In Progress"), (blocker.Key, blocker.StatusName));
+        Assert.Contains("issuelinks", handler.Requests[0].Request.RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task GetIssueAsync_IgnoresParentOfNonSubtaskIssues()
+    {
+        var handler = new SequenceHandler((HttpStatusCode.OK, """
+            {"key":"DFAI-3","fields":{"summary":"S","status":{"name":"To Do"},
+              "issuetype":{"name":"Task","subtask":false},"parent":{"key":"DFAI-EPIC"}}}
+            """));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("DFAI-3", CancellationToken.None);
+
+        Assert.Null(issue.ParentKey);
+        Assert.Empty(issue.Blockers);
+    }
+
     private sealed class StubHandler(HttpStatusCode status, string responseBody = "{}") : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }

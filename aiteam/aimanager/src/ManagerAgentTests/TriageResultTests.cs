@@ -32,6 +32,8 @@ public sealed class TriageResultTests
     [InlineData("""{"decision":"unknown"}""")]
     [InlineData("""{"decision":"clarify"}""")]
     [InlineData("""{"decision":"small"}""")]
+    [InlineData("""{"decision":"split","plan":"","subtasks":[{"title":"A","description":"a"}]}""")]
+    [InlineData("""{"decision":"split","plan":"  ","subtasks":[{"title":"A","description":"a"}]}""")]
     [InlineData("""{"decision":"split","subtasks":[]}""")]
     public void Parse_RejectsMalformedOrIncompleteResults(string json)
     {
@@ -42,7 +44,7 @@ public sealed class TriageResultTests
     public void ExecutionOrder_PutsDependenciesFirst()
     {
         var result = TriageResult.Parse("""
-            {"decision":"split","subtasks":[
+            {"decision":"split","plan":"Complete the work.","subtasks":[
               {"title":"C","description":"c","dependsOn":["B"]},
               {"title":"B","description":"b","dependsOn":["A"]},
               {"title":"A","description":"a","dependsOn":[]}]}
