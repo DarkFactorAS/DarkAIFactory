@@ -97,7 +97,7 @@ internal sealed class ReviewFixFlow(
         }
 
         var promptBatch = ReviewPromptBuilder.BuildBatch(eligible);
-        eligible = promptBatch.Comments;
+        eligible = promptBatch.Comments.ToList();
         var ids = eligible.Select(c => c.Id).ToList();
         var baselineRevision = await git.GetRevisionAsync(workspacePath, cancellationToken);
         // Persist the attempt before running so a crash still counts against the limit.
