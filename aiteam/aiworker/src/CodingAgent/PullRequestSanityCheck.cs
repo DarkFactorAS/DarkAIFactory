@@ -104,7 +104,7 @@ internal sealed class PullRequestSanityCheck(
                     issues[tracked.JiraKey] = issue;
                 }
 
-                if (issue is null || !issue.IsSubTask || string.IsNullOrWhiteSpace(issue.ParentKey))
+                if (issue is null || string.IsNullOrWhiteSpace(issue.ParentKey))
                 {
                     continue;
                 }
@@ -187,7 +187,14 @@ internal sealed class PullRequestSanityCheck(
         CancellationToken cancellationToken)
     {
         var rollbackBranch = $"ai-agent/rollback-pr-{info.Number}";
-        if (await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken) is null)
+        var rollback = await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken);
+        if (rollback?.State == GitHubRepository.PullRequestState.Closed)
+        {
+            throw new InvalidOperationException(
+                $"Rollback pull request {rollback.Url} for #{info.Number} was closed without merging; reopen or merge it to continue.");
+        }
+
+        if (rollback is null)
         {
             if (await gitHub.BranchExistsAsync(rollbackBranch, cancellationToken))
             {
@@ -235,7 +242,8 @@ internal sealed class PullRequestSanityCheck(
     {
         var existing = await gitHub.FindPullRequestAsync(head, baseBranch, cancellationToken);
         if (existing is not null &&
-            (!requireOpen || existing.State == GitHubRepository.PullRequestState.Open))
+            (existing.State == GitHubRepository.PullRequestState.Open ||
+             (!requireOpen && existing.State == GitHubRepository.PullRequestState.Merged)))
         {
             return existing.Url;
         }

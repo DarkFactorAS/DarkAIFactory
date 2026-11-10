@@ -627,6 +627,8 @@ internal static partial class GitHubRepository
     {
         using var httpClient = CreateApiClient(configuration, handler);
         var commits = new List<string>();
+        string? firstParent = null;
+        var hasMergeCommit = false;
         for (var page = 1; ; page++)
         {
             using var response = await httpClient.GetAsync(
@@ -637,6 +639,18 @@ internal static partial class GitHubRepository
                 await response.Content.ReadAsStringAsync(cancellationToken));
             var items = document.RootElement.EnumerateArray().ToArray();
             commits.AddRange(items.Select(item => item.GetProperty("sha").GetString()!));
+            foreach (var item in items)
+            {
+                var parents = item.TryGetProperty("parents", out var parentsElement)
+                    ? parentsElement.EnumerateArray().ToArray()
+                    : [];
+                hasMergeCommit |= parents.Length > 1;
+                if (firstParent is null && parents.Length > 0)
+                {
+                    firstParent = parents[0].GetProperty("sha").GetString();
+                }
+            }
+
             if (items.Length < 100)
             {
                 break;
@@ -653,6 +667,27 @@ internal static partial class GitHubRepository
             ],
             cancellationToken,
             requiresGitHubCredentials: true);
+        if (hasMergeCommit)
+        {
+            // Merge commits cannot be cherry-picked without a mainline; apply the net change as one commit instead.
+            if (firstParent is null)
+            {
+                throw new InvalidOperationException(
+                    $"Pull request {pullRequestNumber} contains merge commits and its base cannot be determined.");
+            }
+
+            var netCommit = await RunGitAsync(
+                configuration,
+                workspacePath,
+                [
+                    "commit-tree", $"origin/pr/{pullRequestNumber}^{{tree}}",
+                    "-p", firstParent,
+                    "-m", $"Net changes of pull request {pullRequestNumber}"
+                ],
+                cancellationToken);
+            commits = [netCommit.StandardOutput.Trim()];
+        }
+
         await CherryPickToNewBranchAsync(
             configuration, workspacePath, newBranchName, $"origin/{targetBranch}", commits, cancellationToken);
     }
