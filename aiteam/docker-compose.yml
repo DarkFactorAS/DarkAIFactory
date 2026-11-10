@@ -286,7 +286,7 @@ volumes:
   review_workspaces:
     name: ${REVIEW_WORKSPACES_VOLUME_NAME:-aiteam_review_workspaces}
 
-  # docker volume create claude_config
+  # docker volume create aiteam_claude_config
   # docker volume rm aiteam_claude_config
   claude_config:
     name: ${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}
