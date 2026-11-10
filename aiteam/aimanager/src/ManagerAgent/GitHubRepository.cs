@@ -398,6 +398,142 @@ internal static class GitHubRepository
             requiresGitHubCredentials: true);
     }
 
+    public sealed record PullRequestInfo(
+        long Number,
+        string Url,
+        PullRequestState State,
+        string BaseBranch,
+        string HeadBranch,
+        string Title);
+
+    public static async Task<PullRequestInfo> GetPullRequestInfoAsync(
+        AgentConfiguration configuration,
+        long pullRequestNumber,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var document = await GetPullRequestDocumentAsync(
+            configuration, pullRequestNumber, cancellationToken, handler);
+        return ReadPullRequestInfo(document.RootElement);
+    }
+
+    /// <summary>
+    /// Finds the newest pull request (any state) from <paramref name="headBranch"/> into <paramref name="baseBranch"/>,
+    /// or null when none exists. Used to make PR creation idempotent.
+    /// </summary>
+    public static async Task<PullRequestInfo?> FindPullRequestAsync(
+        AgentConfiguration configuration,
+        string headBranch,
+        string baseBranch,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        var (owner, _) = ParseOwnerAndRepository(configuration.GitHubRepositoryUrl);
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var response = await httpClient.GetAsync(
+            $"{RepositoryApiPath(configuration)}/pulls?state=all&per_page=1&sort=created&direction=desc" +
+            $"&head={Uri.EscapeDataString($"{owner}:{headBranch}")}&base={Uri.EscapeDataString(baseBranch)}",
+            cancellationToken);
+        await EnsureSuccessAsync(response, $"Looking for a pull request from {headBranch}", cancellationToken);
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.GetArrayLength() == 0
+            ? null
+            : ReadPullRequestInfo(document.RootElement[0]);
+    }
+
+    private static PullRequestInfo ReadPullRequestInfo(System.Text.Json.JsonElement root)
+    {
+        var merged = root.TryGetProperty("merged", out var mergedElement)
+            && mergedElement.ValueKind == System.Text.Json.JsonValueKind.True;
+        // The list endpoint has no "merged" flag; merged_at identifies merged pull requests there.
+        merged |= root.TryGetProperty("merged_at", out var mergedAt)
+            && mergedAt.ValueKind == System.Text.Json.JsonValueKind.String;
+        var state = root.TryGetProperty("state", out var stateElement) ? stateElement.GetString() : null;
+        return new PullRequestInfo(
+            root.GetProperty("number").GetInt64(),
+            root.GetProperty("html_url").GetString() ?? string.Empty,
+            merged
+                ? PullRequestState.Merged
+                : string.Equals(state, "open", StringComparison.OrdinalIgnoreCase)
+                    ? PullRequestState.Open
+                    : PullRequestState.Closed,
+            root.GetProperty("base").GetProperty("ref").GetString() ?? string.Empty,
+            root.GetProperty("head").GetProperty("ref").GetString() ?? string.Empty,
+            root.TryGetProperty("title", out var title) ? title.GetString() ?? string.Empty : string.Empty);
+    }
+
+    /// <summary>Clones the repository into an empty <paramref name="workspacePath"/> without creating a branch.</summary>
+    public static async Task CloneRepositoryAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        CancellationToken cancellationToken)
+    {
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            [
+                "clone",
+                "--quiet",
+                "--recurse-submodules",
+                "--separate-git-dir",
+                GitDirectory(workspacePath),
+                "--",
+                configuration.GitHubRepositoryUrl.AbsoluteUri,
+                workspacePath
+            ],
+            cancellationToken,
+            useRepository: false,
+            requiresGitHubCredentials: true);
+        ProtectGitConfiguration(workspacePath);
+    }
+
+    /// <summary>
+    /// Cherry-picks the commits of a (merged) pull request onto a new branch started from
+    /// <paramref name="targetBranch"/> and pushes it. Works for squash, rebase and merge-commit merges because the
+    /// commits are read from the pull request itself.
+    /// </summary>
+    public static async Task CherryPickPullRequestToNewBranchAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        long pullRequestNumber,
+        string targetBranch,
+        string newBranchName,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        var commits = new List<string>();
+        for (var page = 1; ; page++)
+        {
+            using var response = await httpClient.GetAsync(
+                $"{RepositoryApiPath(configuration)}/pulls/{pullRequestNumber}/commits?per_page=100&page={page}",
+                cancellationToken);
+            await EnsureSuccessAsync(response, $"Reading commits of pull request {pullRequestNumber}", cancellationToken);
+            using var document = System.Text.Json.JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(cancellationToken));
+            var items = document.RootElement.EnumerateArray().ToArray();
+            commits.AddRange(items.Select(item => item.GetProperty("sha").GetString()!));
+            if (items.Length < 100)
+            {
+                break;
+            }
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            [
+                "fetch", "--quiet", "origin",
+                $"+refs/heads/{targetBranch}:refs/remotes/origin/{targetBranch}",
+                $"+refs/pull/{pullRequestNumber}/head:refs/remotes/origin/pr/{pullRequestNumber}"
+            ],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await CherryPickToNewBranchAsync(
+            configuration, workspacePath, newBranchName, $"origin/{targetBranch}", commits, cancellationToken);
+    }
+
     private static async Task<System.Text.Json.JsonDocument> GetPullRequestDocumentAsync(
         AgentConfiguration configuration,
         long pullRequestNumber,

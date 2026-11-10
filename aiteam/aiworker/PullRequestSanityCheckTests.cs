@@ -1,0 +1,289 @@
+using AiTeam.Tests;
+using CodingAgent.Repository;
+using Pr = CodingAgent.GitHubRepository.PullRequestInfo;
+using State = CodingAgent.GitHubRepository.PullRequestState;
+
+namespace CodingAgent.Tests;
+
+public sealed class PullRequestSanityCheckTests
+{
+    private static readonly Uri RepositoryUrl = new("https://github.com/owner/repo");
+    private const string Parent = "ai-agent/TASK-1";
+
+    private static readonly AgentConfiguration Configuration = new(
+        new Uri("https://example.atlassian.net"), "bot@example.com", "token", "gh", "repo",
+        RepositoryUrl, "project = X", "picked", "failed",
+        "In Progress", "In Review", TimeSpan.FromSeconds(30));
+
+    private sealed class FakeGitHub : IPullRequestSanityGitHub
+    {
+        public List<Pr> PullRequests { get; } = [];
+        public HashSet<string> Branches { get; } = ["master"];
+        public List<string> Calls { get; } = [];
+        public List<string> Comments { get; } = [];
+        private long _next = 100;
+
+        public Pr Add(long number, State state, string head, string baseBranch, string title = "Work")
+        {
+            var pr = new Pr(number, $"https://github.com/owner/repo/pull/{number}", state, baseBranch, head, title);
+            PullRequests.Add(pr);
+            return pr;
+        }
+
+        public Task<Pr> GetPullRequestAsync(long number, CancellationToken cancellationToken)
+        {
+            Calls.Add($"get {number}");
+            return Task.FromResult(PullRequests.Single(pr => pr.Number == number));
+        }
+
+        public Task<bool> BranchExistsAsync(string branch, CancellationToken cancellationToken) =>
+            Task.FromResult(Branches.Contains(branch));
+
+        public Task CreateBranchFromDefaultBranchAsync(string branch, CancellationToken cancellationToken)
+        {
+            Calls.Add($"create-branch {branch}");
+            Branches.Add(branch);
+            return Task.CompletedTask;
+        }
+
+        public Task<Pr?> FindPullRequestAsync(string head, string baseBranch, CancellationToken cancellationToken) =>
+            Task.FromResult(PullRequests.LastOrDefault(pr => pr.HeadBranch == head && pr.BaseBranch == baseBranch));
+
+        public Task<string> CreatePullRequestAsync(
+            string head, string baseBranch, string title, string body, CancellationToken cancellationToken)
+        {
+            Calls.Add($"create-pr {head}->{baseBranch}");
+            return Task.FromResult(Add(++_next, State.Open, head, baseBranch, title).Url);
+        }
+
+        public Task ClosePullRequestWithCommentAsync(long number, string comment, CancellationToken cancellationToken)
+        {
+            Calls.Add($"close {number}");
+            Comments.Add(comment);
+            var index = PullRequests.FindIndex(pr => pr.Number == number);
+            PullRequests[index] = PullRequests[index] with { State = State.Closed };
+            return Task.CompletedTask;
+        }
+
+        public Task<string> CreateRevertPullRequestAsync(long number, string branch, CancellationToken cancellationToken)
+        {
+            Calls.Add($"revert {number}");
+            Branches.Add(branch);
+            var original = PullRequests.Single(pr => pr.Number == number);
+            return Task.FromResult(Add(++_next, State.Open, branch, original.BaseBranch).Url);
+        }
+
+        public Task PushCherryPickBranchAsync(
+            long number, string targetBranch, string branch, CancellationToken cancellationToken)
+        {
+            Calls.Add($"cherry-pick {number} onto {targetBranch}");
+            Branches.Add(branch);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class Fixture
+    {
+        public FakeGitHub GitHub { get; } = new();
+        public DatabaseStub Database { get; } = new();
+        public List<string> Replaced { get; } = [];
+        public List<string> JiraLookups { get; } = [];
+        public Dictionary<string, JiraIssue> Issues { get; } = new()
+        {
+            ["TASK-2"] = new JiraIssue("TASK-2", "S", "D") { IssueTypeName = "Sub-Task", ParentKey = "TASK-1" },
+            ["TASK-9"] = new JiraIssue("TASK-9", "S", "D") { IssueTypeName = "Task" }
+        };
+
+        public Fixture(params (string Key, long Number)[] tracked)
+        {
+            Database.Rows.Columns.Add("jira_key", typeof(string));
+            Database.Rows.Columns.Add("repository_url", typeof(string));
+            Database.Rows.Columns.Add("pr_number", typeof(long));
+            Database.Rows.Columns.Add("pr_url", typeof(string));
+            foreach (var (key, number) in tracked)
+            {
+                Database.Rows.Rows.Add(key, RepositoryUrl.AbsoluteUri, number, $"https://github.com/owner/repo/pull/{number}");
+            }
+
+            Database.OnNonQuery = command =>
+            {
+                if (command.CommandText.StartsWith("UPDATE pull_requests", StringComparison.Ordinal))
+                {
+                    Replaced.Add($"{command.Values["@old_pr_number"]}->{command.Values["@new_pr_number"]}");
+                }
+
+                return 1;
+            };
+        }
+
+        public Task<IReadOnlyList<SanityCheckAction>> RunAsync() =>
+            new PullRequestSanityCheck(
+                Configuration,
+                new PullRequestRepository(Database),
+                (key, _) =>
+                {
+                    JiraLookups.Add(key);
+                    return Task.FromResult(Issues[key]);
+                },
+                GitHub).RunAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task OpenPullRequestWithWrongBase_IsReplacedByPullRequestIntoParentBranch()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master", "Do work");
+
+        var actions = await fixture.RunAsync();
+
+        var action = Assert.Single(actions);
+        Assert.Equal(PullRequestSanityCheck.RepairedByOpenPullRequest, action.Kind);
+        Assert.Equal("https://github.com/owner/repo/pull/101", action.NewPullRequestUrl);
+        Assert.Equal(
+            ["get 5", $"create-branch {Parent}", $"create-pr ai-agent/TASK-2-abc->{Parent}", "close 5"],
+            fixture.GitHub.Calls);
+        Assert.Contains("pull/101", Assert.Single(fixture.GitHub.Comments));
+        Assert.Equal(["5->101"], fixture.Replaced);
+        Assert.Equal("Do work", fixture.GitHub.PullRequests.Single(pr => pr.Number == 101).Title);
+    }
+
+    [Fact]
+    public async Task OpenPullRequestWithWrongBase_DoesNotRecreateExistingParentBranch()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Branches.Add(Parent);
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
+
+        await fixture.RunAsync();
+
+        Assert.DoesNotContain(fixture.GitHub.Calls, call => call.StartsWith("create-branch", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task OpenPullRequestWithWrongBase_IsIdempotentAfterInterruptedRun()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Branches.Add(Parent);
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
+        // A previous run created the replacement but stopped before closing the old pull request.
+        fixture.GitHub.Add(7, State.Open, "ai-agent/TASK-2-abc", Parent);
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Equal("https://github.com/owner/repo/pull/7", Assert.Single(actions).NewPullRequestUrl);
+        Assert.DoesNotContain(fixture.GitHub.Calls, call => call.StartsWith("create-pr", StringComparison.Ordinal));
+        Assert.Contains("close 5", fixture.GitHub.Calls);
+        Assert.Equal(["5->7"], fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task OpenPullRequestWithWrongBase_SecondRunDoesNothing()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
+        await fixture.RunAsync();
+        fixture.GitHub.Calls.Clear();
+        fixture.Replaced.Clear();
+        // The table now tracks the replacement pull request, which targets the parent branch.
+        fixture.Database.Rows.Rows[0]["pr_number"] = 101L;
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Empty(actions);
+        Assert.Equal(["get 101"], fixture.GitHub.Calls);
+        Assert.Empty(fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task MergedPullRequestWithWrongBase_IsRolledBackAndCherryPickedIntoParentBranch()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master", "Do work");
+
+        var actions = await fixture.RunAsync();
+
+        var action = Assert.Single(actions);
+        Assert.Equal(PullRequestSanityCheck.RepairedByMergedPullRequest, action.Kind);
+        Assert.Equal(
+            [
+                "get 5", $"create-branch {Parent}", "revert 5", $"cherry-pick 5 onto {Parent}",
+                $"create-pr ai-agent/cherry-pick-pr-5->{Parent}"
+            ],
+            fixture.GitHub.Calls);
+        var rollback = fixture.GitHub.PullRequests.Single(pr => pr.HeadBranch == "ai-agent/rollback-pr-5");
+        Assert.Equal("master", rollback.BaseBranch);
+        var cherryPick = fixture.GitHub.PullRequests.Single(pr => pr.HeadBranch == "ai-agent/cherry-pick-pr-5");
+        Assert.Equal(Parent, cherryPick.BaseBranch);
+        Assert.Equal(cherryPick.Url, action.NewPullRequestUrl);
+        Assert.Equal([$"5->{cherryPick.Number}"], fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task MergedPullRequestWithWrongBase_IsIdempotentWhenRollbackAndCherryPickExist()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Branches.UnionWith([Parent, "ai-agent/rollback-pr-5", "ai-agent/cherry-pick-pr-5"]);
+        fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master");
+        fixture.GitHub.Add(8, State.Open, "ai-agent/rollback-pr-5", "master");
+        fixture.GitHub.Add(9, State.Open, "ai-agent/cherry-pick-pr-5", Parent);
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Equal("https://github.com/owner/repo/pull/9", Assert.Single(actions).NewPullRequestUrl);
+        Assert.Equal(["get 5"], fixture.GitHub.Calls);
+    }
+
+    [Fact]
+    public async Task MergedPullRequestWithWrongBase_ResumesWhenRollbackBranchWasPushedWithoutPullRequest()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Branches.UnionWith([Parent, "ai-agent/rollback-pr-5"]);
+        fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master");
+
+        await fixture.RunAsync();
+
+        Assert.DoesNotContain("revert 5", fixture.GitHub.Calls);
+        Assert.Contains("create-pr ai-agent/rollback-pr-5->master", fixture.GitHub.Calls);
+        Assert.Contains($"create-pr ai-agent/cherry-pick-pr-5->{Parent}", fixture.GitHub.Calls);
+    }
+
+    [Fact]
+    public async Task PullRequestsOfNonSubTasks_AreNeverTouched()
+    {
+        var fixture = new Fixture(("TASK-9", 5), ("TASK-9", 6));
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-9-abc", "master");
+        fixture.GitHub.Add(6, State.Merged, "ai-agent/TASK-9-def", "master");
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Empty(actions);
+        Assert.Empty(fixture.GitHub.Calls);
+        Assert.Empty(fixture.Replaced);
+        Assert.Equal(["TASK-9"], fixture.JiraLookups);
+    }
+
+    [Theory]
+    [InlineData("Open")]
+    [InlineData("Merged")]
+    [InlineData("Closed")]
+    public async Task CorrectBaseOrClosedPullRequests_AreLeftAlone(string stateName)
+    {
+        var state = Enum.Parse<State>(stateName);
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, state, "ai-agent/TASK-2-abc", state == State.Closed ? "master" : Parent);
+
+        Assert.Empty(await fixture.RunAsync());
+        Assert.Equal(["get 5"], fixture.GitHub.Calls);
+    }
+
+    [Fact]
+    public async Task FailureForOnePullRequest_DoesNotStopTheOthers()
+    {
+        var fixture = new Fixture(("TASK-2", 4), ("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Equal(5, Assert.Single(actions).PullRequestNumber);
+    }
+}

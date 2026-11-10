@@ -128,7 +128,9 @@ internal sealed class JiraClient : IDisposable
                 ? labels.EnumerateArray().Select(label => label.GetString()
                     ?? throw new InvalidDataException("A Jira label is null.")).ToArray()
                 : [],
-            Blockers = JiraWorkflowRules.ReadBlockers(fields)
+            Blockers = JiraWorkflowRules.ReadBlockers(fields),
+            ParentKey = JiraWorkflowRules.ReadSubtaskParentKey(fields),
+            IssueTypeName = fields.TryGetProperty("issuetype", out var issueType) ? ReadString(issueType, "name") : string.Empty
         };
     }
 
