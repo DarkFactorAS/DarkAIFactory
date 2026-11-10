@@ -48,6 +48,9 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
         return result;
     }
 
+    // Like ListOpen, but named for callers that must still check the current GitHub state of each row.
+    public IReadOnlyList<TrackedPullRequest> ListTracked(Uri repositoryUrl) => ListOpen(repositoryUrl);
+
     public bool DeleteByNumber(Uri repositoryUrl, long pullRequestNumber)
     {
         using var command = connectionFactory.CreateCommand(
