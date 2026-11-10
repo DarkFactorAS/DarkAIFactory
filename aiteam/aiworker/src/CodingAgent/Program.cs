@@ -17,6 +17,7 @@ builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<ManagerPlanReader>();
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
+builder.Services.AddScoped<JiraIssueClaimRepository>();
 using var host = builder.Build();
 DFLogger.LogOutput(
     DFLogLevel.INFO,
@@ -163,6 +164,14 @@ try
                     jira.RemoveLabelAsync,
                     message => DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", message),
                     cancellation.Token);
+                using var issueClaim = scope.ServiceProvider.GetRequiredService<JiraIssueClaimRepository>()
+                    .TryAcquire(issue.Key);
+                if (issueClaim is null)
+                {
+                    DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Another worker is already processing {issue.Key}.");
+                    continue;
+                }
+
                 DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Claiming {issue.Key}: {issue.Summary}");
 
                 string? workspacePath = null;

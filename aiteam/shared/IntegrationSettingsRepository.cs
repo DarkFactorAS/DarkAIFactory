@@ -34,6 +34,9 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
         string ReadOptional(string name, string defaultValue) =>
             values.TryGetValue(("shared", name), out var value) ? value : defaultValue;
 
+        string ReadClientOptional(string name) =>
+            values.TryGetValue((client, name), out var value) ? value : string.Empty;
+
         return new IntegrationSettings
         {
             PollIntervalSeconds = pollIntervalSeconds,
@@ -62,13 +65,18 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 AgentModel = values.TryGetValue((client, "GitHub.AgentModel"), out var agentModel)
                     ? agentModel
                     : string.Empty
+            },
+            Claude = new ClaudeSettings
+            {
+                AnthropicApiKey = ReadClientOptional("Claude.AnthropicApiKey"),
+                AgentModel = ReadClientOptional("Claude.AgentModel")
             }
         };
     }
 
     private static void ValidateClient(string client)
     {
-        if (client is not ("aimanager" or "aiworker" or "aidashboard"))
+        if (client is not ("aimanager" or "aiworker" or "aiclaudeworker" or "aidashboard"))
         {
             throw new ArgumentException("Unknown settings client.", nameof(client));
         }

@@ -9,6 +9,9 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   GitHub Copilot CLI to implement them in a target repository, and opens pull
   requests. See [the AI worker README](aiteam/aiworker/README.md) for setup,
   configuration, and tests.
+- **Jira Claude Coding Agent** — the same worker using the Claude Code CLI
+  instead of Copilot (`aiteam/aiclaudeworker`). See
+  [the AI Claude worker README](aiteam/aiclaudeworker/README.md).
 - **aidashboard** — a minimal ASP.NET Core application.
   See [the aidashboard README](aiteam/aidashboard/README.md).
 - **dbmigration** — a one-shot executable that creates and upgrades the shared
@@ -22,6 +25,7 @@ flowchart LR
         Jira[("Jira")]
         GH[("GitHub<br/>repository + PR")]
         CLI[["GitHub Copilot CLI"]]
+        CCLI[["Claude Code CLI"]]
         DB[("MariaDB<br/>agent_tasks, settings, manager_projects,<br/>manager_plans, pull_requests")]
     end
 
@@ -31,12 +35,14 @@ flowchart LR
         JM["AIJiraManager<br/>(aijiramanager)"]
         TL["AITechLead<br/>(aiteam/aimanager)"]
         W["AIWorker<br/>(aiworker)"]
+        CW["AIClaudeWorker<br/>(aiclaudeworker)"]
     end
 
     MIG -->|"1. create/upgrade schema (migrations)"| DB
     DB -->|"Jira connection, credentials, status, issue type (settings)"| JM
     DB -->|"credentials, labels, project mappings"| TL
     DB -->|"credentials, labels, project mappings"| W
+    DB -->|"credentials, labels, project mappings"| CW
 
     DASH <-->|"read: agent_tasks, settings, workflow labels / write: create/update agent_tasks"| DB
     DASH <-->|"read: issue stats and active AI tasks / write: user comments"| Jira
@@ -58,6 +64,11 @@ flowchart LR
     W -->|"repo + plan + prompt"| CLI
     CLI -->|"code changes"| W
     W -->|"push branch, create PR"| GH
+    Jira -->|"analyzed issues, requirements"| CW
+    DB -->|"stored plan (manager_plans)"| CW
+    CW -->|"repo + plan + prompt"| CCLI
+    CCLI -->|"code changes"| CW
+    CW -->|"push branch, create PR"| GH
     W -->|"PR link/result comment, status"| Jira
     W -->|"record PR (pull_requests)"| DB
 ```
@@ -112,11 +123,12 @@ with deployment branch restrictions for `main` and `develop`, containing:
 ## Deployment
 
 The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
-DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker and AIJiraManager
+DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker, AIClaudeWorker
+(`aiteam/aiclaudeworker`) and AIJiraManager
 (`aiteam/aijiramanager`) using the reusable
 `infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
-order: DBMigrator, then AITechLead, then AIWorker, then AIJiraManager. Deployments are serialized.
+order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIJiraManager. Deployments are serialized.
 
 The [AI dashboard](.github/workflows/aidashboard-deploy.yml) keeps its own
 separate deployment workflow.

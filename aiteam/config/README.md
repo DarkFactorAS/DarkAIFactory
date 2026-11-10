@@ -58,6 +58,9 @@ column. Names use the former JSON section/property notation, for example
   these same rows, including `GitHub.AgentGitHubToken`.
 - `aimanager`, `aiworker`, `aidashboard`: exactly `GitHub.GitHubRepositoryToken`
   (and `GitHub.AgentModel` for `aiworker`).
+- `aiclaudeworker`: exactly `GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`
+  (optional; empty uses the Claude Code CLI login) and `Claude.AgentModel`
+  (seeded as `claude-sonnet-5-5`). `Claude.*` names are never allowed on `shared`.
   Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
 
@@ -65,7 +68,7 @@ Jira labels are not settings. They live in the `workflow_labels` table
 (`agent_name`, `code_key`, `label_name`, `description`), created by the
 `WorkflowLabels` dbmigration patches with the former hardcoded defaults (code key =
 the name of the former code constant), and the old label rows are deleted from
-`settings`. Only `aimanager` and `aiworker` have rows; agents read them once at startup and
+`settings`. Only `aimanager`, `aiworker` and `aiclaudeworker` have rows; agents read them once at startup and
 fail if a row is missing. Edit `label_name` in the table to rename a label.
 
 | Agent | Code key | Default label |
@@ -79,6 +82,9 @@ fail if a row is missing. Edit `label_name` in the table to rename a label.
 | `aiworker` | `PickupLabel` | `ai-agent-picked` |
 | `aiworker` | `FailureLabel` | `ai-agent-failed` |
 | `aiworker` | `AnalyzedLabel` | `ai-analyzed` |
+| `aiclaudeworker` | `PickupLabel` | `ai-agent-picked` |
+| `aiclaudeworker` | `FailureLabel` | `ai-agent-failed` |
+| `aiclaudeworker` | `AnalyzedLabel` | `ai-analyzed` |
 
 The standalone `dbmigration` executable owns all table creation. It retains
 `StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, adds
@@ -120,7 +126,10 @@ Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
 Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
 optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
-as `--model`; blank uses the CLI default.
+as `--model`; blank uses the CLI default. The `aiclaudeworker` client uses
+`Claude.AgentModel` (seeded as `claude-sonnet-5-5`) for the Claude Code CLI instead,
+and runs `claude -p` with the CLI's own login (`claude auth login`, stored in a Docker
+volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitHub.AgentGitHubToken`.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),

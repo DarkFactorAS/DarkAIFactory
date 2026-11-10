@@ -4,6 +4,7 @@ public sealed class IntegrationSettings
 {
     public JiraSettings Jira { get; set; } = new();
     public GitHubSettings GitHub { get; set; } = new();
+    public ClaudeSettings Claude { get; set; } = new();
     public int PollIntervalSeconds { get; set; } = 30;
 }
 
@@ -30,4 +31,11 @@ public sealed class GitHubSettings
     public string GitHubRepositoryToken { get; set; } = string.Empty;
     public string AgentModel { get; set; } = string.Empty;
     public string TargetRepositoryUrl { get; set; } = string.Empty;
+}
+
+public sealed class ClaudeSettings
+{
+    // Anthropic API key (sk-ant-api...) or Claude Code OAuth token (sk-ant-oat...); aiclaudeworker only.
+    public string AnthropicApiKey { get; set; } = string.Empty;
+    public string AgentModel { get; set; } = string.Empty;
 }

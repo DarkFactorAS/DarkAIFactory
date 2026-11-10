@@ -49,6 +49,22 @@ public static class WorkflowLabelPatcher
                 'Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'Jira.JiraFailureLabel',
                 'Jira.JiraClarificationLabel', 'Jira.JiraApprovalLabel', 'Jira.JiraApprovedLabel')
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // The Claude worker shares the aiworker labels so the manager handoff, the manager query
+        // exclusion and the dashboard keep working whichever worker picks an issue up.
+        patcher.Patch(system, 4,
+            """
+            INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`)
+            SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`
+            FROM `workflow_labels`
+            WHERE `agent_name` = 'aiworker'
+                AND `code_key` IN ('PickupLabel', 'FailureLabel', 'AnalyzedLabel')
+            ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
+            """);
         return patcher.Successful();
     }
 }

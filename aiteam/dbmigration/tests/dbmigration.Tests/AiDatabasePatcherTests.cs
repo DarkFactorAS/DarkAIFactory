@@ -38,10 +38,13 @@ public sealed class AiDatabasePatcherTests
                 "patch:IntegrationSettings:7", "successful",
                 "patch:IntegrationSettings:8", "successful",
                 "patch:IntegrationSettings:9", "successful",
+                "patch:IntegrationSettings:10", "successful",
+                "patch:IntegrationSettings:11", "successful",
                 "init:WorkflowLabels",
                 "patch:WorkflowLabels:1", "successful",
                 "patch:WorkflowLabels:2", "successful",
                 "patch:WorkflowLabels:3", "successful",
+                "patch:WorkflowLabels:4", "successful",
                 "init:AgentTasks",
                 "patch:AgentTasks:1", "successful"]);
         }
@@ -78,10 +81,14 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("UPDATE IGNORE `settings` SET `client` = 'aidashboard'", dbPatcher.Sql[11]);
             Assert.Contains("DELETE FROM `settings` WHERE `client` = 'aibuildpage'", dbPatcher.Sql[12]);
             Assert.Contains("'aidashboard'", dbPatcher.Sql[13]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[14]);
-            Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[15]);
-            Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[16]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[17]);
+            Assert.Contains("`client` = 'aiclaudeworker' AND `name` IN", dbPatcher.Sql[14]);
+            Assert.Contains("('aiclaudeworker', 'Claude.AgentModel', 'claude-sonnet-5-5')", dbPatcher.Sql[15]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", dbPatcher.Sql[16]);
+            Assert.Contains("INSERT INTO `workflow_labels`", dbPatcher.Sql[17]);
+            Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[18]);
+            Assert.Contains("SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`", dbPatcher.Sql[19]);
+            Assert.Contains("WHERE `agent_name` = 'aiworker'", dbPatcher.Sql[19]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[20]);
         }
     }
 

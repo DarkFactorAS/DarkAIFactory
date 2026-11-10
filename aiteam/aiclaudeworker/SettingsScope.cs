@@ -1,0 +1,59 @@
+using Microsoft.Extensions.Configuration;
+using AiTeam.Configuration;
+
+namespace ClaudeCodingAgent.Tests;
+
+[CollectionDefinition("Environment", DisableParallelization = true)]
+public sealed class EnvironmentCollection;
+
+internal sealed class SettingsScope : IDisposable
+{
+    private static SettingsScope? _current;
+    private readonly Dictionary<string, string?> _values = [];
+    private readonly Dictionary<string, string?> _labels = new()
+    {
+        ["PickupLabel"] = "ai-agent-picked",
+        ["FailureLabel"] = "ai-agent-failed",
+        ["AnalyzedLabel"] = "ai-analyzed"
+    };
+
+    public SettingsScope() => _current = this;
+
+    public static IntegrationSettings Current
+    {
+        get
+        {
+            var settings = new IntegrationSettings();
+            new ConfigurationBuilder().AddInMemoryCollection(
+                (_current ?? throw new InvalidOperationException("No test settings scope."))._values)
+                .Build().Bind(settings);
+            return settings;
+        }
+    }
+
+    public SettingsScope WithValidDefaults() => Set("Jira:JiraBaseUrl", "https://example.atlassian.net")
+        .Set("Jira:JiraEmail", "bot@example.com")
+        .Set("Jira:JiraApiToken", "jira-token")
+        .Set("GitHub:AgentGitHubToken", "gh-token")
+        .Set("Claude:AnthropicApiKey", "anthropic-key")
+        .Set("GitHub:GitHubRepositoryToken", "repo-token")
+        .Set("GitHub:TargetRepositoryUrl", "https://github.com/owner/repo");
+
+    public static WorkflowLabels CurrentLabels =>
+        new("aiclaudeworker", (_current ?? throw new InvalidOperationException("No test settings scope."))._labels
+            .Where(pair => pair.Value is not null).ToDictionary(pair => pair.Key, pair => pair.Value!));
+
+    public SettingsScope SetLabel(string codeKey, string? value)
+    {
+        _labels[codeKey] = value;
+        return this;
+    }
+
+    public SettingsScope Set(string name, string? value)
+    {
+        _values[name] = value;
+        return this;
+    }
+
+    public void Dispose() => _current = null;
+}
