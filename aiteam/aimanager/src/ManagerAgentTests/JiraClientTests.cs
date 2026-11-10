@@ -46,6 +46,30 @@ public sealed class JiraClientTests
           {"id":"21","name":"Send to review","to":{"name":"In Review"}}]}
         """;
 
+    [Fact]
+    public async Task GetIssueAsync_ReadsBlockedByLinksAndIgnoresOtherLinks()
+    {
+        const string body = """
+            {"key":"DFAI-3","fields":{"summary":"S","status":{"name":"To Do"},
+              "issuelinks":[
+                {"type":{"name":"Blocks","inward":"is blocked by","outward":"blocks"},
+                 "inwardIssue":{"key":"DFAI-1","fields":{"status":{"name":"In Progress"}}}},
+                {"type":{"name":"Blocks","inward":"is blocked by","outward":"blocks"},
+                 "outwardIssue":{"key":"DFAI-4","fields":{"status":{"name":"To Do"}}}},
+                {"type":{"name":"Relates","inward":"relates to","outward":"relates to"},
+                 "inwardIssue":{"key":"DFAI-5","fields":{"status":{"name":"To Do"}}}}]}}
+            """;
+        var handler = new SequenceHandler((HttpStatusCode.OK, body));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("DFAI-3", CancellationToken.None);
+
+        var blocker = Assert.Single(issue.Blockers);
+        Assert.Equal("DFAI-1", blocker.Key);
+        Assert.Equal("In Progress", blocker.StatusName);
+        Assert.Contains("issuelinks", handler.Requests[0].Request.RequestUri!.Query);
+    }
+
     [Theory]
     [InlineData("In Progress", "11")]
     [InlineData("in review", "21")]

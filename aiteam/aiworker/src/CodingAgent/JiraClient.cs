@@ -1,3 +1,4 @@
+using AiTeam.Configuration;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -38,7 +39,7 @@ internal sealed class JiraClient : IDisposable
     {
         var query =
             $"jql={Uri.EscapeDataString(jql)}" +
-            "&fields=summary,description,status,updated,labels&maxResults=20";
+            $"&fields=summary,description,status,updated,labels,{JiraWorkflowRules.RelationFields}&maxResults=20";
         var issues = new List<JiraIssue>();
         string? nextPageToken = null;
         do
@@ -70,7 +71,7 @@ internal sealed class JiraClient : IDisposable
     public async Task<JiraIssue> GetIssueAsync(string issueKey, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}?fields=summary,description,status,updated,labels",
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}?fields=summary,description,status,updated,labels,{JiraWorkflowRules.RelationFields}",
             cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -127,7 +128,9 @@ internal sealed class JiraClient : IDisposable
             Labels = fields.TryGetProperty("labels", out var labels) && labels.ValueKind == JsonValueKind.Array
                 ? labels.EnumerateArray().Select(label => label.GetString()
                     ?? throw new InvalidDataException("A Jira label is null.")).ToArray()
-                : []
+                : [],
+            Blockers = JiraWorkflowRules.ReadBlockers(fields),
+            ParentKey = JiraWorkflowRules.ReadSubtaskParentKey(fields)
         };
     }
 

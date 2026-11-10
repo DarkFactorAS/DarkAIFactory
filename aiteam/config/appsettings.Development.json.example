@@ -2,6 +2,8 @@
   "AppName": "DarkAIFactory",
   "EnableLogging": true,
   "PollIntervalSeconds": 30,
+  "ReviewerLogin": "",
+  "MaxAttemptsPerPullRequest": 3,
   "DatabaseConnection": {
     "Server": "localhost",
     "Port": 3306,

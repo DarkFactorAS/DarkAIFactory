@@ -9,7 +9,8 @@ internal sealed class ManagerPlanner(
     AgentConfiguration configuration,
     ManagerPlanRepository plans,
     JiraClient jira,
-    Func<JiraIssue, CancellationToken, Task<string>> generatePlan)
+    Func<JiraIssue, CancellationToken, Task<string>> generatePlan,
+    Func<AgentConfiguration, string, string, string, CancellationToken, Task<string>>? createParentPullRequest = null)
 {
     public async Task PlanAsync(long projectId, JiraIssue candidate, CancellationToken cancellationToken)
     {
@@ -57,6 +58,13 @@ internal sealed class ManagerPlanner(
                     blocking.Add($"{dependency} ({dependencyIssue.StatusName})");
                 }
             }
+            foreach (var blocker in JiraWorkflowRules.OpenBlockers(issue.Blockers, configuration.DoneStatus))
+            {
+                if (!hold.Dependencies.Contains(blocker.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    blocking.Add($"{blocker.Key} ({blocker.StatusName})");
+                }
+            }
             if (blocking.Count > 0)
             {
                 await ReportIgnoredAsync(
@@ -75,6 +83,11 @@ internal sealed class ManagerPlanner(
             reusable = storedPlan is not null &&
                 storedPlan.IsCurrent(issue.Summary, issue.Description, configuration.GitHubRepositoryUrl);
         }
+        if (reusable && IsSplitProposal(storedPlan!.Plan))
+        {
+            await HandleSplitProposalAsync(projectId, issue, storedPlan, hasApprovedLabel, cancellationToken);
+            return;
+        }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
         {
             if (storedDecision is TriageDecision.AnalysisOnly or TriageDecision.Split)
@@ -83,7 +96,8 @@ internal sealed class ManagerPlanner(
             }
             if (!storedPlan.PostedToJira && storedDecision == TriageDecision.Split)
             {
-                await CompleteSplitAsync(issue.Key, storedPlan.Plan, storedPlan.RequirementsHash!, cancellationToken);
+                await CompleteSplitAsync(
+                    issue.Key, storedPlan.Plan, storedPlan.RequirementsHash!, cancellationToken);
                 return;
             }
             else if (storedPlan.PostedToJira && storedDecision == TriageDecision.AnalysisOnly)
@@ -96,7 +110,8 @@ internal sealed class ManagerPlanner(
             }
             else if (storedPlan.PostedToJira && storedDecision == TriageDecision.Split)
             {
-                await ReleaseSubtasksAsync(storedPlan.Plan, cancellationToken);
+                await ReleaseSubtasksAsync(
+                    issue.Key, storedPlan.Plan, storedPlan.RequirementsHash!, cancellationToken);
                 return;
             }
             else if (storedDecision == TriageDecision.NeedsApproval)
@@ -168,7 +183,7 @@ internal sealed class ManagerPlanner(
                         await ApplyAnalysisOnlyAsync(projectId, issue, triage, requirementsHash, cancellationToken);
                         return;
                     case TriageDecision.Split:
-                        await ApplySplitAsync(projectId, issue, triage, requirementsHash, cancellationToken);
+                        await ProposeSplitAsync(projectId, issue, triage, requirementsHash, cancellationToken);
                         return;
                     case TriageDecision.NeedsApproval:
                         plan = triage.RiskAreas.Count == 0
@@ -228,6 +243,17 @@ internal sealed class ManagerPlanner(
             !storedPlan.IsCurrent(beforeHandoff.Summary, beforeHandoff.Description, configuration.GitHubRepositoryUrl))
         {
             DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Deferring handoff for {issue.Key}: the issue changed or was claimed.");
+            return;
+        }
+        // Blocked tasks are still analyzed (and approved), but never handed to the worker while a blocker is open.
+        var openBlockers = JiraWorkflowRules.OpenBlockers(beforeHandoff.Blockers, configuration.DoneStatus);
+        if (openBlockers.Count > 0)
+        {
+            await ReportIgnoredAsync(
+                issue.Key,
+                $"it is blocked by tasks that are not {configuration.DoneStatus} yet: {JiraWorkflowRules.DescribeBlockers(openBlockers)}. " +
+                "The plan is ready; the task is handed to the worker when all blockers are done.",
+                cancellationToken);
             return;
         }
         if (configuration.PickupLabel != configuration.AnalyzedLabel)
@@ -308,12 +334,14 @@ internal sealed class ManagerPlanner(
             var dependencies = subtask.DependsOn.Select(title => keys[titleToIndex[title.Trim().ToLowerInvariant()]]).ToArray();
             var description = subtask.Description +
                 $"\n\nParent task: {issue.Key}" +
-                (dependencies.Length == 0 ? string.Empty : $"\nDepends on: {string.Join(", ", dependencies)}");
+                (dependencies.Length == 0 ? string.Empty : $"\nDepends on: {string.Join(", ", dependencies)}") +
+                "\n\n" + BuildBranchInstructions(issue.Key);
             var key = await jira.CreateSubtaskAsync(issue.Key, subtask.Title, description, cancellationToken);
             keys[index] = key;
             var created = await jira.GetIssueAsync(key, cancellationToken);
             var subtaskPlan = $"{subtask.Description}\n\nThis is part of {issue.Key}: {issue.Summary}." +
-                (dependencies.Length == 0 ? string.Empty : $" Its dependencies are {string.Join(", ", dependencies)}.");
+                (dependencies.Length == 0 ? string.Empty : $" Its dependencies are {string.Join(", ", dependencies)}.") +
+                "\n\n" + BuildBranchInstructions(issue.Key);
             var storedSubtaskPlan = dependencies.Length == 0
                 ? subtaskPlan
                 : DependencyHoldPlan(subtaskPlan, dependencies);
@@ -345,9 +373,99 @@ internal sealed class ManagerPlanner(
             triage.Subtasks[index].DependsOn
                 .Select(title => keys[titleToIndex[title.Trim().ToLowerInvariant()]]).ToArray())).ToArray());
         SaveTriaged(projectId, issue, TriageDecision.Split, JsonSerializer.Serialize(state), requirementsHash);
+        foreach (var approvalLabel in new[] { configuration.ApprovalLabel, configuration.ApprovedLabel }
+            .Where(label => issue.Labels.Contains(label)))
+        {
+            await jira.RemoveLabelAsync(issue.Key, approvalLabel, cancellationToken);
+        }
         await CompleteSplitAsync(
             issue.Key, ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)), requirementsHash, cancellationToken);
         DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Split {issue.Key} into {keys.Length} sub-tasks.");
+    }
+
+    private async Task ProposeSplitAsync(
+        long projectId, JiraIssue issue, TriageResult triage, string requirementsHash, CancellationToken cancellationToken)
+    {
+        // The detailed plan is written to the parent task and approved before any sub-task exists.
+        var proposal = new SplitProposal(triage.Plan, triage.Subtasks.ToArray());
+        plans.Save(
+            projectId,
+            issue.Key,
+            $"{SplitProposalMarker}\n{JsonSerializer.Serialize(proposal)}",
+            requirementsHash,
+            issue.UpdatedAt);
+        await HandleSplitProposalAsync(
+            projectId,
+            issue,
+            plans.Find(issue.Key)!,
+            hasApprovedLabel: false,
+            cancellationToken);
+    }
+
+    private async Task HandleSplitProposalAsync(
+        long projectId, JiraIssue issue, ManagerPlan storedPlan, bool hasApprovedLabel, CancellationToken cancellationToken)
+    {
+        var proposal = ReadSplitProposal(storedPlan.Plan);
+        if (!storedPlan.PostedToJira)
+        {
+            await jira.AddLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
+            foreach (var comment in PromptBuilder.BuildComments(
+                BuildSplitProposalText(issue.Key, proposal),
+                part => $"Implementation plan for splitting this task (generated by the manager, part {part}):"))
+            {
+                await jira.AddCommentAsync(issue.Key, comment, cancellationToken);
+            }
+            await jira.AddCommentAsync(
+                issue.Key,
+                "A task that is split into sub-tasks always needs human approval of the full plan first. " +
+                $"Add the `{configuration.ApprovedLabel}` label to create the sub-tasks and release them to the worker. " +
+                "Editing the title or description discards this plan and triggers a new triage.",
+                cancellationToken);
+            plans.MarkPostedToJira(issue.Key, storedPlan.RequirementsHash!);
+        }
+
+        if (!hasApprovedLabel)
+        {
+            await ReportIgnoredAsync(
+                issue.Key,
+                $"its split plan is waiting for approval (add the \"{configuration.ApprovedLabel}\" label).",
+                cancellationToken);
+            return;
+        }
+
+        var triage = new TriageResult(
+            TriageDecision.Split, [], string.Empty, proposal.Plan, proposal.Subtasks, []);
+        await ApplySplitAsync(projectId, issue, triage, storedPlan.RequirementsHash!, cancellationToken);
+    }
+
+    private string BuildSplitProposalText(string parentKey, SplitProposal proposal)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine(proposal.Plan.Length == 0 ? "(No overall plan was provided.)" : proposal.Plan);
+        text.AppendLine();
+        text.AppendLine("Proposed sub-tasks (created and released only after approval):");
+        for (var index = 0; index < proposal.Subtasks.Length; index++)
+        {
+            var subtask = proposal.Subtasks[index];
+            text.AppendLine();
+            text.AppendLine($"{index + 1}. {subtask.Title}");
+            text.AppendLine(subtask.Description);
+            text.AppendLine(subtask.DependsOn.Count == 0
+                ? "Depends on: nothing"
+                : $"Depends on: {string.Join(", ", subtask.DependsOn)}");
+        }
+        text.AppendLine();
+        text.Append(BuildBranchInstructions(parentKey));
+        return text.ToString();
+    }
+
+    internal static string BuildBranchInstructions(string parentKey)
+    {
+        var parentBranch = JiraWorkflowRules.ParentBranchName(parentKey);
+        return "Branch and pull request rules for this sub-task:\n" +
+            $"- The parent task {parentKey} uses the branch `{parentBranch}`. Create your branch off `{parentBranch}`, not off the default branch.\n" +
+            $"- Open your pull request with `{parentBranch}` as the base branch, so it merges this sub-task into the parent task branch.\n" +
+            $"- The full, approved plan is written in the comments of {parentKey}.";
     }
 
     private async Task CompleteSplitAsync(
@@ -356,7 +474,7 @@ internal sealed class ManagerPlanner(
         var state = ReadSplitState(storedPlan);
         await jira.AddCommentAsync(issueKey, BuildSplitComment(state), cancellationToken);
         plans.MarkPostedToJira(issueKey, requirementsHash);
-        await ReleaseSubtasksAsync(storedPlan, cancellationToken);
+        await ReleaseSubtasksAsync(issueKey, storedPlan, requirementsHash, cancellationToken);
     }
 
     internal Task ReportIgnoredAsync(string issueKey, string reason, CancellationToken cancellationToken)
@@ -381,13 +499,24 @@ internal sealed class ManagerPlanner(
             message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
             cancellationToken);
 
-    private async Task ReleaseSubtasksAsync(string storedPlan, CancellationToken cancellationToken)
+    private async Task ReleaseSubtasksAsync(
+        string parentKey, string storedPlan, string requirementsHash, CancellationToken cancellationToken)
     {
+        var parent = await jira.GetIssueAsync(parentKey, cancellationToken);
+        if (JiraWorkflowRules.OpenBlockers(parent.Blockers, configuration.DoneStatus).Count > 0)
+        {
+            return;
+        }
+
         var state = ReadSplitState(storedPlan);
+        var allSubtasksDone = true;
         foreach (var subtask in state.Subtasks)
         {
             var current = await jira.GetIssueAsync(subtask.Key, cancellationToken);
-            if (string.Equals(current.StatusName, configuration.DoneStatus, StringComparison.OrdinalIgnoreCase) ||
+            var isDone = string.Equals(
+                current.StatusName, configuration.DoneStatus, StringComparison.OrdinalIgnoreCase);
+            allSubtasksDone &= isDone;
+            if (isDone ||
                 current.Labels.Contains(configuration.AnalyzedLabel) ||
                 current.Labels.Contains(configuration.FailureLabel) ||
                 current.Labels.Contains(configuration.WorkerPickupLabel))
@@ -395,7 +524,8 @@ internal sealed class ManagerPlanner(
                 continue;
             }
 
-            var ready = true;
+            // Open "blocked by" links (also ones added by people) hold the sub-task back as well.
+            var ready = JiraWorkflowRules.OpenBlockers(current.Blockers, configuration.DoneStatus).Count == 0;
             foreach (var dependency in subtask.DependsOn)
             {
                 var dependencyIssue = await jira.GetIssueAsync(dependency, cancellationToken);
@@ -440,6 +570,35 @@ internal sealed class ManagerPlanner(
             await jira.AddLabelAsync(subtask.Key, configuration.AnalyzedLabel, cancellationToken);
             DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Released sub-task {subtask.Key} to the worker.");
         }
+
+        if (!allSubtasksDone)
+        {
+            return;
+        }
+
+        var parentBranch = JiraWorkflowRules.ParentBranchName(parentKey);
+        var pullRequestUrl = state.PullRequestUrl;
+        if (pullRequestUrl is null)
+        {
+            pullRequestUrl = createParentPullRequest is null
+                ? await GitHubRepository.CreateOrFindPullRequestAsync(
+                    configuration, parentBranch, parentKey, parent.Summary, cancellationToken)
+                : await createParentPullRequest(
+                    configuration, parentBranch, parentKey, parent.Summary, cancellationToken);
+            state = state with { PullRequestUrl = pullRequestUrl };
+            plans.ReplacePlan(
+                parentKey,
+                requirementsHash,
+                ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)));
+        }
+
+        var completionComment =
+            $"All sub-tasks are complete. The parent-to-default pull request is ready: {pullRequestUrl}";
+        var comments = await jira.GetCommentsAsync(parentKey, cancellationToken);
+        if (!comments.Any(comment => comment.Contains(pullRequestUrl, StringComparison.Ordinal)))
+        {
+            await jira.AddCommentAsync(parentKey, completionComment, cancellationToken);
+        }
     }
 
     private void SaveTriaged(
@@ -448,6 +607,15 @@ internal sealed class ManagerPlanner(
 
     private static string ManagerPlanMarker(TriageDecision decision, string text) =>
         $"{TriageResult.MarkerFor(decision)}\n{text}";
+
+    private const string SplitProposalMarker = "[triage:split_proposal]";
+
+    private static bool IsSplitProposal(string plan) =>
+        plan.StartsWith(SplitProposalMarker, StringComparison.Ordinal);
+
+    private static SplitProposal ReadSplitProposal(string plan) =>
+        JsonSerializer.Deserialize<SplitProposal>(plan[SplitProposalMarker.Length..].TrimStart('\r', '\n'))
+            ?? throw new InvalidDataException("The stored split proposal is invalid.");
 
     private const string DependencyHoldMarker = "[triage:dependency_hold]";
 
@@ -476,9 +644,14 @@ internal sealed class ManagerPlanner(
             $"The others are released when all their dependencies reach {configuration.DoneStatus}.";
     }
 
+    private sealed record SplitProposal(string Plan, TriageSubtask[] Subtasks);
+
     private sealed record DependencyHoldState(string Plan, string[] Dependencies);
 
     private sealed record SplitSubtask(string Key, string Title, string[] DependsOn);
 
-    private sealed record SplitState(string Plan, SplitSubtask[] Subtasks);
+    private sealed record SplitState(string Plan, SplitSubtask[] Subtasks)
+    {
+        public string? PullRequestUrl { get; init; }
+    }
 }

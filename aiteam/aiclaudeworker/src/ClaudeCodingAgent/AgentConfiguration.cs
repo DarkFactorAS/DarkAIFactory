@@ -23,6 +23,7 @@ internal sealed record AgentConfiguration(
     public long? ManagerProjectId { get; init; }
     public bool RequiresManagerPlan { get; init; } = true;
     public string AgentModel { get; init; } = string.Empty;
+    public string DoneStatus { get; init; } = "Done";
 
     public static AgentConfiguration Load(
         IntegrationSettings settings, WorkflowLabels labels, ManagerProject? project = null)
@@ -104,6 +105,7 @@ internal sealed record AgentConfiguration(
             JiraProjectKey = jiraProjectKey,
             ManagerProjectId = project?.Id,
             AgentModel = Get(settings.Claude.AgentModel, string.Empty),
+            DoneStatus = Get(settings.Jira.JiraDoneStatus, "Done"),
             RequiresManagerPlan = project is not null || string.IsNullOrWhiteSpace(settings.Jira.JiraJql)
         };
     }

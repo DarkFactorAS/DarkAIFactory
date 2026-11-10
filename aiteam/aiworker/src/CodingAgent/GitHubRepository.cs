@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiTeam.Configuration;
 
 namespace CodingAgent;
 
@@ -26,7 +27,8 @@ internal static partial class GitHubRepository
         AgentConfiguration configuration,
         string workspacePath,
         string issueKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? parentKey = null)
     {
         await RunGitAsync(
             configuration,
@@ -47,13 +49,67 @@ internal static partial class GitHubRepository
 
         var issueBranch = IssueBranchPart().Replace(issueKey, "-");
         var branchName = $"ai-agent/{issueBranch}-{Guid.NewGuid():N}";
+        // A sub-task branches off its parent's integration branch instead of the default branch.
+        var startPoint = parentKey is null
+            ? null
+            : await EnsureParentBranchAsync(configuration, workspacePath, parentKey, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
-            ["switch", "--create", branchName],
+            startPoint is null
+                ? ["switch", "--create", branchName]
+                : ["switch", "--no-track", "--create", branchName, startPoint],
             cancellationToken);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["submodule", "sync", "--recursive"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["submodule", "update", "--init", "--recursive"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
         ProtectGitConfiguration(workspacePath);
         return branchName;
+    }
+
+    /// <summary>
+    /// Makes sure the parent task's integration branch exists on origin (creating it from the default branch
+    /// when the first sub-task starts) and returns the remote-tracking ref to branch from.
+    /// </summary>
+    private static async Task<string> EnsureParentBranchAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string parentKey,
+        CancellationToken cancellationToken)
+    {
+        var parentBranch = JiraWorkflowRules.ParentBranchName(parentKey);
+        var existing = await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["ls-remote", "--heads", "origin", $"refs/heads/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        if (string.IsNullOrWhiteSpace(existing.StandardOutput))
+        {
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["push", "--quiet", "origin", $"HEAD:refs/heads/{parentBranch}"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["fetch", "--quiet", "origin", $"+refs/heads/{parentBranch}:refs/remotes/origin/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        return $"origin/{parentBranch}";
     }
 
     public static async Task<PushResult> CommitAndPushAsync(
@@ -155,7 +211,8 @@ internal static partial class GitHubRepository
         string issueKey,
         string summary,
         CancellationToken cancellationToken,
-        HttpMessageHandler? handler = null)
+        HttpMessageHandler? handler = null,
+        string? baseBranch = null)
     {
         var (owner, repositoryName) = ParseOwnerAndRepository(configuration.GitHubRepositoryUrl);
         var repositoryPath =
@@ -167,13 +224,15 @@ internal static partial class GitHubRepository
         httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-CodingAgent/1.0");
 
-        string defaultBranch;
-        using (var repositoryResponse = await httpClient.GetAsync(repositoryPath, cancellationToken))
+        // Sub-task pull requests target the parent task's branch; all others target the default branch.
+        var targetBranch = baseBranch;
+        if (targetBranch is null)
         {
+            using var repositoryResponse = await httpClient.GetAsync(repositoryPath, cancellationToken);
             repositoryResponse.EnsureSuccessStatusCode();
             using var repositoryDocument = System.Text.Json.JsonDocument.Parse(
                 await repositoryResponse.Content.ReadAsStringAsync(cancellationToken));
-            defaultBranch = repositoryDocument.RootElement.GetProperty("default_branch").GetString()
+            targetBranch = repositoryDocument.RootElement.GetProperty("default_branch").GetString()
                 ?? throw new InvalidOperationException("GitHub did not return a default branch.");
         }
 
@@ -182,7 +241,7 @@ internal static partial class GitHubRepository
         {
             title = $"{issueKey}: {title}",
             head = branchName,
-            @base = defaultBranch,
+            @base = targetBranch,
             body = $"Implements Jira task {issueKey}: {title}\n\nCreated automatically by the coding agent."
         };
         using var response = await httpClient.PostAsJsonAsync($"{repositoryPath}/pulls", body, cancellationToken);

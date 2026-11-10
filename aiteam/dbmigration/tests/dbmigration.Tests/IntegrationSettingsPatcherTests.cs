@@ -103,7 +103,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)]);
+            ("AgentConfig", 7),
+            ("ReviewCommentAttempts", 1)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -125,6 +126,26 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Contains("IN ('New', 'Created', 'Failed')", sql);
 
         Assert.False(AgentTaskPatcher.Run(new SettingsPatcherStub(1)));
+    }
+
+    [Fact]
+    public void ReviewCommentAttemptsPatcher_CreatesTableIdempotentlyAndPropagatesFailure()
+    {
+        var patcher = new SettingsPatcherStub(0);
+        Assert.True(ReviewCommentAttemptsPatcher.Run(patcher));
+        Assert.Equal("ReviewCommentAttempts", patcher.System);
+        var sql = Assert.Single(patcher.Sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `review_comment_attempts`", sql);
+        foreach (var column in new[]
+            { "`id`", "`pull_request_id`", "`github_comment_id`", "`attempts`", "`status`",
+              "`created`", "`updated`", "`last_error`" })
+        {
+            Assert.Contains(column, sql);
+        }
+        Assert.Contains("UNIQUE KEY `uq_review_comment_attempts_pr_comment` (`pull_request_id`, `github_comment_id`)", sql);
+        Assert.Contains("REFERENCES `pull_requests` (`id`)", sql);
+
+        Assert.False(ReviewCommentAttemptsPatcher.Run(new SettingsPatcherStub(1)));
     }
 
     [Fact]
@@ -200,7 +221,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 7),
+            ("ReviewCommentAttempts", 1)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -229,7 +251,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentConfig", 4),
             ("AgentConfig", 5),
             ("AgentConfig", 6),
-            ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 7),
+            ("ReviewCommentAttempts", 1)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
