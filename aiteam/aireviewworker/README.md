@@ -21,6 +21,17 @@ Loaded like [aiworker](../aiworker/README.md):
   the `aiworker` settings client (agent/repository tokens, `GitHub.TargetRepositoryUrl`), so no
   schema change is needed.
 
+## GitHub token permissions
+
+The GitHub token needs, on the target repository: Contents: write (push fixes) and
+Pull requests: read (read review comments).
+
+## Deployment
+
+Compose service `review-worker` (`aiteam/docker-compose.yml`); CI in
+`.github/workflows/aireviewworker-ci-*.yml`; deployed after AIClaudeWorker by
+`aiteam-deploy.yml`.
+
 ## Build, test, run
 
 ```bash
