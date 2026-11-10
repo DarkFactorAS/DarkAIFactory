@@ -138,7 +138,7 @@ public sealed class PullRequestCloserTests
         Assert.Equal("https://github.com/owner/repo/pull/42", url);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Contains("head=owner%3Aai-agent%2FTASK-1", handler.Requests[1].Request.RequestUri!.Query);
-        Assert.Contains("base=main", handler.Requests[1].Request.RequestUri.Query);
+        Assert.Contains("base=main", handler.Requests[1].Request.RequestUri!.Query);
     }
 
     [Fact]
