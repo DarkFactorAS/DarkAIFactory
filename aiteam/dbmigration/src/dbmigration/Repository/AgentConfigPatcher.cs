@@ -132,6 +132,14 @@ public static class AgentConfigPatcher
             INSERT IGNORE INTO `agent_metrics_totals` (`agent_id`)
             SELECT `id` FROM `agents` WHERE `name` = 'sample-agent'
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // Output tokens are unknown for some runs; NULL means "not reported".
+        patcher.Patch(system, 8,
+            "ALTER TABLE `agent_task_metrics` MODIFY COLUMN `output_tokens` BIGINT NULL DEFAULT NULL");
         return patcher.Successful();
     }
 }
