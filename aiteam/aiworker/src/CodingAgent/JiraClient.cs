@@ -130,7 +130,8 @@ internal sealed class JiraClient : IDisposable
                     ?? throw new InvalidDataException("A Jira label is null.")).ToArray()
                 : [],
             Blockers = JiraWorkflowRules.ReadBlockers(fields),
-            ParentKey = JiraWorkflowRules.ReadSubtaskParentKey(fields)
+            ParentKey = JiraWorkflowRules.ReadSubtaskParentKey(fields),
+            IssueTypeName = fields.TryGetProperty("issuetype", out var issueType) ? ReadString(issueType, "name") : string.Empty
         };
     }
 
