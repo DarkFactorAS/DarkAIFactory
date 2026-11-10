@@ -17,7 +17,9 @@ RUN apt-get update \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 # The CLI login (claude /login) is kept in CLAUDE_CONFIG_DIR; Compose mounts a volume here.
-RUN mkdir -p /claude-config && chown app:app /claude-config
+# /workspaces is shared between the worker and the CLI runner via a named volume; Docker seeds a new
+# empty volume with this directory's ownership, so it must belong to the non-root app user.
+RUN mkdir -p /claude-config /workspaces && chown app:app /claude-config /workspaces
 ENV DISABLE_AUTOUPDATER=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
     CLAUDE_CONFIG_DIR=/claude-config

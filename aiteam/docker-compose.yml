@@ -208,8 +208,10 @@ services:
       - "127.0.0.1:8206:3306"
 
 volumes:
+  # docker volume create claude_config
   claude_config:
     name: ${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}
+  # docker volume create claude_workspaces
   claude_workspaces:
     name: ${CLAUDE_WORKSPACES_VOLUME_NAME:-aiteam_claude_workspaces}
   # docker volume create aiteam_mariadb_data
