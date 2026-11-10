@@ -17,8 +17,8 @@ internal interface IReviewGit
     Task<IReadOnlyList<string>> ChangedFilesAsync(string workspacePath, CancellationToken cancellationToken);
     Task DiscardChangesAsync(string workspacePath, CancellationToken cancellationToken);
     Task CommitAsync(string workspacePath, string message, CancellationToken cancellationToken);
-    /// <summary>Pushes HEAD to the named branch on origin. Must never force.</summary>
-    Task PushAsync(string workspacePath, string branch, CancellationToken cancellationToken);
+    /// <summary>Pushes HEAD to the named branch at the trusted repository URL. Must never force.</summary>
+    Task PushAsync(string workspacePath, Uri repositoryUrl, string branch, CancellationToken cancellationToken);
 }
 
 internal interface IProjectCommandRunner
@@ -84,7 +84,7 @@ internal sealed class ReviewFixFlow(
     {
         if (!FixDecision.IsPushableBranch(headBranch))
         {
-            return await FailAsync(pullRequest, comments.Select(c => c.Id).ToList(), 0,
+            return await FailAsync(pullRequest, comments.Select(c => c.Id).ToList(), new Dictionary<long, int>(),
                 $"Refusing to push to branch '{headBranch}'.", terminal: true);
         }
 
@@ -96,7 +96,6 @@ internal sealed class ReviewFixFlow(
         }
 
         var ids = eligible.Select(c => c.Id).ToList();
-        var attemptNumber = eligible.Max(c => used.GetValueOrDefault(c.Id)) + 1;
         // Persist the attempt before running so a crash still counts against the limit.
         attempts.Record(pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
 
@@ -108,9 +107,7 @@ internal sealed class ReviewFixFlow(
             if (changed.Count == 0)
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: Copilot made no changes; nothing to push.");
-                attempts.Record(pullRequest.Id, ids,
-                    FixDecision.StatusAfterUnsuccessfulAttempt(attemptNumber, options.MaxAttempts),
-                    countAttempt: false, error: "Copilot made no changes.");
+                RecordUnsuccessfulAttempts(pullRequest, ids, used, "Copilot made no changes.");
                 return new FixResult(FixOutcome.NoChanges);
             }
 
@@ -118,7 +115,7 @@ internal sealed class ReviewFixFlow(
             if (outOfBounds.Count > 0)
             {
                 await git.DiscardChangesAsync(workspacePath, cancellationToken);
-                return await FailAsync(pullRequest, ids, attemptNumber,
+                return await FailAsync(pullRequest, ids, used,
                     $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
             }
 
@@ -133,13 +130,22 @@ internal sealed class ReviewFixFlow(
                 if (failure is not null)
                 {
                     await git.DiscardChangesAsync(workspacePath, cancellationToken);
-                    return await FailAsync(pullRequest, ids, attemptNumber, $"'{command}' failed: {failure}");
+                    return await FailAsync(pullRequest, ids, used, $"'{command}' failed: {failure}");
                 }
+            }
+
+            changed = await git.ChangedFilesAsync(workspacePath, cancellationToken);
+            outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
+            if (outOfBounds.Count > 0)
+            {
+                await git.DiscardChangesAsync(workspacePath, cancellationToken);
+                return await FailAsync(pullRequest, ids, used,
+                    $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
             }
 
             await git.CommitAsync(workspacePath,
                 $"{pullRequest.JiraKey}: Address review comments ({ids.Count})", cancellationToken);
-            await git.PushAsync(workspacePath, headBranch, cancellationToken);
+            await git.PushAsync(workspacePath, pullRequest.RepositoryUrl, headBranch, cancellationToken);
             attempts.Record(pullRequest.Id, ids, "Resolved", countAttempt: false, error: null);
             DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: pushed fixes to '{headBranch}'.");
             return new FixResult(FixOutcome.Pushed);
@@ -151,17 +157,37 @@ internal sealed class ReviewFixFlow(
         }
         catch (Exception exception)
         {
-            return await FailAsync(pullRequest, ids, attemptNumber, exception.Message);
+            return await FailAsync(pullRequest, ids, used, exception.Message);
         }
     }
 
     private Task<FixResult> FailAsync(
-        TrackedPullRequest pullRequest, IReadOnlyCollection<long> ids, int attemptNumber, string error,
+        TrackedPullRequest pullRequest, IReadOnlyCollection<long> ids, IReadOnlyDictionary<long, int> attemptsUsed, string error,
         bool terminal = false)
     {
         DFLogger.LogOutput(DFLogLevel.ERROR, Category, $"PR #{pullRequest.Number}: {error}");
-        var status = terminal ? "Failed" : FixDecision.StatusAfterUnsuccessfulAttempt(attemptNumber, options.MaxAttempts);
-        attempts.Record(pullRequest.Id, ids, status, countAttempt: false, error);
+        if (terminal)
+        {
+            attempts.Record(pullRequest.Id, ids, "Failed", countAttempt: false, error);
+        }
+        else
+        {
+            RecordUnsuccessfulAttempts(pullRequest, ids, attemptsUsed, error);
+        }
+
         return Task.FromResult(new FixResult(FixOutcome.Failed, error));
+    }
+
+    private void RecordUnsuccessfulAttempts(
+        TrackedPullRequest pullRequest,
+        IReadOnlyCollection<long> ids,
+        IReadOnlyDictionary<long, int> attemptsUsed,
+        string error)
+    {
+        foreach (var group in ids.GroupBy(id =>
+                     FixDecision.StatusAfterUnsuccessfulAttempt(attemptsUsed.GetValueOrDefault(id) + 1, options.MaxAttempts)))
+        {
+            attempts.Record(pullRequest.Id, group.ToList(), group.Key, countAttempt: false, error);
+        }
     }
 }

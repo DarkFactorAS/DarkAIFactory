@@ -15,10 +15,11 @@ public sealed class ReviewFixFlowTests
         public List<string> Calls { get; } = [];
         public List<string> Changed { get; set; } = ["src/A.cs"];
         public Dictionary<long, int> Used { get; } = [];
-        public List<(string Status, bool Count, string? Error)> Records { get; } = [];
+        public List<(long[] Ids, string Status, bool Count, string? Error)> Records { get; } = [];
         public Exception? RunnerError { get; set; }
         public string? CommandFailure { get; set; }
         public string? Pushed { get; private set; }
+        public Queue<IReadOnlyList<string>>? ChangedSequence { get; set; }
 
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
@@ -26,10 +27,10 @@ public sealed class ReviewFixFlowTests
             return RunnerError is null ? Task.CompletedTask : Task.FromException(RunnerError);
         }
         public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, CancellationToken c) =>
-            Task.FromResult<IReadOnlyList<string>>(Changed);
+            Task.FromResult(ChangedSequence is { Count: > 0 } ? ChangedSequence.Dequeue() : (IReadOnlyList<string>)Changed);
         public Task DiscardChangesAsync(string w, CancellationToken c) { Calls.Add("discard"); return Task.CompletedTask; }
         public Task CommitAsync(string w, string m, CancellationToken c) { Calls.Add("commit"); return Task.CompletedTask; }
-        public Task PushAsync(string w, string b, CancellationToken c) { Calls.Add("push"); Pushed = b; return Task.CompletedTask; }
+        public Task PushAsync(string w, Uri u, string b, CancellationToken c) { Calls.Add("push"); Pushed = b; return Task.CompletedTask; }
         Task<string?> IProjectCommandRunner.RunAsync(string command, string w, CancellationToken c)
         {
             Calls.Add(command);
@@ -37,7 +38,7 @@ public sealed class ReviewFixFlowTests
         }
         public IReadOnlyDictionary<long, int> GetAttempts(long id, IReadOnlyCollection<long> ids) => Used;
         public void Record(long id, IReadOnlyCollection<long> ids, string status, bool count, string? error) =>
-            Records.Add((status, count, error));
+            Records.Add((ids.ToArray(), status, count, error));
     }
 
     private static Task<FixResult> Run(Fakes f, FixOptions? options = null, string branch = "feature/x", params ReviewComment[] comments) =>
@@ -52,7 +53,7 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(["copilot", "build", "test", "commit", "push"], f.Calls);
         Assert.Equal("feature/x", f.Pushed);
-        Assert.Equal(("InProgress", true, null), f.Records[0]);
+        Assert.Equal(("InProgress", true, null), (f.Records[0].Status, f.Records[0].Count, f.Records[0].Error));
         Assert.Equal("Resolved", f.Records[^1].Status);
     }
 
@@ -75,6 +76,22 @@ public sealed class ReviewFixFlowTests
         f.Used[10] = 2;
         await Run(f);
         Assert.Equal("Failed", f.Records[^1].Status);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UnsuccessfulBatchUsesEachCommentsOwnAttemptCount(bool noChanges)
+    {
+        var f = noChanges
+            ? new Fakes { Changed = [] }
+            : new Fakes { RunnerError = new InvalidOperationException("boom") };
+        f.Used[10] = 2;
+
+        await Run(f, comments: [Comment(10), Comment(11)]);
+
+        Assert.Contains(f.Records, record => record.Status == "Failed" && record.Ids.SequenceEqual([10L]));
+        Assert.Contains(f.Records, record => record.Status == "Pending" && record.Ids.SequenceEqual([11L]));
     }
 
     [Fact]
@@ -123,6 +140,22 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.Failed, result.Outcome);
         Assert.Equal(["copilot", "test", "discard"], f.Calls);
         Assert.Contains("test", f.Records[^1].Error);
+    }
+
+    [Fact]
+    public async Task RechecksChangedFilesAfterValidationBeforeCommit()
+    {
+        var f = new Fakes
+        {
+            ChangedSequence = new Queue<IReadOnlyList<string>>(
+                [["src/A.cs"], ["src/A.cs", "src/Generated.cs"]])
+        };
+
+        var result = await Run(f, new FixOptions(3, TestCommand: "test"));
+
+        Assert.Equal(FixOutcome.Failed, result.Outcome);
+        Assert.Equal(["copilot", "test", "discard"], f.Calls);
+        Assert.Contains("src/Generated.cs", result.Error);
     }
 
     [Fact]

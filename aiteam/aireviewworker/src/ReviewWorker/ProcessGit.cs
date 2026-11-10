@@ -53,15 +53,35 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
         await GitAsync(workspacePath, ["commit", "--no-verify", "-m", message], cancellationToken);
     }
 
-    public async Task PushAsync(string workspacePath, string branch, CancellationToken cancellationToken)
+    public async Task PushAsync(string workspacePath, Uri repositoryUrl, string branch, CancellationToken cancellationToken)
     {
         if (!FixDecision.IsPushableBranch(branch))
         {
             throw new InvalidOperationException($"Refusing to push to branch '{branch}'.");
         }
 
-        // Plain (non-forced, no '+') refspec: a non-fast-forward push is rejected by GitHub.
-        await GitAsync(workspacePath, ["push", "origin", $"HEAD:refs/heads/{branch}"], cancellationToken, credentials: true);
+        var pushRepositoryPath = Path.Combine(Path.GetTempPath(), $"review-worker-push-{Guid.NewGuid():N}");
+        try
+        {
+            await GitAsync(workspacePath, ["init", "--bare", pushRepositoryPath], cancellationToken);
+            await GitAsync(workspacePath,
+                ["--git-dir", pushRepositoryPath, "fetch", "--no-tags", "--no-recurse-submodules", "--", workspacePath, "HEAD"],
+                cancellationToken);
+
+            // Use an isolated Git config and the trusted URL so checkout configuration cannot redirect the token.
+            // Plain (non-forced, no '+') refspec: a non-fast-forward push is rejected by GitHub.
+            await GitAsync(workspacePath,
+                ["--git-dir", pushRepositoryPath, "push", "--no-recurse-submodules", "--",
+                    repositoryUrl.AbsoluteUri, $"FETCH_HEAD:refs/heads/{branch}"],
+                cancellationToken, credentials: true);
+        }
+        finally
+        {
+            if (Directory.Exists(pushRepositoryPath))
+            {
+                Directory.Delete(pushRepositoryPath, recursive: true);
+            }
+        }
     }
 
     public async Task<string?> RunAsync(string command, string workspacePath, CancellationToken cancellationToken)
