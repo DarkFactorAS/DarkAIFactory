@@ -45,6 +45,16 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
+| `AgentConfig` | 1 | `language_models` (`model_id` unique, `display_name`, `enabled`) |
+| `AgentConfig` | 2 | `agent_definitions` (unique `name`, `role`, `instructions`, FK `language_model_id`, created/updated) |
+| `AgentConfig` | 3 | `agent_capabilities` (FK `agent_id` with cascade delete, `name`, `enabled`, unique per agent and name) |
+| `AgentConfig` | 4 | `task_metrics` (FK `agent_id`, `task_key`, nullable `tokens_in`/`tokens_out`, `tool_call_count`, `duration_ms`, `status` `success`/`failed`, `started`/`completed`/`created`) |
+| `AgentConfig` | 5 | Seeds language model `claude-sonnet-5-5` (enabled), only if missing |
+| `AgentConfig` | 6 | Seeds the agent `default` (role "Software developer"), only if missing |
+
+The `AgentConfig` patches only create new tables (`CREATE TABLE IF NOT EXISTS`) and seed rows
+with `INSERT ... WHERE NOT EXISTS`; no existing table is altered. Models and repositories live in
+`aiteam/shared/AgentConfig.cs`.
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database
