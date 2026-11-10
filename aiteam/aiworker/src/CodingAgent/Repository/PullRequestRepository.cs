@@ -30,8 +30,8 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
         command.ExecuteNonQuery();
     }
 
-    // Rows are removed once a pull request is no longer open, so every row is a tracked open pull request.
-    public IReadOnlyList<TrackedPullRequest> ListOpen(Uri repositoryUrl)
+    // Rows may refer to closed or merged pull requests; callers must check the current GitHub state.
+    public IReadOnlyList<TrackedPullRequest> ListTracked(Uri repositoryUrl)
     {
         using var command = connectionFactory.CreateCommand(
             "SELECT jira_key, repository_url, pr_number, pr_url FROM pull_requests " +
@@ -47,6 +47,9 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
 
         return result;
     }
+
+    [Obsolete("Does not guarantee open state; use ListTracked.")]
+    public IReadOnlyList<TrackedPullRequest> ListOpen(Uri repositoryUrl) => ListTracked(repositoryUrl);
 
     public bool DeleteByNumber(Uri repositoryUrl, long pullRequestNumber)
     {
