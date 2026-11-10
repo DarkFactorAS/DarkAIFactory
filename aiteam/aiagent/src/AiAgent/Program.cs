@@ -3,6 +3,8 @@ using AiAgent;
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Config", "appsettings.json"), optional: true);
 builder.Configuration.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Config", $"appsettings.{builder.Environment.EnvironmentName}.json"), optional: true);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("AiAgent"));
 builder.Services.AddSingleton<IAgentInfo, AgentInfo>();
