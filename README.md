@@ -12,9 +12,9 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
 - **Jira Claude Coding Agent** — the same worker using the Claude Code CLI
   instead of Copilot (`aiteam/aiclaudeworker`). See
   [the AI Claude worker README](aiteam/aiclaudeworker/README.md).
-- **Review Worker** — solves pull-request review comments: it fetches
-  comments from the reviewer on the agent's pull requests, runs Copilot CLI to
-  fix them and pushes to the PR branch (`aiteam/aireviewworker`). See
+- **Review Worker** — a polling scaffold that loads and validates configuration
+  (`aiteam/aireviewworker`). Review fetching, Copilot fixes, pushes and attempt
+  persistence shown below are planned, not active service behavior. See
   [the review worker README](aiteam/aireviewworker/README.md).
 - **aidashboard** — a minimal ASP.NET Core application.
   See [the aidashboard README](aiteam/aidashboard/README.md).
