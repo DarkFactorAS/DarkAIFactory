@@ -21,21 +21,60 @@ public sealed class GitHubReviewClientTests
         }
     }
 
-    private static string Thread(long id, string login, bool resolved = false, bool outdated = false) =>
-        new JsonObject
+    private static string Thread(
+        long id, string login, bool resolved = false, bool outdated = false,
+        bool hasNextCommentPage = false, params (long Id, string Login)[] replies)
+    {
+        var comments = new JsonArray { Comment(id, login) };
+        foreach (var reply in replies)
         {
+            comments.Add(Comment(reply.Id, reply.Login));
+        }
+
+        return new JsonObject
+        {
+            ["id"] = $"thread-{id}",
+            ["line"] = 3,
             ["isResolved"] = resolved,
             ["isOutdated"] = outdated,
             ["comments"] = new JsonObject
             {
-                ["nodes"] = new JsonArray(new JsonObject
+                ["pageInfo"] = new JsonObject
                 {
-                    ["databaseId"] = id,
-                    ["body"] = $"fix {id}",
-                    ["path"] = "a.cs",
-                    ["line"] = 3,
-                    ["author"] = new JsonObject { ["login"] = login }
-                })
+                    ["hasNextPage"] = hasNextCommentPage,
+                    ["endCursor"] = hasNextCommentPage ? "comment-cursor" : null
+                },
+                ["nodes"] = comments
+            }
+        }.ToJsonString();
+    }
+
+    private static JsonObject Comment(long id, string login) =>
+        new()
+        {
+            ["fullDatabaseId"] = id.ToString(),
+            ["body"] = $"fix {id}",
+            ["path"] = "a.cs",
+            ["author"] = new JsonObject { ["login"] = login }
+        };
+
+    private static string CommentsPage((long Id, string Login)[] comments, string? next = null) =>
+        new JsonObject
+        {
+            ["data"] = new JsonObject
+            {
+                ["node"] = new JsonObject
+                {
+                    ["comments"] = new JsonObject
+                    {
+                        ["pageInfo"] = new JsonObject
+                        {
+                            ["hasNextPage"] = next is not null,
+                            ["endCursor"] = next
+                        },
+                        ["nodes"] = new JsonArray(comments.Select(comment => (JsonNode?)Comment(comment.Id, comment.Login)).ToArray())
+                    }
+                }
             }
         }.ToJsonString();
 
@@ -114,6 +153,35 @@ public sealed class GitHubReviewClientTests
         Assert.Equal([1L, 2L], comments.Select(c => c.Id));
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal("c1", handler.Requests[1]["variables"]!["cursor"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task FiltersEveryCommentAcrossPaginatedThreadComments()
+    {
+        HandledIds = [];
+        var handler = new Handler(request => request["variables"]!["threadId"] is not null
+            ? CommentsPage([(22, "Copilot")])
+            : Page("OPEN", Thread(
+                20, "someone", hasNextCommentPage: true, replies: [(21, "Copilot")])));
+        var (client, _) = Create(handler);
+
+        var comments = await client.GetActionableCommentsAsync(Pr, default);
+
+        Assert.Equal([21L, 22L], comments.Select(comment => comment.Id));
+        Assert.Equal(3, comments[0].Line);
+        Assert.Equal("thread-20", handler.Requests[1]["variables"]!["threadId"]!.GetValue<string>());
+        Assert.Equal("comment-cursor", handler.Requests[1]["variables"]!["cursor"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task ParsesFullDatabaseIdsBeyondInt32()
+    {
+        HandledIds = [];
+        var (client, _) = Create(new Handler(_ => Page("OPEN", Thread(2_147_483_648, "Copilot"))));
+
+        var comments = await client.GetActionableCommentsAsync(Pr, default);
+
+        Assert.Equal(2_147_483_648L, Assert.Single(comments).Id);
     }
 
     [Fact]
