@@ -110,6 +110,9 @@ services:
     build:
       context: ..
       dockerfile: aiteam/aiagent/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
     command: ["--git-fetch"]
     volumes:
       - aiagent_workspaces:/workspaces
@@ -128,6 +131,9 @@ services:
     build:
       context: ..
       dockerfile: aiteam/aiagent/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
     command: ["--runner"]
     depends_on:
       aiagent-git-fetch:

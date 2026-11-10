@@ -5,8 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>AiAgent</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="AiAgent.Tests" />
+    <Content Include="../../../config/appsettings*.json" Link="Config/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

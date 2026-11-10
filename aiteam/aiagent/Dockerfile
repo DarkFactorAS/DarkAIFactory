@@ -2,7 +2,9 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY aiteam/aiagent/NuGet.config ./
 COPY aiteam/aiagent/src/AiAgent/AiAgent.csproj src/AiAgent/
-RUN dotnet restore src/AiAgent/AiAgent.csproj
+RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
+    --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
+    dotnet restore src/AiAgent/AiAgent.csproj
 COPY aiteam/aiagent/src/AiAgent/ src/AiAgent/
 RUN dotnet publish src/AiAgent/AiAgent.csproj --configuration Release --no-restore --output /app/publish
 

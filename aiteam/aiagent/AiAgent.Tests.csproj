@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="src/**" />
+    <Compile Remove="tests/**" />
     <None Remove="src/**" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />
