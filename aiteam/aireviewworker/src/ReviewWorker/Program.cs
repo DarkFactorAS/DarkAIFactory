@@ -5,6 +5,7 @@ using DFCommonLib.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ReviewWorker;
+using ReviewWorker.Repository;
 using System.Runtime.InteropServices;
 
 if (args is ["--runner-server"])
@@ -18,6 +19,8 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<PullRequestReader>();
+builder.Services.AddScoped<ReviewCommentAttemptRepository>();
 using var host = builder.Build();
 DFLogger.LogOutput(
     DFLogLevel.INFO,
@@ -48,12 +51,15 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
     });
 
 AgentConfiguration? loggedConfiguration = null;
+var cycle = 0L;
 try
 {
     while (!cancellation.IsCancellationRequested)
     {
+        cycle++;
         try
         {
+            DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Cycle {cycle}: started.");
             using var scope = host.Services.CreateScope();
             var settings = scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
                 .Load("aiworker", appSettings.PollIntervalSeconds);
@@ -70,7 +76,13 @@ try
                     $"GitHub repository: {configuration.GitHubRepositoryUrl}");
             }
 
-            // Review comment processing is added in follow-up sub-tasks of DFAI-137.
+            await ReviewCycleScanner.ScanAsync(cycle, configuration, scope.ServiceProvider, cancellation.Token);
+
+            // Review comment fixing is added in follow-up sub-tasks of DFAI-137.
+            DFLogger.LogOutput(
+                DFLogLevel.INFO,
+                "Worker",
+                $"Cycle {cycle}: done. Comment fixing is not enabled yet; sleeping {configuration.PollInterval.TotalSeconds:0} seconds.");
             await Task.Delay(configuration.PollInterval, cancellation.Token);
         }
         catch (Exception exception) when (
