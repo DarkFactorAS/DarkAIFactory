@@ -88,6 +88,30 @@
       "group": "test"
     },
     {
+      "label": "build aiagent",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/aiteam/aiagent/src/AiAgent/AiAgent.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "test aiagent",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/aiteam/aiagent/AiAgent.Tests.csproj"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
       "label": "test aitechlead",
       "type": "process",
       "command": "dotnet",

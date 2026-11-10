@@ -106,6 +106,52 @@ services:
     networks:
       - claude-runner
 
+  aiagent-git-fetch:
+    build:
+      context: ..
+      dockerfile: aiteam/aiagent/Dockerfile
+    command: ["--git-fetch"]
+    volumes:
+      - aiagent_workspaces:/workspaces
+    restart: "no"
+    environment:
+      HOME: /tmp
+      AIAGENT_WORKSPACE_ROOT: /workspaces
+      AIAGENT_REPOSITORY_URL: ${AIAGENT_REPOSITORY_URL:-https://github.com/DarkFactorAS/DarkAIFactory.git}
+      AIAGENT_REPOSITORY_BRANCH: ${AIAGENT_REPOSITORY_BRANCH:-}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  aiagent-runner:
+    build:
+      context: ..
+      dockerfile: aiteam/aiagent/Dockerfile
+    command: ["--runner"]
+    depends_on:
+      aiagent-git-fetch:
+        condition: service_completed_successfully
+    volumes:
+      - aiagent_workspaces:/workspaces
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /tmp
+      AIAGENT_WORKSPACE_ROOT: /workspaces
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - aiagent
+
   manager-agent:
     build:
       context: ..
@@ -214,6 +260,8 @@ volumes:
   # docker volume create claude_workspaces
   claude_workspaces:
     name: ${CLAUDE_WORKSPACES_VOLUME_NAME:-aiteam_claude_workspaces}
+  aiagent_workspaces:
+    name: ${AIAGENT_WORKSPACES_VOLUME_NAME:-aiteam_aiagent_workspaces}
   # docker volume create aiteam_mariadb_data
   aiteam_mariadb_data:
     external: true
@@ -227,3 +275,4 @@ secrets:
 
 networks:
   claude-runner:
+  aiagent:
