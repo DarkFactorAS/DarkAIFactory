@@ -81,7 +81,7 @@ public sealed class GitHubReviewClientTests
 
     private static string Page(string state, string threads, string? next = null) =>
         JsonNode.Parse(
-            "{\"data\":{\"repository\":{\"pullRequest\":{\"state\":\"" + state + "\",\"headRefOid\":\"sha1\"," +
+            "{\"data\":{\"repository\":{\"pullRequest\":{\"state\":\"" + state + "\",\"headRefOid\":\"sha1\",\"headRefName\":\"feature/x\"," +
             "\"reviewThreads\":{\"pageInfo\":{\"hasNextPage\":" + (next is null ? "false" : "true") +
             ",\"endCursor\":" + (next is null ? "null" : "\"" + next + "\"") + "},\"nodes\":[" + threads + "]}}}}}")!
             .ToJsonString();
@@ -120,6 +120,20 @@ public sealed class GitHubReviewClientTests
     }
 
     [ThreadStatic] private static long[] HandledIds = [];
+
+    [Fact]
+    public async Task GetHeadReturnsBranchAndSha()
+    {
+        var handler = new Handler(_ => Page("OPEN", string.Empty));
+        var (client, _) = Create(handler);
+        using (client)
+        {
+            var (branch, sha) = await client.GetHeadAsync(Pr, CancellationToken.None);
+            Assert.Equal("feature/x", branch);
+            Assert.Equal("sha1", sha);
+            Assert.Contains("headRefName", handler.Requests[0]["query"]!.GetValue<string>());
+        }
+    }
 
     [Fact]
     public async Task FiltersByReviewerResolvedOutdatedAndHandled()

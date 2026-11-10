@@ -50,6 +50,10 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
+var fixOptions = new FixOptions(
+    appSettings.MaxAttemptsPerPullRequest,
+    string.IsNullOrWhiteSpace(appSettings.BuildCommand) ? null : appSettings.BuildCommand.Trim(),
+    string.IsNullOrWhiteSpace(appSettings.TestCommand) ? null : appSettings.TestCommand.Trim());
 AgentConfiguration? loggedConfiguration = null;
 var cycle = 0L;
 try
@@ -73,16 +77,16 @@ try
                     $"{appSettings.AppName} review worker polling every {configuration.PollInterval.TotalSeconds:0} seconds. " +
                     $"Reviewer: {configuration.ReviewerLogin}. " +
                     $"Max attempts per pull request: {configuration.MaxAttemptsPerPullRequest}. " +
-                    $"GitHub repository: {configuration.GitHubRepositoryUrl}");
+                    $"GitHub repository: {configuration.GitHubRepositoryUrl}. " +
+                    $"Build command: {fixOptions.BuildCommand ?? "(none)"}. Test command: {fixOptions.TestCommand ?? "(none)"}.");
             }
 
-            await ReviewCycleScanner.ScanAsync(cycle, configuration, scope.ServiceProvider, cancellation.Token);
+            await ReviewCycleRunner.RunAsync(cycle, configuration, fixOptions, scope.ServiceProvider, cancellation.Token);
 
-            // Review comment fixing is added in follow-up sub-tasks of DFAI-137.
             DFLogger.LogOutput(
                 DFLogLevel.INFO,
                 "Worker",
-                $"Cycle {cycle}: done. Comment fixing is not enabled yet; sleeping {configuration.PollInterval.TotalSeconds:0} seconds.");
+                $"Cycle {cycle}: done; sleeping {configuration.PollInterval.TotalSeconds:0} seconds.");
             await Task.Delay(configuration.PollInterval, cancellation.Token);
         }
         catch (Exception exception) when (

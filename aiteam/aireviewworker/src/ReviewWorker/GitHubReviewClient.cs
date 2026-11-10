@@ -20,6 +20,7 @@ internal sealed class GitHubReviewClient : IDisposable
           repository(owner: $owner, name: $name) {
             pullRequest(number: $number) {
               state
+              headRefName
               headRefOid
               reviewThreads(first: 100, after: $cursor) {
                 pageInfo { hasNextPage endCursor }
@@ -93,6 +94,14 @@ internal sealed class GitHubReviewClient : IDisposable
         }
 
         return open;
+    }
+
+    /// <summary>Head branch name and commit of the pull request.</summary>
+    public async Task<(string Branch, string Sha)> GetHeadAsync(
+        TrackedPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var page = await FetchThreadsPageAsync(pullRequest, null, cancellationToken);
+        return (page.HeadBranch, page.HeadSha);
     }
 
     /// <summary>
@@ -208,6 +217,7 @@ internal sealed class GitHubReviewClient : IDisposable
         return new ThreadsPage(
             node["state"]?.GetValue<string>() ?? string.Empty,
             node["headRefOid"]?.GetValue<string>() ?? string.Empty,
+            node["headRefName"]?.GetValue<string>() ?? string.Empty,
             list,
             threads?["pageInfo"]?["hasNextPage"]?.GetValue<bool>() ?? false,
             threads?["pageInfo"]?["endCursor"]?.GetValue<string>());
@@ -289,5 +299,5 @@ internal sealed class GitHubReviewClient : IDisposable
         bool HasNextCommentPage, string? CommentEndCursor);
     private sealed record CommentsPage(List<CommentInfo> Comments, bool HasNextPage, string? EndCursor);
     private sealed record ThreadsPage(
-        string State, string HeadSha, List<ThreadInfo> Threads, bool HasNextPage, string? EndCursor);
+        string State, string HeadSha, string HeadBranch, List<ThreadInfo> Threads, bool HasNextPage, string? EndCursor);
 }
