@@ -46,7 +46,12 @@ public sealed class AiDatabasePatcherTests
                 "patch:WorkflowLabels:3", "successful",
                 "patch:WorkflowLabels:4", "successful",
                 "init:AgentTasks",
-                "patch:AgentTasks:1", "successful"]);
+                "patch:AgentTasks:1", "successful",
+                "init:NewSchema",
+                "patch:NewSchema:1", "successful",
+                "patch:NewSchema:2", "successful",
+                "patch:NewSchema:3", "successful",
+                "patch:NewSchema:4", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -89,6 +94,8 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`", dbPatcher.Sql[19]);
             Assert.Contains("WHERE `agent_name` = 'aiworker'", dbPatcher.Sql[19]);
             Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[20]);
+            Assert.Equal(4, dbPatcher.Sql.Skip(21).Count());
+            Assert.All(dbPatcher.Sql.Skip(21), sql => Assert.Contains("CREATE TABLE IF NOT EXISTS `new_", sql));
         }
     }
 
