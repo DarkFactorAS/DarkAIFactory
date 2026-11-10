@@ -204,9 +204,10 @@ public sealed class ManagerPlannerSplitTests
         handler.AddLabel("TASK-1", "ai-approved");
         await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
 
+        Assert.Equal(["In Progress", "In Progress", "Done"],
+            handler.CreatedKeys.Select(key => handler.GetIssue(key).StatusName));
         Assert.All(handler.CreatedKeys, key =>
         {
-            Assert.Equal("In Progress", handler.GetIssue(key).StatusName);
             Assert.DoesNotContain("ai-analyzed", handler.GetIssue(key).Labels);
         });
 
