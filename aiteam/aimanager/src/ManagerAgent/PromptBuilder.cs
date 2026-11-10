@@ -38,6 +38,13 @@ internal static class PromptBuilder
         prompt.AppendLine("- \"subtasks\": array of {\"title\": unique short title, \"description\": what to do and acceptance criteria, \"dependsOn\": array of titles of other sub-tasks that must finish first}. Maximum 10, no cycles.");
         prompt.AppendLine("- \"riskAreas\": array of strings such as \"authentication\", \"database\", \"architecture\".");
         prompt.AppendLine();
+        prompt.AppendLine("Rules:");
+        prompt.AppendLine("- Ask for feedback (\"clarify\") only when it is critical: the requirement is ambiguous in a way that could make the work wrong or unsafe. Decide smaller matters yourself and list the assumptions you made in \"plan\".");
+        prompt.AppendLine("- When the work needs several sub-tasks or steps (\"split\"), \"plan\" is required and must be the full, detailed implementation plan for the whole task: it is written on the main task and a human approves it before any sub-task is created or implemented.");
+        prompt.AppendLine("- Write every sub-task \"description\" in cleartext so that it is self-contained: what to do, the files involved and the acceptance criteria. Do not refer to information that exists only in your reasoning.");
+        prompt.AppendLine("- The main task gets a branch named after its task key like normal. Every sub-task branches off that main task branch and its pull request is merged into the main task branch, not the default branch. The manager adds these branch and pull request instructions to each sub-task automatically; do not contradict them.");
+        prompt.AppendLine("- Tasks that are blocked by other open tasks may still be triaged and planned. They are only handed to the worker when every blocking task is Done.");
+        prompt.AppendLine();
         AppendIssue(prompt, issue);
         return prompt.ToString();
     }

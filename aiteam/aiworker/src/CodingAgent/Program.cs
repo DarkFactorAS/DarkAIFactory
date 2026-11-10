@@ -158,6 +158,15 @@ try
                     await ReportIgnoredAsync(jira, issue.Key, reason, cancellation.Token);
                     continue;
                 }
+                var openBlockers = JiraWorkflowRules.OpenBlockers(issue.Blockers, configuration.DoneStatus);
+                if (openBlockers.Count > 0)
+                {
+                    var blockedReason =
+                        $"it is blocked by tasks that are not {configuration.DoneStatus} yet: {JiraWorkflowRules.DescribeBlockers(openBlockers)}.";
+                    DFLogger.LogOutput(DFLogLevel.WARNING, "Worker", $"Skipping {issue.Key}: {blockedReason}");
+                    await ReportIgnoredAsync(jira, issue.Key, blockedReason, cancellation.Token);
+                    continue;
+                }
                 await IgnoredTaskNotifier.ClearAsync(
                     issue.Key,
                     issue.Labels,
@@ -244,7 +253,8 @@ try
                             configuration,
                             workspacePath,
                             issue.Key,
-                            cancellation.Token);
+                            cancellation.Token,
+                            issue.ParentKey);
                         branchName = createdBranchName;
                         string plan;
                         if (managerPlan is not null)
@@ -270,7 +280,10 @@ try
                         }
                         var result = await copilot.RunAsync(
                             workspacePath,
-                            PromptBuilder.BuildImplementationPrompt(issue, plan),
+                            PromptBuilder.BuildImplementationPrompt(
+                                issue,
+                                plan,
+                                issue.ParentKey is null ? null : JiraWorkflowRules.ParentBranchName(issue.ParentKey)),
                             allowChanges: true,
                             cancellation.Token);
                         var pushResult = await GitHubRepository.CommitAndPushAsync(
@@ -289,7 +302,8 @@ try
                                 pushedBranchName,
                                 issue.Key,
                                 issue.Summary,
-                                cancellation.Token);
+                                cancellation.Token,
+                                baseBranch: issue.ParentKey is null ? null : JiraWorkflowRules.ParentBranchName(issue.ParentKey));
                             message += $" Pull request: {pullRequestUrl}";
                             try
                             {
