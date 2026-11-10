@@ -11,7 +11,10 @@ RUN dotnet publish src/ReviewWorker/ReviewWorker.csproj --configuration Release 
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates git \
+    && apt-get install --yes --no-install-recommends bash ca-certificates curl git \
+    && curl -fsSL https://gh.io/copilot-install --output /tmp/copilot-install \
+    && PREFIX=/usr/local bash /tmp/copilot-install \
+    && rm /tmp/copilot-install \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish/ .
