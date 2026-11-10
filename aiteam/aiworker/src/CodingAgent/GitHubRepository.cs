@@ -429,6 +429,22 @@ internal static partial class GitHubRepository
         var commit = await RunGitAsync(
             configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
         var isMergeCommit = commit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 2;
+        if (!isMergeCommit
+            && root.TryGetProperty("commits", out var prCommits) && prCommits.TryGetInt32(out var prCommitCount) && prCommitCount > 1)
+        {
+            var mergedFiles = await RunGitAsync(
+                configuration, workspacePath, ["diff", "--name-only", "-z", $"{mergeSha}^", mergeSha], cancellationToken);
+            var mergedFileCount = mergedFiles.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (!root.TryGetProperty("changed_files", out var changedFiles)
+                || !changedFiles.TryGetInt32(out var changedFileCount)
+                || changedFileCount != mergedFileCount)
+            {
+                throw new InvalidOperationException(
+                    $"Pull request {pullRequestNumber} appears to be rebase-merged with multiple commits and cannot be reverted automatically.");
+            }
+        }
+
+        var baseRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -436,6 +452,7 @@ internal static partial class GitHubRepository
                 ? ["revert", "--no-edit", "-m", "1", mergeSha]
                 : ["revert", "--no-edit", mergeSha],
             cancellationToken);
+        await EnsureNoUserSettingsChangesAsync(configuration, workspacePath, baseRevision, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -475,6 +492,7 @@ internal static partial class GitHubRepository
             workspacePath,
             ["switch", "--no-track", "--create", newBranchName, startPoint],
             cancellationToken);
+        var startRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
         try
         {
             await RunGitAsync(
@@ -494,6 +512,7 @@ internal static partial class GitHubRepository
             throw;
         }
 
+        await EnsureNoUserSettingsChangesAsync(configuration, workspacePath, startRevision, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -681,6 +700,35 @@ internal static partial class GitHubRepository
         if (value is not null)
         {
             startInfo.Environment[name] = value;
+        }
+    }
+
+    private static async Task<string> GetCurrentRevisionAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        CancellationToken cancellationToken) =>
+        (await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["rev-parse", "--verify", "HEAD"],
+            cancellationToken)).StandardOutput.Trim();
+
+    private static async Task EnsureNoUserSettingsChangesAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string initialRevision,
+        CancellationToken cancellationToken)
+    {
+        var changedPaths = await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["diff", "--name-only", "-z", initialRevision, "HEAD"],
+            cancellationToken);
+        if (changedPaths.StandardOutput.Split('\0').Any(path =>
+                path.Equals("UserSettings", StringComparison.Ordinal) ||
+                path.StartsWith("UserSettings/", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Refusing to push commits that modify files under UserSettings/.");
         }
     }
 
