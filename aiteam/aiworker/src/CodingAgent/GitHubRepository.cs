@@ -258,6 +258,307 @@ internal static partial class GitHubRepository
             ?? throw new InvalidOperationException("GitHub did not return a pull request URL.");
     }
 
+    public enum PullRequestState
+    {
+        Open,
+        Merged,
+        Closed
+    }
+
+    public static async Task<PullRequestState> GetPullRequestStateAsync(
+        AgentConfiguration configuration,
+        long pullRequestNumber,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var document = await GetPullRequestDocumentAsync(
+            configuration, pullRequestNumber, cancellationToken, handler);
+        var root = document.RootElement;
+        if (root.TryGetProperty("merged", out var merged) && merged.ValueKind == System.Text.Json.JsonValueKind.True)
+        {
+            return PullRequestState.Merged;
+        }
+
+        var state = root.TryGetProperty("state", out var stateElement) ? stateElement.GetString() : null;
+        return string.Equals(state, "open", StringComparison.OrdinalIgnoreCase)
+            ? PullRequestState.Open
+            : PullRequestState.Closed;
+    }
+
+    public static async Task<bool> BranchExistsAsync(
+        AgentConfiguration configuration,
+        string branchName,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var response = await httpClient.GetAsync(
+            $"{RepositoryApiPath(configuration)}/git/ref/heads/{EscapeBranchPath(branchName)}",
+            cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await EnsureSuccessAsync(response, $"Checking whether branch {branchName} exists", cancellationToken);
+        return true;
+    }
+
+    /// <summary>Creates <paramref name="branchName"/> at the tip of the default branch and returns the commit SHA.</summary>
+    public static async Task<string> CreateBranchFromDefaultBranchAsync(
+        AgentConfiguration configuration,
+        string branchName,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        var repositoryPath = RepositoryApiPath(configuration);
+        var defaultBranch = await GetDefaultBranchAsync(httpClient, repositoryPath, cancellationToken);
+        using var refResponse = await httpClient.GetAsync(
+            $"{repositoryPath}/git/ref/heads/{EscapeBranchPath(defaultBranch)}", cancellationToken);
+        await EnsureSuccessAsync(refResponse, $"Reading default branch {defaultBranch}", cancellationToken);
+        using var refDocument = System.Text.Json.JsonDocument.Parse(
+            await refResponse.Content.ReadAsStringAsync(cancellationToken));
+        var sha = refDocument.RootElement.GetProperty("object").GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return the default branch commit.");
+
+        using var response = await httpClient.PostAsJsonAsync(
+            $"{repositoryPath}/git/refs",
+            new { @ref = $"refs/heads/{branchName}", sha },
+            cancellationToken);
+        await EnsureSuccessAsync(response, $"Creating branch {branchName}", cancellationToken);
+        return sha;
+    }
+
+    public static async Task AddPullRequestCommentAsync(
+        AgentConfiguration configuration,
+        long pullRequestNumber,
+        string comment,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var response = await httpClient.PostAsJsonAsync(
+            $"{RepositoryApiPath(configuration)}/issues/{pullRequestNumber}/comments",
+            new { body = comment },
+            cancellationToken);
+        await EnsureSuccessAsync(response, $"Commenting on pull request {pullRequestNumber}", cancellationToken);
+    }
+
+    public static async Task ClosePullRequestWithCommentAsync(
+        AgentConfiguration configuration,
+        long pullRequestNumber,
+        string comment,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        await AddPullRequestCommentAsync(configuration, pullRequestNumber, comment, cancellationToken, handler);
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch, $"{RepositoryApiPath(configuration)}/pulls/{pullRequestNumber}")
+        {
+            Content = JsonContent.Create(new { state = "closed" })
+        };
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, $"Closing pull request {pullRequestNumber}", cancellationToken);
+    }
+
+    /// <summary>Creates a pull request from <paramref name="headBranch"/> into an explicit base branch.</summary>
+    public static async Task<string> CreatePullRequestWithBaseAsync(
+        AgentConfiguration configuration,
+        string headBranch,
+        string baseBranch,
+        string title,
+        string body,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var response = await httpClient.PostAsJsonAsync(
+            $"{RepositoryApiPath(configuration)}/pulls",
+            new { title, head = headBranch, @base = baseBranch, body },
+            cancellationToken);
+        await EnsureSuccessAsync(response, "Creating the pull request", cancellationToken);
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.GetProperty("html_url").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return a pull request URL.");
+    }
+
+    /// <summary>
+    /// Reverts a merged pull request on a new branch of the cloned workspace, pushes it and opens a pull request
+    /// against the branch the original pull request was merged into. Returns the new pull request URL.
+    /// </summary>
+    public static async Task<string> CreateRevertPullRequestAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        long pullRequestNumber,
+        string revertBranchName,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var document = await GetPullRequestDocumentAsync(
+            configuration, pullRequestNumber, cancellationToken, handler);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("merged", out var merged) || merged.ValueKind != System.Text.Json.JsonValueKind.True)
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} is not merged and cannot be reverted.");
+        }
+
+        var mergeSha = root.TryGetProperty("merge_commit_sha", out var shaElement) ? shaElement.GetString() : null;
+        if (string.IsNullOrWhiteSpace(mergeSha))
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} has no merge commit to revert.");
+        }
+
+        var baseBranch = root.GetProperty("base").GetProperty("ref").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return the pull request base branch.");
+        var title = root.TryGetProperty("title", out var titleElement) ? titleElement.GetString() : null;
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["fetch", "--quiet", "origin", $"+refs/heads/{baseBranch}:refs/remotes/origin/{baseBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["switch", "--no-track", "--create", revertBranchName, $"origin/{baseBranch}"],
+            cancellationToken);
+        var commit = await RunGitAsync(
+            configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
+        var isMergeCommit = commit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 2;
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            isMergeCommit
+                ? ["revert", "--no-edit", "-m", "1", mergeSha]
+                : ["revert", "--no-edit", mergeSha],
+            cancellationToken);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["push", "--quiet", "origin", $"HEAD:refs/heads/{revertBranchName}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+
+        return await CreatePullRequestWithBaseAsync(
+            configuration,
+            revertBranchName,
+            baseBranch,
+            $"Revert \"{Regex.Replace(title ?? $"pull request {pullRequestNumber}", @"[\r\n\t]+", " ").Trim()}\"",
+            $"Reverts pull request #{pullRequestNumber}.\n\nCreated automatically.",
+            cancellationToken,
+            handler);
+    }
+
+    /// <summary>
+    /// Creates <paramref name="newBranchName"/> from <paramref name="startPoint"/> (a ref or commit in the cloned
+    /// workspace), cherry-picks the commits in order and pushes the branch.
+    /// </summary>
+    public static async Task CherryPickToNewBranchAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string newBranchName,
+        string startPoint,
+        IReadOnlyList<string> commits,
+        CancellationToken cancellationToken)
+    {
+        if (commits.Count == 0)
+        {
+            throw new ArgumentException("At least one commit is required.", nameof(commits));
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["switch", "--no-track", "--create", newBranchName, startPoint],
+            cancellationToken);
+        try
+        {
+            await RunGitAsync(
+                configuration, workspacePath, ["cherry-pick", "--allow-empty", .. commits], cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            try
+            {
+                await RunGitAsync(configuration, workspacePath, ["cherry-pick", "--abort"], cancellationToken);
+            }
+            catch (InvalidOperationException)
+            {
+                // Nothing to abort; surface the original failure.
+            }
+
+            throw;
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["push", "--quiet", "origin", $"HEAD:refs/heads/{newBranchName}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+    }
+
+    private static async Task<System.Text.Json.JsonDocument> GetPullRequestDocumentAsync(
+        AgentConfiguration configuration,
+        long pullRequestNumber,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler)
+    {
+        using var httpClient = CreateApiClient(configuration, handler);
+        using var response = await httpClient.GetAsync(
+            $"{RepositoryApiPath(configuration)}/pulls/{pullRequestNumber}", cancellationToken);
+        await EnsureSuccessAsync(response, $"Reading pull request {pullRequestNumber}", cancellationToken);
+        return System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+
+    private static async Task<string> GetDefaultBranchAsync(
+        HttpClient httpClient, string repositoryPath, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync(repositoryPath, cancellationToken);
+        await EnsureSuccessAsync(response, "Reading the repository", cancellationToken);
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.GetProperty("default_branch").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return a default branch.");
+    }
+
+    private static HttpClient CreateApiClient(AgentConfiguration configuration, HttpMessageHandler? handler)
+    {
+        var httpClient = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
+        httpClient.BaseAddress = new Uri("https://api.github.com");
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", configuration.GitHubRepositoryToken);
+        httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-CodingAgent/1.0");
+        return httpClient;
+    }
+
+    private static string RepositoryApiPath(AgentConfiguration configuration)
+    {
+        var (owner, repositoryName) = ParseOwnerAndRepository(configuration.GitHubRepositoryUrl);
+        return $"/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repositoryName)}";
+    }
+
+    private static string EscapeBranchPath(string branchName) =>
+        string.Join('/', branchName.Split('/').Select(Uri.EscapeDataString));
+
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response, string action, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var details = Limit(await response.Content.ReadAsStringAsync(cancellationToken), 500);
+        throw new InvalidOperationException(
+            $"{action} failed with status {(int)response.StatusCode}. Details: {details}");
+    }
+
     public static void DeleteWorkspace(string workspacePath)
     {
         var workspaceRoot = Directory.GetParent(workspacePath)
