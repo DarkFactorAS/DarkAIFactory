@@ -81,7 +81,7 @@ public sealed class GitHubReviewClientTests
 
     private static string Page(string state, string threads, string? next = null) =>
         JsonNode.Parse(
-            "{\"data\":{\"repository\":{\"pullRequest\":{\"state\":\"" + state + "\",\"headRefOid\":\"sha1\"," +
+            "{\"data\":{\"repository\":{\"pullRequest\":{\"state\":\"" + state + "\",\"headRefOid\":\"sha1\",\"headRefName\":\"feature/x\"," +
             "\"reviewThreads\":{\"pageInfo\":{\"hasNextPage\":" + (next is null ? "false" : "true") +
             ",\"endCursor\":" + (next is null ? "null" : "\"" + next + "\"") + "},\"nodes\":[" + threads + "]}}}}}")!
             .ToJsonString();
@@ -122,6 +122,20 @@ public sealed class GitHubReviewClientTests
     [ThreadStatic] private static long[] HandledIds = [];
 
     [Fact]
+    public async Task GetHeadReturnsBranchAndSha()
+    {
+        var handler = new Handler(_ => Page("OPEN", string.Empty));
+        var (client, _) = Create(handler);
+        using (client)
+        {
+            var (branch, sha) = await client.GetHeadAsync(Pr, CancellationToken.None);
+            Assert.Equal("feature/x", branch);
+            Assert.Equal("sha1", sha);
+            Assert.Contains("headRefName", handler.Requests[0]["query"]!.GetValue<string>());
+        }
+    }
+
+    [Fact]
     public async Task FiltersByReviewerResolvedOutdatedAndHandled()
     {
         HandledIds = [14];
@@ -138,6 +152,37 @@ public sealed class GitHubReviewClientTests
         Assert.Equal("a.cs", comments[0].Path);
         Assert.Equal(3, comments[0].Line);
         Assert.Equal("fix 10", comments[0].Body);
+    }
+
+    [Fact]
+    public async Task ScanCountsOtherAuthorsAndHandledComments()
+    {
+        HandledIds = [14];
+        var handler = new Handler(_ => Page("OPEN",
+            string.Join(",",
+                Thread(10, "Copilot"), Thread(11, "someone"), Thread(12, "alice", resolved: true),
+                Thread(13, "Someone", outdated: false), Thread(14, "Copilot"), Thread(16, "bob"))));
+        var (client, _) = Create(handler);
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Equal([10L], scan.Actionable.Select(c => c.Id));
+        Assert.Equal(5, scan.OpenComments);
+        Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(new Dictionary<string, int> { ["bob"] = 1, ["someone"] = 2 }, scan.OtherAuthors);
+    }
+
+    [Fact]
+    public async Task ScanIsEmptyWhenThereAreNoComments()
+    {
+        HandledIds = [];
+        var (client, _) = Create(new Handler(_ => Page("OPEN", string.Empty)));
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Equal(0, scan.OpenComments);
+        Assert.Empty(scan.Actionable);
+        Assert.Empty(scan.OtherAuthors);
     }
 
     [Fact]

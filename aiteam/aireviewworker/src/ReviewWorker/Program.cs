@@ -5,6 +5,7 @@ using DFCommonLib.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ReviewWorker;
+using ReviewWorker.Repository;
 using System.Runtime.InteropServices;
 
 if (args is ["--runner-server"])
@@ -18,6 +19,8 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddScoped<PullRequestReader>();
+builder.Services.AddScoped<ReviewCommentAttemptRepository>();
 using var host = builder.Build();
 DFLogger.LogOutput(
     DFLogLevel.INFO,
@@ -47,13 +50,20 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
+var fixOptions = new FixOptions(
+    appSettings.MaxAttemptsPerPullRequest,
+    string.IsNullOrWhiteSpace(appSettings.BuildCommand) ? null : appSettings.BuildCommand.Trim(),
+    string.IsNullOrWhiteSpace(appSettings.TestCommand) ? null : appSettings.TestCommand.Trim());
 AgentConfiguration? loggedConfiguration = null;
+var cycle = 0L;
 try
 {
     while (!cancellation.IsCancellationRequested)
     {
+        cycle++;
         try
         {
+            DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"Cycle {cycle}: started.");
             using var scope = host.Services.CreateScope();
             var settings = scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>()
                 .Load("aiworker", appSettings.PollIntervalSeconds);
@@ -67,10 +77,16 @@ try
                     $"{appSettings.AppName} review worker polling every {configuration.PollInterval.TotalSeconds:0} seconds. " +
                     $"Reviewer: {configuration.ReviewerLogin}. " +
                     $"Max attempts per pull request: {configuration.MaxAttemptsPerPullRequest}. " +
-                    $"GitHub repository: {configuration.GitHubRepositoryUrl}");
+                    $"GitHub repository: {configuration.GitHubRepositoryUrl}. " +
+                    $"Build command: {fixOptions.BuildCommand ?? "(none)"}. Test command: {fixOptions.TestCommand ?? "(none)"}.");
             }
 
-            // Review comment processing is added in follow-up sub-tasks of DFAI-137.
+            await ReviewCycleRunner.RunAsync(cycle, configuration, fixOptions, scope.ServiceProvider, cancellation.Token);
+
+            DFLogger.LogOutput(
+                DFLogLevel.INFO,
+                "Worker",
+                $"Cycle {cycle}: done; sleeping {configuration.PollInterval.TotalSeconds:0} seconds.");
             await Task.Delay(configuration.PollInterval, cancellation.Token);
         }
         catch (Exception exception) when (

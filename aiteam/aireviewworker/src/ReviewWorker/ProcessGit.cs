@@ -15,6 +15,18 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit
         return checkoutPath;
     }
 
+    /// <summary>Deletes the workspace folder and its Git metadata.</summary>
+    public static void DeleteWorkspace(string workspacePath)
+    {
+        foreach (var path in new[] { GitDirectory(workspacePath), Path.GetDirectoryName(Path.GetFullPath(workspacePath))! })
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+    }
+
     public async Task CloneAsync(Uri repositoryUrl, string branch, string workspacePath, CancellationToken cancellationToken)
     {
         if (!FixDecision.IsPushableBranch(branch))

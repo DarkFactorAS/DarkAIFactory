@@ -4,6 +4,8 @@
   "PollIntervalSeconds": 30,
   "ReviewerLogin": "",
   "MaxAttemptsPerPullRequest": 3,
+  "BuildCommand": "",
+  "TestCommand": "",
   "DatabaseConnection": {
     "Server": "aiteam_database",
     "Port": 3306,
