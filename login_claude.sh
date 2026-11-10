@@ -5,7 +5,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/aiteam"
 
-volume="${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}"
+if ! volume="$(docker compose config --format json | jq -er '.volumes.claude_config.name | strings | select(length > 0)')"; then
+  printf 'Unable to resolve the claude_config volume name from Docker Compose configuration.\n' >&2
+  exit 1
+fi
 
 # Stop and remove the runner so the volume is no longer in use.
 docker compose rm --stop --force claude-cli
