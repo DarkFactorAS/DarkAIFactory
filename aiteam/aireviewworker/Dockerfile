@@ -9,7 +9,7 @@ COPY aiteam/aireviewworker/src/ReviewWorker/ src/ReviewWorker/
 COPY aiteam/shared/ /shared/
 RUN dotnet publish src/ReviewWorker/ReviewWorker.csproj --configuration Release --no-restore --output /app/publish
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS worker-runtime
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends bash ca-certificates curl git \
     && curl -fsSL https://gh.io/copilot-install --output /tmp/copilot-install \
@@ -18,5 +18,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish/ .
+RUN mkdir -p /workspaces && chown app:app /workspaces
 USER app
 ENTRYPOINT ["dotnet", "/app/ReviewWorker.dll"]
+
+FROM worker-runtime AS runner
+USER root
+RUN rm -rf /app/Config
+USER app
+
+FROM worker-runtime AS worker

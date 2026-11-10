@@ -65,6 +65,7 @@ public sealed class GitHubReviewClientTests
             {
                 ["node"] = new JsonObject
                 {
+                    ["line"] = 3,
                     ["comments"] = new JsonObject
                     {
                         ["pageInfo"] = new JsonObject
@@ -169,6 +170,7 @@ public sealed class GitHubReviewClientTests
 
         Assert.Equal([21L, 22L], comments.Select(comment => comment.Id));
         Assert.Equal(3, comments[0].Line);
+        Assert.Equal(3, comments[1].Line);
         Assert.Equal("thread-20", handler.Requests[1]["variables"]!["threadId"]!.GetValue<string>());
         Assert.Equal("comment-cursor", handler.Requests[1]["variables"]!["cursor"]!.GetValue<string>());
     }

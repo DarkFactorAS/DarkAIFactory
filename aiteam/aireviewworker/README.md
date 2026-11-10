@@ -32,6 +32,11 @@ Compose service `review-worker` (`aiteam/docker-compose.yml`); CI in
 `.github/workflows/aireviewworker-ci-*.yml`; deployed after AIClaudeWorker by
 `aiteam-deploy.yml`.
 
+Compose runs Copilot and project build/test commands in the separate `review-runner`
+service. It shares only the `review_workspaces` volume with the worker and does not
+mount the worker's `/app/Config` directory. The runner receives a disposable copy of
+Git metadata; authoritative metadata stays in the worker container outside the checkout.
+
 ## Build, test, run
 
 ```bash

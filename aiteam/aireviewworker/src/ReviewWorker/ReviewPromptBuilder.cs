@@ -9,6 +9,7 @@ namespace ReviewWorker;
 internal static class ReviewPromptBuilder
 {
     public const int MaxCommentLength = 4_000;
+    public const int MaxPromptLengthBytes = 64 * 1024;
     private const string Open = "<untrusted_review_comments>";
     private const string Close = "</untrusted_review_comments>";
 
@@ -49,6 +50,30 @@ internal static class ReviewPromptBuilder
 
         prompt.AppendLine(Close);
         return prompt.ToString();
+    }
+
+    public static (IReadOnlyList<ReviewComment> Comments, string Prompt) BuildBatch(
+        IReadOnlyList<ReviewComment> comments)
+    {
+        var batch = new List<ReviewComment>();
+        foreach (var comment in comments)
+        {
+            var candidate = batch.Append(comment).ToList();
+            var prompt = Build(candidate);
+            if (Encoding.UTF8.GetByteCount(prompt) > MaxPromptLengthBytes)
+            {
+                if (batch.Count == 0)
+                {
+                    throw new InvalidOperationException("A review comment exceeds the maximum prompt size.");
+                }
+
+                break;
+            }
+
+            batch.Add(comment);
+        }
+
+        return (batch, Build(batch));
     }
 
     /// <summary>Truncates and neutralises the wrapper tags so a comment cannot close the data block.</summary>

@@ -7,6 +7,12 @@ using Microsoft.Extensions.Hosting;
 using ReviewWorker;
 using System.Runtime.InteropServices;
 
+if (args is ["--runner-server"])
+{
+    await ReviewRunnerServer.RunAsync();
+    return;
+}
+
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();

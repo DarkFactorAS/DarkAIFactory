@@ -34,6 +34,23 @@ public sealed class ReviewPromptBuilderTests
     }
 
     [Fact]
+    public void PromptBatchFitsWithinTheArgumentSizeLimit()
+    {
+        var comments = Enumerable.Range(1, 40)
+            .Select(id => Comment(id, "a.cs", new string('x', ReviewPromptBuilder.MaxCommentLength)))
+            .ToList();
+
+        var batch = ReviewPromptBuilder.BuildBatch(comments);
+
+        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(batch.Prompt), 1, ReviewPromptBuilder.MaxPromptLengthBytes);
+        Assert.InRange(batch.Comments.Count, 1, comments.Count - 1);
+    }
+
+    [Fact]
     public void OutOfBoundsDetectsOtherFiles() =>
         Assert.Equal(["b.cs"], FixDecision.OutOfBounds(["a.cs", "b.cs"], ["a.cs"]));
+
+    [Fact]
+    public void LiteralBackslashesAreNotTreatedAsPathSeparators() =>
+        Assert.Equal(["src\\A.cs"], FixDecision.OutOfBounds(["src\\A.cs"], ["src/A.cs"]));
 }

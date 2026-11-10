@@ -13,12 +13,15 @@ internal interface IFixRunner
 
 internal interface IReviewGit
 {
-    /// <summary>Paths of files modified, added or deleted in the working tree.</summary>
-    Task<IReadOnlyList<string>> ChangedFilesAsync(string workspacePath, CancellationToken cancellationToken);
-    Task DiscardChangesAsync(string workspacePath, CancellationToken cancellationToken);
+    Task<string> GetRevisionAsync(string workspacePath, CancellationToken cancellationToken);
+    /// <summary>Paths changed since the revision captured before running untrusted code.</summary>
+    Task<IReadOnlyList<string>> ChangedFilesAsync(
+        string workspacePath, string baselineRevision, CancellationToken cancellationToken);
+    Task DiscardChangesAsync(string workspacePath, string baselineRevision, CancellationToken cancellationToken);
     Task CommitAsync(string workspacePath, string message, CancellationToken cancellationToken);
     /// <summary>Pushes HEAD to the named branch at the trusted repository URL. Must never force.</summary>
-    Task PushAsync(string workspacePath, Uri repositoryUrl, string branch, CancellationToken cancellationToken);
+    Task PushAsync(
+        string workspacePath, Uri repositoryUrl, string branch, string baselineRevision, CancellationToken cancellationToken);
 }
 
 internal interface IProjectCommandRunner
@@ -55,11 +58,9 @@ internal static class FixDecision
     /// <summary>Changed files outside the cited set.</summary>
     public static IReadOnlyList<string> OutOfBounds(IEnumerable<string> changed, IEnumerable<string> cited)
     {
-        var allowed = new HashSet<string>(cited.Select(Normalize), StringComparer.Ordinal);
-        return changed.Where(path => !allowed.Contains(Normalize(path))).ToList();
+        var allowed = new HashSet<string>(cited, StringComparer.Ordinal);
+        return changed.Where(path => !allowed.Contains(path)).ToList();
     }
-
-    private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');
 }
 
 /// <summary>
@@ -95,15 +96,18 @@ internal sealed class ReviewFixFlow(
             return new FixResult(FixOutcome.Skipped);
         }
 
+        var promptBatch = ReviewPromptBuilder.BuildBatch(eligible);
+        eligible = promptBatch.Comments;
         var ids = eligible.Select(c => c.Id).ToList();
+        var baselineRevision = await git.GetRevisionAsync(workspacePath, cancellationToken);
         // Persist the attempt before running so a crash still counts against the limit.
         attempts.Record(pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
 
         try
         {
-            await runner.RunAsync(workspacePath, ReviewPromptBuilder.Build(eligible), cancellationToken);
+            await runner.RunAsync(workspacePath, promptBatch.Prompt, cancellationToken);
 
-            var changed = await git.ChangedFilesAsync(workspacePath, cancellationToken);
+            var changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: Copilot made no changes; nothing to push.");
@@ -114,7 +118,7 @@ internal sealed class ReviewFixFlow(
             var outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
             if (outOfBounds.Count > 0)
             {
-                await git.DiscardChangesAsync(workspacePath, cancellationToken);
+                await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
                 return await FailAsync(pullRequest, ids, used,
                     $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
             }
@@ -129,24 +133,43 @@ internal sealed class ReviewFixFlow(
                 var failure = await commands.RunAsync(command, workspacePath, cancellationToken);
                 if (failure is not null)
                 {
-                    await git.DiscardChangesAsync(workspacePath, cancellationToken);
+                    await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
                     return await FailAsync(pullRequest, ids, used, $"'{command}' failed: {failure}");
                 }
             }
 
-            changed = await git.ChangedFilesAsync(workspacePath, cancellationToken);
+            changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
             if (outOfBounds.Count > 0)
             {
-                await git.DiscardChangesAsync(workspacePath, cancellationToken);
+                await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
                 return await FailAsync(pullRequest, ids, used,
                     $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
             }
 
             await git.CommitAsync(workspacePath,
                 $"{pullRequest.JiraKey}: Address review comments ({ids.Count})", cancellationToken);
-            await git.PushAsync(workspacePath, pullRequest.RepositoryUrl, headBranch, cancellationToken);
-            attempts.Record(pullRequest.Id, ids, "Resolved", countAttempt: false, error: null);
+            await git.PushAsync(workspacePath, pullRequest.RepositoryUrl, headBranch, baselineRevision, cancellationToken);
+            var changedPaths = new HashSet<string>(changed, StringComparer.Ordinal);
+            var commentsPerPath = eligible.GroupBy(comment => comment.Path, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            var resolvedIds = eligible
+                .Where(comment => changedPaths.Contains(comment.Path) && commentsPerPath[comment.Path] == 1)
+                .Select(comment => comment.Id)
+                .ToList();
+            var resolvedSet = new HashSet<long>(resolvedIds);
+            var pendingIds = eligible.Where(comment => !resolvedSet.Contains(comment.Id)).Select(comment => comment.Id).ToList();
+            if (resolvedIds.Count > 0)
+            {
+                attempts.Record(pullRequest.Id, resolvedIds, "Resolved", countAttempt: false, error: null);
+            }
+
+            if (pendingIds.Count > 0)
+            {
+                attempts.Record(pullRequest.Id, pendingIds, "Pending", countAttempt: false,
+                    "No changes were made to the cited files.");
+            }
+
             DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: pushed fixes to '{headBranch}'.");
             return new FixResult(FixOutcome.Pushed);
         }

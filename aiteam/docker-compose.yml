@@ -43,6 +43,33 @@ services:
     cap_drop:
       - ALL
 
+  review-runner:
+    build:
+      context: ..
+      dockerfile: aiteam/aireviewworker/Dockerfile
+      target: runner
+      secrets:
+        - nuget_username
+        - nuget_token
+    command: ["--runner-server"]
+    volumes:
+      - review_workspaces:/workspaces
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /tmp
+      REVIEW_WORKSPACE_ROOT: /workspaces
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   claude-coding-agent:
     build:
       context: ..
@@ -110,14 +137,18 @@ services:
     build:
       context: ..
       dockerfile: aiteam/aireviewworker/Dockerfile
+      target: worker
       secrets:
         - nuget_username
         - nuget_token
     depends_on:
       dbmigration:
         condition: service_completed_successfully
+      review-runner:
+        condition: service_healthy
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+      - review_workspaces:/workspaces
     restart: unless-stopped
     init: true
     environment:
@@ -125,6 +156,8 @@ services:
       NUGET_USERNAME: ${NUGET_USERNAME}
       NUGET_TOKEN: ${NUGET_TOKEN}
       HOME: /tmp
+      REVIEW_RUNNER_URL: http://review-runner:8080/
+      REVIEW_WORKSPACE_ROOT: /workspaces
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -248,6 +281,8 @@ services:
       - "127.0.0.1:8206:3306"
 
 volumes:
+  review_workspaces:
+    name: ${REVIEW_WORKSPACES_VOLUME_NAME:-aiteam_review_workspaces}
   # docker volume create claude_config
   claude_config:
     name: ${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}

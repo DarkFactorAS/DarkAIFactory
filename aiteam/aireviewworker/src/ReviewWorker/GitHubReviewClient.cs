@@ -43,6 +43,7 @@ internal sealed class GitHubReviewClient : IDisposable
         query($threadId: ID!, $cursor: String) {
           node(id: $threadId) {
             ... on PullRequestReviewThread {
+              line
               comments(first: 100, after: $cursor) {
                 pageInfo { hasNextPage endCursor }
                 nodes { fullDatabaseId body path author { login } }
@@ -225,10 +226,13 @@ internal sealed class GitHubReviewClient : IDisposable
             }
         };
         var root = await SendGraphQlAsync(body, pullRequest.Url, cancellationToken);
-        var comments = root["data"]?["node"]?["comments"]
+        var thread = root["data"]?["node"]
             ?? throw new InvalidDataException($"Review thread for pull request {pullRequest.Url} not found.");
+        var comments = thread["comments"]
+            ?? throw new InvalidDataException($"Review thread for pull request {pullRequest.Url} not found.");
+        var line = thread["line"]?.GetValue<int>();
         var commentList = (comments["nodes"]?.AsArray() ?? [])
-            .Select(comment => ParseComment(comment, null))
+            .Select(comment => ParseComment(comment, line))
             .OfType<CommentInfo>()
             .ToList();
 

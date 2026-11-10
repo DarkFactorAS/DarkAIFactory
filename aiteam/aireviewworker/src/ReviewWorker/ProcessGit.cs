@@ -3,9 +3,18 @@ using System.Text;
 
 namespace ReviewWorker;
 
-/// <summary>Git and shell helpers backed by real processes.</summary>
-internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectCommandRunner
+/// <summary>Git operations backed by real processes.</summary>
+internal sealed class ProcessGit(string repositoryToken) : IReviewGit
 {
+    public static string CreateWorkspacePath()
+    {
+        var workspaceRoot = Path.GetFullPath(
+            Environment.GetEnvironmentVariable("REVIEW_WORKSPACE_ROOT") ?? Path.Combine(Path.GetTempPath(), "review-workspaces"));
+        var checkoutPath = Path.Combine(workspaceRoot, Guid.NewGuid().ToString("N"), "checkout");
+        Directory.CreateDirectory(checkoutPath);
+        return checkoutPath;
+    }
+
     public async Task CloneAsync(Uri repositoryUrl, string branch, string workspacePath, CancellationToken cancellationToken)
     {
         if (!FixDecision.IsPushableBranch(branch))
@@ -14,66 +23,73 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
         }
 
         Directory.CreateDirectory(workspacePath);
-        await GitAsync(workspacePath, ["clone", "--branch", branch, "--single-branch", "--", repositoryUrl.AbsoluteUri, "."],
-            cancellationToken, credentials: true);
+        // Keep Git metadata outside the shared checkout so sandboxed code cannot rewrite refs or configuration.
+        var gitDirectory = GitDirectory(workspacePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(gitDirectory)!);
+        await GitAsync(workspacePath,
+            ["clone", "--separate-git-dir", gitDirectory, "--branch", branch, "--single-branch", "--", repositoryUrl.AbsoluteUri, "."],
+            cancellationToken, credentials: true, useWorkspaceRepository: false);
+        File.Delete(Path.Combine(workspacePath, ".git"));
+        CopyDirectory(gitDirectory, Path.Combine(workspacePath, ".git"));
     }
 
-    public async Task<IReadOnlyList<string>> ChangedFilesAsync(string workspacePath, CancellationToken cancellationToken)
-    {
-        var output = await GitAsync(workspacePath, ["status", "--porcelain", "-z", "--untracked-files=all"], cancellationToken);
-        var entries = output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
-        var paths = new List<string>();
-        for (var i = 0; i < entries.Length; i++)
-        {
-            var entry = entries[i];
-            paths.Add(entry[3..]);
-            if (entry[0] is 'R' or 'C')
-            {
-                // Rename/copy entries are followed by the original path.
-                i++;
-                if (i < entries.Length)
-                {
-                    paths.Add(entries[i]);
-                }
-            }
-        }
+    public async Task<string> GetRevisionAsync(string workspacePath, CancellationToken cancellationToken) =>
+        (await GitAsync(workspacePath, ["rev-parse", "--verify", "HEAD^{commit}"], cancellationToken)).Trim();
 
-        return paths;
+    public async Task<IReadOnlyList<string>> ChangedFilesAsync(
+        string workspacePath, string baselineRevision, CancellationToken cancellationToken)
+    {
+        await EnsureBaselineIsAncestorAsync(workspacePath, baselineRevision, cancellationToken);
+        var tracked = await GitAsync(workspacePath, ["diff", "--name-only", "-z", baselineRevision], cancellationToken);
+        var untracked = await GitAsync(workspacePath, ["ls-files", "--others", "--exclude-standard", "-z"], cancellationToken);
+        return tracked.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Concat(untracked.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
-    public async Task DiscardChangesAsync(string workspacePath, CancellationToken cancellationToken)
+    public async Task DiscardChangesAsync(
+        string workspacePath, string baselineRevision, CancellationToken cancellationToken)
     {
-        await GitAsync(workspacePath, ["reset", "--hard", "HEAD"], cancellationToken);
+        await GitAsync(workspacePath, ["reset", "--hard", baselineRevision], cancellationToken);
         await GitAsync(workspacePath, ["clean", "-fd"], cancellationToken);
     }
 
     public async Task CommitAsync(string workspacePath, string message, CancellationToken cancellationToken)
     {
         await GitAsync(workspacePath, ["add", "--all"], cancellationToken);
+        if (await GitAsync(workspacePath, ["diff", "--cached", "--quiet"], cancellationToken, allowExitCodeOne: true) == "0")
+        {
+            return;
+        }
+
         await GitAsync(workspacePath, ["commit", "--no-verify", "-m", message], cancellationToken);
     }
 
-    public async Task PushAsync(string workspacePath, Uri repositoryUrl, string branch, CancellationToken cancellationToken)
+    public async Task PushAsync(
+        string workspacePath, Uri repositoryUrl, string branch, string baselineRevision, CancellationToken cancellationToken)
     {
         if (!FixDecision.IsPushableBranch(branch))
         {
             throw new InvalidOperationException($"Refusing to push to branch '{branch}'.");
         }
 
+        await EnsureBaselineIsAncestorAsync(workspacePath, baselineRevision, cancellationToken);
         var pushRepositoryPath = Path.Combine(Path.GetTempPath(), $"review-worker-push-{Guid.NewGuid():N}");
         try
         {
-            await GitAsync(workspacePath, ["init", "--bare", pushRepositoryPath], cancellationToken);
+            await GitAsync(
+                workspacePath, ["init", "--bare", pushRepositoryPath], cancellationToken, useWorkspaceRepository: false);
             await GitAsync(workspacePath,
-                ["--git-dir", pushRepositoryPath, "fetch", "--no-tags", "--no-recurse-submodules", "--", workspacePath, "HEAD"],
-                cancellationToken);
+                ["--git-dir", pushRepositoryPath, "fetch", "--no-tags", "--no-recurse-submodules", "--", GitDirectory(workspacePath), "HEAD"],
+                cancellationToken, allowFileProtocol: true, useWorkspaceRepository: false);
 
             // Use an isolated Git config and the trusted URL so checkout configuration cannot redirect the token.
             // Plain (non-forced, no '+') refspec: a non-fast-forward push is rejected by GitHub.
             await GitAsync(workspacePath,
                 ["--git-dir", pushRepositoryPath, "push", "--no-recurse-submodules", "--",
                     repositoryUrl.AbsoluteUri, $"FETCH_HEAD:refs/heads/{branch}"],
-                cancellationToken, credentials: true);
+                cancellationToken, credentials: true, useWorkspaceRepository: false);
         }
         finally
         {
@@ -84,36 +100,31 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
         }
     }
 
-    public async Task<string?> RunAsync(string command, string workspacePath, CancellationToken cancellationToken)
+    private async Task EnsureBaselineIsAncestorAsync(
+        string workspacePath, string baselineRevision, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo
+        if (baselineRevision.Length is not (40 or 64) ||
+            baselineRevision.Any(character => !Uri.IsHexDigit(character)))
         {
-            FileName = "/bin/sh",
-            WorkingDirectory = workspacePath,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add("-c");
-        startInfo.ArgumentList.Add(command);
-        foreach (var name in new[] { "GH_TOKEN", "GITHUB_TOKEN", "GITHUB_REPOSITORY_TOKEN", "COPILOT_GITHUB_TOKEN" })
-        {
-            startInfo.Environment.Remove(name);
+            throw new InvalidOperationException("The baseline revision is invalid.");
         }
 
-        var (exitCode, output, error) = await ExecuteAsync(startInfo, cancellationToken);
-        if (exitCode == 0)
+        var result = await GitAsync(
+            workspacePath, ["merge-base", "--is-ancestor", baselineRevision, "HEAD"], cancellationToken, allowExitCodeOne: true);
+        if (result == "1")
         {
-            return null;
+            throw new InvalidOperationException("The checkout no longer contains its starting revision.");
         }
-
-        var detail = (error.Length > 0 ? error : output).Trim();
-        return $"exit code {exitCode}. {(detail.Length > 2_000 ? detail[^2_000..] : detail)}";
     }
 
     private async Task<string> GitAsync(
-        string workspacePath, IReadOnlyList<string> arguments, CancellationToken cancellationToken, bool credentials = false)
+        string workspacePath,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken,
+        bool credentials = false,
+        bool allowFileProtocol = false,
+        bool allowExitCodeOne = false,
+        bool useWorkspaceRepository = true)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -131,6 +142,12 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
         startInfo.Environment["GIT_AUTHOR_EMAIL"] = "ai-coding-agent@users.noreply.github.com";
         startInfo.Environment["GIT_COMMITTER_NAME"] = "AI Review Worker";
         startInfo.Environment["GIT_COMMITTER_EMAIL"] = "ai-coding-agent@users.noreply.github.com";
+        if (useWorkspaceRepository)
+        {
+            startInfo.ArgumentList.Add($"--git-dir={GitDirectory(workspacePath)}");
+            startInfo.ArgumentList.Add($"--work-tree={Path.GetFullPath(workspacePath)}");
+        }
+
         if (credentials)
         {
             startInfo.Environment["GIT_CONFIG_COUNT"] = "1";
@@ -148,13 +165,19 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
         startInfo.ArgumentList.Add("protocol.allow=never");
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add("protocol.https.allow=always");
+        if (allowFileProtocol)
+        {
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("protocol.file.allow=always");
+        }
+
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
         }
 
         var (exitCode, output, error) = await ExecuteAsync(startInfo, cancellationToken);
-        if (exitCode != 0)
+        if (exitCode != 0 && !(allowExitCodeOne && exitCode == 1))
         {
             var detail = error.Trim();
             throw new InvalidOperationException(
@@ -162,7 +185,33 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit, IProjectC
                 (detail.Length == 0 ? string.Empty : $" Details: {(detail.Length > 2_000 ? detail[..2_000] + "..." : detail)}"));
         }
 
-        return output;
+        return allowExitCodeOne ? exitCode.ToString() : output;
+    }
+
+    private static string GitDirectory(string workspacePath)
+    {
+        var checkout = new DirectoryInfo(Path.GetFullPath(workspacePath));
+        var workspaceId = checkout.Parent?.Name;
+        if (checkout.Name != "checkout" || !Guid.TryParseExact(workspaceId, "N", out var id))
+        {
+            throw new InvalidOperationException("The workspace is not in the shared sandbox volume.");
+        }
+
+        return Path.Combine(Path.GetTempPath(), "review-worker-git", id.ToString("N"));
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.EnumerateFiles(source))
+        {
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(source))
+        {
+            CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+        }
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> ExecuteAsync(

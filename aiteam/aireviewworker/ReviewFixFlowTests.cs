@@ -20,17 +20,33 @@ public sealed class ReviewFixFlowTests
         public string? CommandFailure { get; set; }
         public string? Pushed { get; private set; }
         public Queue<IReadOnlyList<string>>? ChangedSequence { get; set; }
+        public List<string> Baselines { get; } = [];
 
+        public Task<string> GetRevisionAsync(string w, CancellationToken c) => Task.FromResult("baseline");
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
             Calls.Add("copilot");
             return RunnerError is null ? Task.CompletedTask : Task.FromException(RunnerError);
         }
-        public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, CancellationToken c) =>
-            Task.FromResult(ChangedSequence is { Count: > 0 } ? ChangedSequence.Dequeue() : (IReadOnlyList<string>)Changed);
-        public Task DiscardChangesAsync(string w, CancellationToken c) { Calls.Add("discard"); return Task.CompletedTask; }
+        public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, string baseline, CancellationToken c)
+        {
+            Baselines.Add(baseline);
+            return Task.FromResult(ChangedSequence is { Count: > 0 } ? ChangedSequence.Dequeue() : (IReadOnlyList<string>)Changed);
+        }
+        public Task DiscardChangesAsync(string w, string baseline, CancellationToken c)
+        {
+            Baselines.Add(baseline);
+            Calls.Add("discard");
+            return Task.CompletedTask;
+        }
         public Task CommitAsync(string w, string m, CancellationToken c) { Calls.Add("commit"); return Task.CompletedTask; }
-        public Task PushAsync(string w, Uri u, string b, CancellationToken c) { Calls.Add("push"); Pushed = b; return Task.CompletedTask; }
+        public Task PushAsync(string w, Uri u, string b, string baseline, CancellationToken c)
+        {
+            Baselines.Add(baseline);
+            Calls.Add("push");
+            Pushed = b;
+            return Task.CompletedTask;
+        }
         Task<string?> IProjectCommandRunner.RunAsync(string command, string w, CancellationToken c)
         {
             Calls.Add(command);
@@ -52,6 +68,7 @@ public sealed class ReviewFixFlowTests
         var result = await Run(f, new FixOptions(3, "build", "test"));
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(["copilot", "build", "test", "commit", "push"], f.Calls);
+        Assert.All(f.Baselines, baseline => Assert.Equal("baseline", baseline));
         Assert.Equal("feature/x", f.Pushed);
         Assert.Equal(("InProgress", true, null), (f.Records[0].Status, f.Records[0].Count, f.Records[0].Error));
         Assert.Equal("Resolved", f.Records[^1].Status);
@@ -156,6 +173,42 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.Failed, result.Outcome);
         Assert.Equal(["copilot", "test", "discard"], f.Calls);
         Assert.Contains("src/Generated.cs", result.Error);
+    }
+
+    [Fact]
+    public async Task ResolvesOnlyCommentsWhoseFilesChanged()
+    {
+        var f = new Fakes { Changed = ["src/A.cs"] };
+
+        var result = await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/B.cs")]);
+
+        Assert.Equal(FixOutcome.Pushed, result.Outcome);
+        Assert.Contains(f.Records, record => record.Status == "Resolved" && record.Ids.SequenceEqual([10L]));
+        Assert.Contains(f.Records, record => record.Status == "Pending" && record.Ids.SequenceEqual([11L]));
+    }
+
+    [Fact]
+    public async Task LeavesSameFileCommentsPendingWhenIndividualCompletionIsAmbiguous()
+    {
+        var f = new Fakes { Changed = ["src/A.cs"] };
+
+        await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/A.cs")]);
+
+        Assert.DoesNotContain(f.Records, record => record.Status == "Resolved");
+        Assert.Contains(f.Records, record => record.Status == "Pending" && record.Ids.SequenceEqual([10L, 11L]));
+    }
+
+    [Fact]
+    public async Task RecordsOnlyCommentsThatFitInThePromptBatch()
+    {
+        var f = new Fakes();
+        var comments = Enumerable.Range(1, 40)
+            .Select(id => Comment(id, body: new string('x', ReviewPromptBuilder.MaxCommentLength)))
+            .ToArray();
+
+        await Run(f, comments: comments);
+
+        Assert.InRange(f.Records[0].Ids.Length, 1, comments.Length - 1);
     }
 
     [Fact]
