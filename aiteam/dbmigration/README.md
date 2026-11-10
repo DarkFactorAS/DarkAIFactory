@@ -50,6 +50,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `AgentConfig` | 3 | `agent_task_metrics`: one row per task run (`agent_id`, optional `agent_task_id`/`jira_key`, `language_model`, `input_tokens`, `output_tokens`, `tool_calls`, `duration_ms`, `succeeded`, `started`, `finished`) |
 | `AgentConfig` | 4 | `agent_metrics_totals`: per-agent running totals (tokens, tool calls, `total_duration_ms`, `tasks_succeeded`, `tasks_failed`) |
 | `AgentConfig` | 5-7 | Seed `sample-agent` (role Software developer, model `claude-sonnet-5-5`), its capabilities (`read_files`, `edit_files`, `run_shell` on; `web_search` off) and an empty totals row. Seeding is guarded so reruns do not duplicate or overwrite rows |
+| `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; `pull_request_id` FK to `pull_requests` with cascade delete, `github_comment_id`, unique per pull request, `attempts`, `status` Pending/InProgress/Resolved/Failed, created/updated, nullable `last_error`) |
 
 The `AgentConfig` patches only create new tables (`CREATE TABLE IF NOT EXISTS`,
 guarded seeds), so they apply on an empty database and on an existing one without
