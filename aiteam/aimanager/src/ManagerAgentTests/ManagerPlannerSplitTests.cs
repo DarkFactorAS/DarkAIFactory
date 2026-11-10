@@ -190,6 +190,87 @@ public sealed class ManagerPlannerSplitTests
         Assert.Contains("ai-analyzed", handler.GetIssue(dependentKey).Labels);
     }
 
+    [Fact]
+    public async Task PlanAsync_DoesNotReleaseChildrenWhileParentIsBlocked()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler();
+        handler.SetBlockers("TASK-1", new JiraBlocker("TASK-9", "In Progress"));
+        using var jira = new JiraClient(Configuration, handler);
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => Task.FromResult(SplitJson));
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+        handler.AddLabel("TASK-1", "ai-approved");
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.All(handler.CreatedKeys, key =>
+        {
+            Assert.Equal("In Progress", handler.GetIssue(key).StatusName);
+            Assert.DoesNotContain("ai-analyzed", handler.GetIssue(key).Labels);
+        });
+
+        handler.SetBlockers("TASK-1", new JiraBlocker("TASK-9", "Done"));
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal("Selected for Development", handler.GetIssue(handler.CreatedKeys[0]).StatusName);
+        Assert.Contains("ai-analyzed", handler.GetIssue(handler.CreatedKeys[0]).Labels);
+    }
+
+    [Fact]
+    public async Task PlanAsync_RestoresAwaitingApprovalLabelWhenReplanningSplit()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler();
+        handler.AddLabel("TASK-1", "ai-awaiting-approval");
+        using var jira = new JiraClient(Configuration, handler);
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => Task.FromResult(SplitJson));
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Contains("ai-awaiting-approval", handler.GetIssue("TASK-1").Labels);
+        Assert.Empty(handler.CreatedKeys);
+    }
+
+    [Fact]
+    public async Task PlanAsync_OpensAndRecordsParentPullRequestWhenEverySubtaskIsDone()
+    {
+        const string pullRequestUrl = "https://github.com/owner/repo/pull/42";
+        var database = CreateDatabase();
+        var handler = new SplitHandler();
+        using var jira = new JiraClient(Configuration, handler);
+        var createdPullRequests = 0;
+        var planner = new ManagerPlanner(
+            Configuration,
+            new ManagerPlanRepository(database),
+            jira,
+            (_, _) => Task.FromResult(SplitJson),
+            (_, branch, issueKey, summary, _) =>
+            {
+                createdPullRequests++;
+                Assert.Equal("ai-agent/TASK-1", branch);
+                Assert.Equal("TASK-1", issueKey);
+                Assert.Equal("Title", summary);
+                return Task.FromResult(pullRequestUrl);
+            });
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+        handler.AddLabel("TASK-1", "ai-approved");
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+        foreach (var key in handler.CreatedKeys)
+        {
+            handler.SetStatus(key, "Done");
+        }
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal(1, createdPullRequests);
+        Assert.Contains(pullRequestUrl, new ManagerPlanRepository(database).Find("TASK-1")!.Plan);
+        Assert.Single(handler.Comments["TASK-1"].Where(comment => comment.Contains(pullRequestUrl)));
+    }
+
     private static DatabaseStub CreateDatabase()
     {
         var database = new DatabaseStub();
@@ -280,6 +361,31 @@ public sealed class ManagerPlannerSplitTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path.EndsWith("/comment", StringComparison.Ordinal))
+            {
+                var comments = Comments.GetValueOrDefault(IssueKey(path), []);
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new
+                {
+                    comments = comments.Select(comment => new
+                    {
+                        body = new
+                        {
+                            type = "doc",
+                            content = new[]
+                            {
+                                new
+                                {
+                                    type = "paragraph",
+                                    content = new[] { new { type = "text", text = comment } }
+                                }
+                            }
+                        }
+                    }),
+                    total = comments.Count,
+                    isLast = true
+                }));
+            }
+
             if (request.Method == HttpMethod.Get && path.EndsWith("/transitions", StringComparison.Ordinal))
             {
                 return Json(HttpStatusCode.OK, """{"transitions":[{"id":"selected","name":"Start","to":{"name":"Selected for Development"}}]}""");

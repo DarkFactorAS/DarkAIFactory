@@ -60,6 +60,18 @@ internal static partial class GitHubRepository
                 ? ["switch", "--create", branchName]
                 : ["switch", "--no-track", "--create", branchName, startPoint],
             cancellationToken);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["submodule", "sync", "--recursive"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["submodule", "update", "--init", "--recursive"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
         ProtectGitConfiguration(workspacePath);
         return branchName;
     }
