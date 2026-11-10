@@ -46,7 +46,15 @@ public sealed class AiDatabasePatcherTests
                 "patch:WorkflowLabels:3", "successful",
                 "patch:WorkflowLabels:4", "successful",
                 "init:AgentTasks",
-                "patch:AgentTasks:1", "successful"]);
+                "patch:AgentTasks:1", "successful",
+                "init:AgentConfig",
+                "patch:AgentConfig:1", "successful",
+                "patch:AgentConfig:2", "successful",
+                "patch:AgentConfig:3", "successful",
+                "patch:AgentConfig:4", "successful",
+                "patch:AgentConfig:5", "successful",
+                "patch:AgentConfig:6", "successful",
+                "patch:AgentConfig:7", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);

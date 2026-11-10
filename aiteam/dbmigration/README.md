@@ -45,6 +45,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
+| `AgentConfig` | 1-7 | `agent_definitions` (name, role, instructions, language model key), `agent_capabilities` and `language_models` enable flags, `agent_metrics` (tokens, tool calls, duration, success/failure counts); seeds model `gpt-5-mini`, one `default` agent and its metrics row. All statements are idempotent (`IF NOT EXISTS` / `ON DUPLICATE KEY`) |
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database

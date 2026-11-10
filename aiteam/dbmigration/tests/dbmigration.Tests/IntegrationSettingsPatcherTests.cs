@@ -96,7 +96,9 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
-            ("AgentTasks", 1)]);
+            ("AgentTasks", 1),
+            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
+            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -118,6 +120,42 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Contains("IN ('New', 'Created', 'Failed')", sql);
 
         Assert.False(AgentTaskPatcher.Run(new SettingsPatcherStub(1)));
+    }
+
+    [Theory]
+    [InlineData(0, true, 7)]
+    [InlineData(1, false, 1)]
+    [InlineData(4, false, 4)]
+    [InlineData(7, false, 7)]
+    public void AgentConfigPatcher_CreatesTablesAndSeedsIdempotently(int failingPatch, bool expected, int count)
+    {
+        var patcher = new SettingsPatcherStub(failingPatch);
+        Assert.Equal(expected, AgentConfigPatcher.Run(patcher));
+        Assert.Equal("AgentConfig", patcher.System);
+        Assert.Equal(count, patcher.Sql.Count);
+        if (!expected)
+        {
+            return;
+        }
+
+        Assert.All(patcher.Sql.Take(4), sql => Assert.Contains("CREATE TABLE IF NOT EXISTS", sql));
+        foreach (var column in new[] { "`name`", "`role`", "`instructions`", "`language_model_key`" })
+        {
+            Assert.Contains(column, patcher.Sql[0]);
+        }
+
+        Assert.Contains("`agent_capabilities`", patcher.Sql[1]);
+        Assert.Contains("`enabled`", patcher.Sql[1]);
+        Assert.Contains("`language_models`", patcher.Sql[2]);
+        Assert.Contains("`enabled`", patcher.Sql[2]);
+        foreach (var column in new[]
+            { "`input_tokens`", "`output_tokens`", "`tool_calls`", "`duration_ms`", "`success_count`", "`failure_count`" })
+        {
+            Assert.Contains(column, patcher.Sql[3]);
+        }
+
+        Assert.All(patcher.Sql.Skip(4), sql => Assert.Contains("ON DUPLICATE KEY UPDATE", sql));
+        Assert.Contains("VALUES ('default'", patcher.Sql[5]);
     }
 
     [Fact]
@@ -186,7 +224,9 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
-            ("AgentTasks", 1)], patcher.Executed);
+            ("AgentTasks", 1),
+            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
+            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -208,7 +248,9 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
             ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
-            ("AgentTasks", 1)], patcher.Executed);
+            ("AgentTasks", 1),
+            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
+            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
