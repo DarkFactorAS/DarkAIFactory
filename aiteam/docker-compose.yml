@@ -106,6 +106,30 @@ services:
     networks:
       - claude-runner
 
+  review-worker:
+    build:
+      context: ..
+      dockerfile: aiteam/aireviewworker/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      dbmigration:
+        condition: service_completed_successfully
+    volumes:
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+    restart: unless-stopped
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      NUGET_USERNAME: ${NUGET_USERNAME}
+      NUGET_TOKEN: ${NUGET_TOKEN}
+      HOME: /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   manager-agent:
     build:
       context: ..
