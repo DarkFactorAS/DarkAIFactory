@@ -1,16 +1,31 @@
 using AiAgent;
+using Microsoft.Extensions.Hosting;
+using System.Runtime.InteropServices;
 
-var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Config", "appsettings.json"), optional: true);
-builder.Configuration.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "Config", $"appsettings.{builder.Environment.EnvironmentName}.json"), optional: true);
-builder.Configuration.AddEnvironmentVariables();
-builder.Configuration.AddCommandLine(args);
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+var builder = AgentHost.CreateBuilder(args);
+using var host = builder.Build();
 
-builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection("AiAgent"));
-builder.Services.AddSingleton<IAgentInfo, AgentInfo>();
-builder.Services.AddHealthChecks();
+using var cancellation = new CancellationTokenSource();
+Console.CancelKeyPress += (_, eventArgs) =>
+{
+    eventArgs.Cancel = true;
+    cancellation.Cancel();
+};
+using var sigterm = OperatingSystem.IsWindows()
+    ? null
+    : PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+    {
+        context.Cancel = true;
+        cancellation.Cancel();
+    });
 
-var app = builder.Build();
-app.MapHealthChecks("/health");
-app.MapGet("/", (IAgentInfo info) => Results.Ok(new { agent = info.Name }));
-app.Run();
+try
+{
+    return await AgentHost.RunAsync(host.Services, cancellation.Token);
+}
+catch (Exception ex) when (ex is InvalidOperationException)
+{
+    Console.Error.WriteLine($"Startup failed: {ex.Message}");
+    return 1;
+}

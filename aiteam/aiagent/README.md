@@ -1,7 +1,12 @@
 # aiagent
 
-Minimal .NET host for the custom agent (DFAI-52). Provides DI setup and a `/health` endpoint on port 8080.
+Scaffold for the configurable custom agent (DFAI-52). It is a .NET generic host that loads
+`Config/appsettings.{DOTNET_ENVIRONMENT}.json` and starts the capabilities named in `Capabilities`.
+With none enabled it logs a message and exits with code 0.
 
-- Project: `src/AiAgent/AiAgent.csproj`
-- Config: `Config/appsettings.json` (override with `Config/appsettings.<Environment>.json`)
-- Docker: `docker compose up aiagent` from `aiteam/`
+- `Capabilities/` – `ICapability` module interface and `CapabilityRegistry`.
+- `LanguageModels/` – `ILanguageModel` module interface and `LanguageModelRegistry`.
+- Settings: `AppName`, `Capabilities` (list of names), `LanguageModel` (optional name).
+Build: `dotnet build src/AiAgent/AiAgent.csproj`; test: `dotnet test tests/AiAgent.Tests.csproj`;
+image: `docker build -f aiteam/aiagent/Dockerfile .` from the repository root.
+image: `docker build -f aiteam/aiagent/Dockerfile .` from the repository root.
