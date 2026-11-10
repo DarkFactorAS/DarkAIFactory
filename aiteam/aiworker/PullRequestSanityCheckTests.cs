@@ -198,6 +198,7 @@ public sealed class PullRequestSanityCheckTests
     public async Task MergedPullRequestWithWrongBase_IsRolledBackAndCherryPickedIntoParentBranch()
     {
         var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Branches.Add(Parent);
         fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master", "Do work");
 
         var actions = await fixture.RunAsync();
@@ -206,7 +207,7 @@ public sealed class PullRequestSanityCheckTests
         Assert.Equal(PullRequestSanityCheck.RepairedByMergedPullRequest, action.Kind);
         Assert.Equal(
             [
-                "get 5", $"create-branch {Parent}", "revert 5", $"cherry-pick 5 onto {Parent}",
+                "get 5", "revert 5", $"cherry-pick 5 onto {Parent}",
                 $"create-pr ai-agent/cherry-pick-pr-5->{Parent}"
             ],
             fixture.GitHub.Calls);
@@ -216,6 +217,21 @@ public sealed class PullRequestSanityCheckTests
         Assert.Equal(Parent, cherryPick.BaseBranch);
         Assert.Equal(cherryPick.Url, action.NewPullRequestUrl);
         Assert.Equal([$"5->{cherryPick.Number}"], fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task MergedPullRequestWithWrongBase_DoesNotCreateParentBranchBeforeRollbackMerges()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master");
+
+        var actions = await fixture.RunAsync();
+
+        Assert.Empty(actions);
+        Assert.Contains("revert 5", fixture.GitHub.Calls);
+        Assert.DoesNotContain($"create-branch {Parent}", fixture.GitHub.Calls);
+        Assert.DoesNotContain($"cherry-pick 5 onto {Parent}", fixture.GitHub.Calls);
+        Assert.Empty(fixture.Replaced);
     }
 
     [Fact]
