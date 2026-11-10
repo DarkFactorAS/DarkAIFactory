@@ -32,12 +32,65 @@ public class WorkspaceTests
             var status = RunnerServer.Inspect(options);
             Assert.True(status.Ready);
             Assert.True(status.EntryCount >= 2);
+
+            await File.WriteAllTextAsync(Path.Combine(source, "a.txt"), "updated");
+            Git(source, "add", ".");
+            Git(source, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "update");
+            Assert.Equal(0, await GitFetcher.RunAsync(options));
+            Assert.Equal("updated", await File.ReadAllTextAsync(Path.Combine(options.CheckoutPath, "a.txt")));
+            Assert.True(RunnerServer.Inspect(options).Ready);
         }
         finally
         {
             foreach (var f in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             {
                 File.SetAttributes(f, FileAttributes.Normal);
+            }
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("repository")]
+    [InlineData("branch")]
+    [InlineData("detached")]
+    public async Task Fetch_WithMismatchedCheckout_FailsAndClearsReadiness(string mismatch)
+    {
+        var root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(source);
+            Git(source, "init", "-q", "--initial-branch=main");
+            Git(source, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "initial");
+
+            var options = new WorkspaceOptions(Path.Combine(root, "ws"), source, "main");
+            Assert.Equal(0, await GitFetcher.RunAsync(options));
+            Assert.True(RunnerServer.Inspect(options).Ready);
+
+            if (mismatch == "repository")
+            {
+                options = options with { RepositoryUrl = Path.Combine(root, "other") };
+            }
+            else if (mismatch == "branch")
+            {
+                Git(source, "branch", "other");
+                options = options with { Branch = "other" };
+            }
+            else
+            {
+                Git(options.CheckoutPath, "checkout", "--detach");
+            }
+
+            Assert.Equal(2, await GitFetcher.RunAsync(options));
+            Assert.False(RunnerServer.Inspect(options).Ready);
+            Assert.False(File.Exists(Path.Combine(options.Root, WorkspaceOptions.MarkerFileName)));
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
             }
             Directory.Delete(root, true);
         }

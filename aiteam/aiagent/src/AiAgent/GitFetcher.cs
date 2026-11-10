@@ -19,7 +19,16 @@ internal static class GitFetcher
         List<string> args;
         if (Directory.Exists(Path.Combine(options.CheckoutPath, ".git")))
         {
-            args = ["-C", options.CheckoutPath, "pull", "--ff-only"];
+            var origin = await GitAsync(["-C", options.CheckoutPath, "config", "--get", "remote.origin.url"]);
+            var branch = await GitAsync(["-C", options.CheckoutPath, "symbolic-ref", "--quiet", "--short", "HEAD"]);
+            if (origin.ExitCode != 0 || origin.Output.Trim() != options.RepositoryUrl ||
+                branch.ExitCode != 0 ||
+                (!string.IsNullOrWhiteSpace(options.Branch) && branch.Output.Trim() != options.Branch))
+            {
+                Console.Error.WriteLine("Existing checkout does not match the configured repository and branch. Use a fresh workspace.");
+                return 2;
+            }
+            args = ["-C", options.CheckoutPath, "pull", "--ff-only", "origin", branch.Output.Trim()];
         }
         else
         {
@@ -31,10 +40,11 @@ internal static class GitFetcher
             args.AddRange([options.RepositoryUrl, options.CheckoutPath]);
         }
 
-        var exit = await GitAsync(args);
-        if (exit != 0)
+        var result = await GitAsync(args);
+        Console.Write(result.Output);
+        if (result.ExitCode != 0)
         {
-            return exit;
+            return result.ExitCode;
         }
 
         await File.WriteAllTextAsync(marker, DateTimeOffset.UtcNow.ToString("O"));
@@ -42,16 +52,17 @@ internal static class GitFetcher
         return 0;
     }
 
-    private static async Task<int> GitAsync(IEnumerable<string> args)
+    private static async Task<(int ExitCode, string Output)> GitAsync(IEnumerable<string> args)
     {
-        var info = new ProcessStartInfo("git") { UseShellExecute = false };
+        var info = new ProcessStartInfo("git") { UseShellExecute = false, RedirectStandardOutput = true };
         foreach (var arg in args)
         {
             info.ArgumentList.Add(arg);
         }
         info.Environment["GIT_TERMINAL_PROMPT"] = "0";
         using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not start git.");
+        var output = await process.StandardOutput.ReadToEndAsync();
         await process.WaitForExitAsync();
-        return process.ExitCode;
+        return (process.ExitCode, output);
     }
 }

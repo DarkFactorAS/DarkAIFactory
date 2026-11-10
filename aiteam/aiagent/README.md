@@ -5,6 +5,8 @@ Scaffold for the custom agent (DFAI-52). One image, two containers sharing the `
 - `aiagent-git-fetch` (`--git-fetch`): clones `AIAGENT_REPOSITORY_URL` (optional `AIAGENT_REPOSITORY_BRANCH`) into `/workspaces/repo`, writes a completion marker and exits.
 - `aiagent-runner` (`--runner`): starts after the fetch succeeds, mounts the volume and serves `/health` and `/workspace` (whether the checkout is readable) on port 8080 inside the `aiagent` network.
 
+Existing checkouts are updated from `origin` only when its URL and the checked-out branch match the configuration. A mismatch (or detached HEAD) fails without marking the workspace ready; use a fresh workspace when changing the repository or branch.
+
 Build: `dotnet build aiteam/aiagent/src/AiAgent/AiAgent.csproj`. Test: `dotnet test aiteam/aiagent/AiAgent.Tests.csproj`.
 Run: `aiteam/docker-up.sh` / `aiteam/docker-down.sh` (aiagent services only; existing agents are untouched).
 
