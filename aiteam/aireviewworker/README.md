@@ -26,5 +26,9 @@ Loaded like [aiworker](../aiworker/README.md):
 ```bash
 dotnet build aiteam/aireviewworker/src/ReviewWorker/ReviewWorker.csproj
 dotnet test aiteam/aireviewworker/ReviewWorker.Tests.csproj
-docker build -f aiteam/aireviewworker/Dockerfile -t aireviewworker .   # from the repository root
+# Export NUGET_USERNAME and NUGET_TOKEN before building.
+docker build \
+  --secret id=nuget_username,env=NUGET_USERNAME \
+  --secret id=nuget_token,env=NUGET_TOKEN \
+  -f aiteam/aireviewworker/Dockerfile -t aireviewworker .  # from the repository root
 ```
