@@ -125,6 +125,61 @@ public sealed class PullRequestCloserTests
             new StubHandler(HttpStatusCode.Forbidden, "{}")));
     }
 
+    [Fact]
+    public async Task CreateOrFindPullRequestAsync_UsesExistingParentPullRequestWhenAvailable()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"default_branch":"main"}"""),
+            (HttpStatusCode.OK, """[{"html_url":"https://github.com/owner/repo/pull/42"}]"""));
+
+        var url = await GitHubRepository.CreateOrFindPullRequestAsync(
+            Configuration, "ai-agent/TASK-1", "TASK-1", "Title", CancellationToken.None, handler);
+
+        Assert.Equal("https://github.com/owner/repo/pull/42", url);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Contains("head=owner%3Aai-agent%2FTASK-1", handler.Requests[1].RequestUri!.Query);
+        Assert.Contains("base=main", handler.Requests[1].RequestUri.Query);
+    }
+
+    [Fact]
+    public async Task CreateOrFindPullRequestAsync_CreatesParentPullRequestAgainstDefaultBranch()
+    {
+        var handler = new SequenceHandler(
+            (HttpStatusCode.OK, """{"default_branch":"main"}"""),
+            (HttpStatusCode.OK, "[]"),
+            (HttpStatusCode.Created, """{"html_url":"https://github.com/owner/repo/pull/43"}"""));
+
+        var url = await GitHubRepository.CreateOrFindPullRequestAsync(
+            Configuration, "ai-agent/TASK-1", "TASK-1", "Title", CancellationToken.None, handler);
+
+        Assert.Equal("https://github.com/owner/repo/pull/43", url);
+        var request = handler.Requests[2];
+        using var body = JsonDocument.Parse(request.Body!);
+        Assert.Equal("ai-agent/TASK-1", body.RootElement.GetProperty("head").GetString());
+        Assert.Equal("main", body.RootElement.GetProperty("base").GetString());
+    }
+
+    private sealed class SequenceHandler(params (HttpStatusCode Status, string Body)[] responses) : HttpMessageHandler
+    {
+        private int _next;
+
+        public List<(HttpRequestMessage Request, string? Body)> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            Requests.Add((request, body));
+            var (status, responseBody) = responses[_next++];
+            return new HttpResponseMessage(status)
+            {
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
     private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler
     {
         public string? Path { get; private set; }

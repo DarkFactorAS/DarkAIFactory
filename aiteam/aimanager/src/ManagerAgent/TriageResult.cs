@@ -148,6 +148,8 @@ internal sealed record TriageResult(
                 throw new InvalidDataException("An analysis_only decision needs an analysis.");
             case TriageDecision.Small or TriageDecision.NeedsApproval when Plan.Length == 0:
                 throw new InvalidDataException($"A {Decision} decision needs a plan.");
+            case TriageDecision.Split when Plan.Length == 0:
+                throw new InvalidDataException("A split decision needs an overall plan.");
             case TriageDecision.Split when Subtasks.Count == 0:
                 throw new InvalidDataException("A split decision needs at least one subtask.");
         }

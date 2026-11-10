@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ManagerAgent;
 
@@ -82,6 +84,74 @@ internal static class GitHubRepository
             await response.Content.ReadAsStringAsync(cancellationToken));
         return document.RootElement.TryGetProperty("merged", out var merged) &&
             merged.ValueKind == System.Text.Json.JsonValueKind.True;
+    }
+
+    public static async Task<string> CreateOrFindPullRequestAsync(
+        AgentConfiguration configuration,
+        string headBranch,
+        string issueKey,
+        string summary,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        var (owner, repositoryName) = ParseOwnerAndRepository(configuration.GitHubRepositoryUrl);
+        var repositoryPath =
+            $"/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repositoryName)}";
+        using var httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
+        httpClient.BaseAddress = new Uri("https://api.github.com");
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", configuration.GitHubRepositoryToken);
+        httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-ManagerAgent/1.0");
+
+        using var repositoryResponse = await httpClient.GetAsync(repositoryPath, cancellationToken);
+        repositoryResponse.EnsureSuccessStatusCode();
+        using var repositoryDocument = System.Text.Json.JsonDocument.Parse(
+            await repositoryResponse.Content.ReadAsStringAsync(cancellationToken));
+        var defaultBranch = repositoryDocument.RootElement.GetProperty("default_branch").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return a default branch.");
+
+        var query =
+            $"?state=open&head={Uri.EscapeDataString($"{owner}:{headBranch}")}&base={Uri.EscapeDataString(defaultBranch)}";
+        using var existingResponse = await httpClient.GetAsync($"{repositoryPath}/pulls{query}", cancellationToken);
+        existingResponse.EnsureSuccessStatusCode();
+        using var existingDocument = System.Text.Json.JsonDocument.Parse(
+            await existingResponse.Content.ReadAsStringAsync(cancellationToken));
+        if (existingDocument.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+        {
+            throw new InvalidDataException("GitHub returned an invalid pull request list.");
+        }
+
+        foreach (var pullRequest in existingDocument.RootElement.EnumerateArray())
+        {
+            if (pullRequest.TryGetProperty("html_url", out var url) &&
+                url.ValueKind == System.Text.Json.JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(url.GetString()))
+            {
+                return url.GetString()!;
+            }
+        }
+
+        var title = Regex.Replace(summary, @"[\r\n\t]+", " ").Trim();
+        var body = new
+        {
+            title = $"{issueKey}: {title}",
+            head = headBranch,
+            @base = defaultBranch,
+            body = $"All sub-tasks for Jira task {issueKey} are complete.\n\nCreated automatically by the manager."
+        };
+        using var response = await httpClient.PostAsJsonAsync($"{repositoryPath}/pulls", body, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var details = Limit(await response.Content.ReadAsStringAsync(cancellationToken), 500);
+            throw new InvalidOperationException(
+                $"Creating the pull request failed with status {(int)response.StatusCode}. Details: {details}");
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(cancellationToken));
+        return document.RootElement.GetProperty("html_url").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return a pull request URL.");
     }
 
     public static void DeleteWorkspace(string workspacePath)
@@ -228,6 +298,22 @@ internal static class GitHubRepository
 
     private static string Limit(string text, int maximumLength) =>
         text.Length <= maximumLength ? text : text[..maximumLength] + "...";
+
+    private static (string Owner, string RepositoryName) ParseOwnerAndRepository(Uri repositoryUrl)
+    {
+        var parts = repositoryUrl.AbsolutePath.Trim('/').Split('/');
+        if (parts.Length != 2 ||
+            !string.Equals(repositoryUrl.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"The repository URL \"{repositoryUrl}\" is not in the form https://github.com/owner/repository.");
+        }
+
+        var repositoryName = parts[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase)
+            ? parts[1][..^4]
+            : parts[1];
+        return (parts[0], repositoryName);
+    }
 
     private sealed record GitResult(int ExitCode, string StandardOutput, string StandardError);
 

@@ -17,6 +17,21 @@ public sealed class PromptBuilderTests
     }
 
     [Fact]
+    public void TriagePrompt_StatesSplitBranchApprovalAndFeedbackRules()
+    {
+        var prompt = PromptBuilder.BuildTriagePrompt(Issue);
+
+        Assert.Contains("only when it is critical", prompt);
+        Assert.Contains("Decide smaller matters yourself", prompt);
+        Assert.Contains("full, detailed implementation plan", prompt);
+        Assert.Contains("approves it before any sub-task is created", prompt);
+        Assert.Contains("in cleartext", prompt);
+        Assert.Contains("branches off that main task branch", prompt);
+        Assert.Contains("not the default branch", prompt);
+        Assert.Contains("blocked by other open tasks may still be triaged", prompt);
+    }
+
+    [Fact]
     public void PlanPrompt_ForbidsImplementation()
     {
         var prompt = PromptBuilder.BuildPlanPrompt(Issue);

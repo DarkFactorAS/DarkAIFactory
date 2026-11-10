@@ -32,6 +32,8 @@ public sealed class TriageResultTests
     [InlineData("""{"decision":"unknown"}""")]
     [InlineData("""{"decision":"clarify"}""")]
     [InlineData("""{"decision":"small"}""")]
+    [InlineData("""{"decision":"split","plan":"","subtasks":[{"title":"A","description":"a"}]}""")]
+    [InlineData("""{"decision":"split","plan":"  ","subtasks":[{"title":"A","description":"a"}]}""")]
     [InlineData("""{"decision":"split","subtasks":[]}""")]
     public void Parse_RejectsMalformedOrIncompleteResults(string json)
     {
