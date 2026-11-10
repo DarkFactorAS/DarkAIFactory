@@ -15,6 +15,8 @@ public static class AgentHost
         var environment = builder.Environment.EnvironmentName;
         builder.Configuration.AddJsonFile("Config/appsettings.json", optional: true, reloadOnChange: false);
         builder.Configuration.AddJsonFile($"Config/appsettings.{environment}.json", optional: true, reloadOnChange: false);
+        builder.Configuration.AddEnvironmentVariables();
+        builder.Configuration.AddCommandLine(args);
         builder.Services.Configure<AgentSettings>(builder.Configuration);
         builder.Services.AddSingleton<ICapabilityRegistry, CapabilityRegistry>();
         builder.Services.AddSingleton<ILanguageModelRegistry, LanguageModelRegistry>();
@@ -39,9 +41,31 @@ public static class AgentHost
         }
 
         logger.LogInformation("{AppName}: starting {Count} capabilities.", settings.AppName, enabled.Count);
+        using var capabilityCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        async Task RunCapabilityAsync(ICapability capability)
+        {
+            try
+            {
+                await capability.RunAsync(capabilityCancellation.Token);
+            }
+            catch
+            {
+                try
+                {
+                    capabilityCancellation.Cancel();
+                }
+                catch
+                {
+                }
+
+                throw;
+            }
+        }
+
         try
         {
-            await Task.WhenAll(enabled.Select(c => c.RunAsync(cancellationToken)));
+            await Task.WhenAll(enabled.Select(RunCapabilityAsync));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
