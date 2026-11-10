@@ -145,6 +145,17 @@
         "${workspaceFolder}/aiteam/aidashboard/aidashboard.csproj"
       ],
       "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run aiagent",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/aiteam/aiagent/src/AiAgent/AiAgent.csproj"
+      ],
+      "problemMatcher": "$msCompile"
     }
   ]
 }
