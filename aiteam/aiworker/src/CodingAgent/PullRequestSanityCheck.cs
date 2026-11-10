@@ -135,16 +135,43 @@ internal sealed class PullRequestSanityCheck(
         TrackedPullRequest tracked, string parentBranch, CancellationToken cancellationToken)
     {
         var info = await gitHub.GetPullRequestAsync(tracked.Number, cancellationToken);
-        if (info.State == GitHubRepository.PullRequestState.Closed ||
-            string.Equals(info.BaseBranch, parentBranch, StringComparison.Ordinal))
+        if (string.Equals(info.BaseBranch, parentBranch, StringComparison.Ordinal))
         {
             return null;
         }
 
-        await EnsureParentBranchAsync(parentBranch, cancellationToken);
-        return info.State == GitHubRepository.PullRequestState.Open
-            ? await RepairOpenAsync(tracked, info, parentBranch, cancellationToken)
-            : await RepairMergedAsync(tracked, info, parentBranch, cancellationToken);
+        if (info.State == GitHubRepository.PullRequestState.Closed)
+        {
+            return await ReconcileClosedAsync(tracked, info, parentBranch, cancellationToken);
+        }
+
+        if (info.State == GitHubRepository.PullRequestState.Open)
+        {
+            await EnsureParentBranchAsync(parentBranch, cancellationToken);
+            return await RepairOpenAsync(tracked, info, parentBranch, cancellationToken);
+        }
+
+        return await RepairMergedAsync(tracked, info, parentBranch, cancellationToken);
+    }
+
+    // A previous run may have closed the original before the tracking update; move tracking to the replacement.
+    private async Task<SanityCheckAction?> ReconcileClosedAsync(
+        TrackedPullRequest tracked,
+        GitHubRepository.PullRequestInfo info,
+        string parentBranch,
+        CancellationToken cancellationToken)
+    {
+        var replacement =
+            await gitHub.FindPullRequestAsync(info.HeadBranch, parentBranch, cancellationToken) ??
+            await gitHub.FindPullRequestAsync($"ai-agent/cherry-pick-pr-{info.Number}", parentBranch, cancellationToken);
+        if (replacement is null || replacement.State == GitHubRepository.PullRequestState.Closed)
+        {
+            return null;
+        }
+
+        pullRequests.Replace(configuration.GitHubRepositoryUrl, info.Number, replacement.Url);
+        DFLogger.LogOutput(DFLogLevel.INFO, "SanityCheck", $"Recovered {tracked.JiraKey}: tracking moved from #{info.Number} to {replacement.Url}.");
+        return new SanityCheckAction(tracked.JiraKey, info.Number, RepairedByOpenPullRequest, replacement.Url);
     }
 
     private async Task EnsureParentBranchAsync(string parentBranch, CancellationToken cancellationToken)
@@ -210,6 +237,19 @@ internal sealed class PullRequestSanityCheck(
             {
                 await gitHub.CreateRevertPullRequestAsync(info.Number, rollbackBranch, cancellationToken);
             }
+        }
+
+        if (!await gitHub.BranchExistsAsync(parentBranch, cancellationToken))
+        {
+            // Creating the parent from the default branch before the rollback lands would keep the misplaced changes.
+            var landed = await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken);
+            if (landed?.State != GitHubRepository.PullRequestState.Merged)
+            {
+                throw new InvalidOperationException(
+                    $"Parent branch {parentBranch} does not exist; merge the rollback pull request for #{info.Number} first.");
+            }
+
+            await gitHub.CreateBranchFromDefaultBranchAsync(parentBranch, cancellationToken);
         }
 
         var cherryPickBranch = $"ai-agent/cherry-pick-pr-{info.Number}";
