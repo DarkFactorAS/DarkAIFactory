@@ -1,4 +1,6 @@
 using ManagerAgent;
+using AiAgent;
+using AgentSettings = ManagerAgent.AgentSettings;
 using AiTeam.Configuration;
 using ManagerAgent.Repository;
 using DFCommonLib.Config;
@@ -18,6 +20,7 @@ new DFServices(builder.Services)
 builder.Services.AddScoped<ManagerProjectRepository>();
 builder.Services.AddScoped<ManagerPlanRepository>();
 builder.Services.AddScoped<PullRequestRepository>();
+builder.Services.AddAgentConfig(new AgentDefinition("managementagent", "managementagent", string.Empty, string.Empty, []));
 builder.Services.AddScoped<IntegrationSettingsRepository>();
 builder.Services.AddScoped<WorkflowLabelRepository>();
 
@@ -78,6 +81,9 @@ try
     while (!cancellation.IsCancellationRequested)
     {
         using var scope = host.Services.CreateScope();
+        // Re-read the DB each cycle so behavior text changes apply without a rebuild or restart.
+        var agentHost = scope.ServiceProvider.GetRequiredService<AgentHost>();
+        await agentHost.RefreshAsync(cancellation.Token);
         var projects = scope.ServiceProvider.GetRequiredService<ManagerProjectRepository>().GetProjects();
         var plans = scope.ServiceProvider.GetRequiredService<ManagerPlanRepository>();
         if (projects.Count == 0 && !loggedNoProjects)
@@ -185,7 +191,7 @@ try
                 try
                 {
                     await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token, issue.ParentKey);
-                    return await copilot.RunAsync(workspacePath, PromptBuilder.BuildTriagePrompt(issue), token);
+                    return await copilot.RunAsync(workspacePath, PromptBuilder.BuildTriagePrompt(issue, agentHost.SystemPrompt), token);
                 }
                 finally
                 {

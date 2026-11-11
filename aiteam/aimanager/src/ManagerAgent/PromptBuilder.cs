@@ -5,9 +5,14 @@ namespace ManagerAgent;
 
 internal static class PromptBuilder
 {
-    public static string BuildPlanPrompt(JiraIssue issue)
+    public static string BuildPlanPrompt(JiraIssue issue, string? behavior = null)
     {
         var prompt = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(behavior))
+        {
+            prompt.AppendLine(behavior);
+            prompt.AppendLine();
+        }
         prompt.AppendLine("Inspect this repository and prepare an implementation plan for the Jira task below.");
         prompt.AppendLine("Planning only: do not implement code, edit files, run commands or builds, commit, push, or create pull requests. Return a concise, actionable plan with files to inspect/change and proposed validation steps.");
         prompt.AppendLine("First read the repository's root AGENTS.md, README.md, .github/copilot-instructions.md, and any relevant Markdown workflow or coding-guideline files.");
@@ -17,9 +22,14 @@ internal static class PromptBuilder
         return prompt.ToString();
     }
 
-    public static string BuildTriagePrompt(JiraIssue issue)
+    public static string BuildTriagePrompt(JiraIssue issue, string? behavior = null)
     {
         var prompt = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(behavior))
+        {
+            prompt.AppendLine(behavior);
+            prompt.AppendLine();
+        }
         prompt.AppendLine("You are the tech lead. Inspect this repository and triage the Jira task below.");
         prompt.AppendLine("Triage only: do not implement code, edit files, run commands or builds, commit, push, or create pull requests.");
         prompt.AppendLine("First read the repository's root AGENTS.md, README.md, .github/copilot-instructions.md, and any relevant Markdown workflow or coding-guideline files.");

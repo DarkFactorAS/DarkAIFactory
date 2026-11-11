@@ -1,5 +1,7 @@
 using ClaudeCodingAgent;
 using ClaudeCodingAgent.Repository;
+using AiAgent;
+using AgentSettings = ClaudeCodingAgent.AgentSettings;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.Logger;
@@ -18,6 +20,7 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
+builder.Services.AddAgentConfig(new AgentDefinition("claudecodingagent", "claudecodingagent", string.Empty, string.Empty, []));
 builder.Services.AddScoped<IntegrationSettingsRepository>();
 builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<ManagerPlanReader>();
@@ -74,6 +77,9 @@ try
     while (!cancellation.IsCancellationRequested)
     {
         using var scope = host.Services.CreateScope();
+        // Re-read the DB each cycle so behavior text changes apply without a rebuild or restart.
+        var agentHost = scope.ServiceProvider.GetRequiredService<AgentHost>();
+        await agentHost.RefreshAsync(cancellation.Token);
         var projects = scope.ServiceProvider.GetRequiredService<ManagerProjectRepository>().GetProjects();
         AgentConfiguration[] configurations = projects.Count == 0
             ? [AgentConfiguration.Load(settings, labels)]
@@ -295,7 +301,7 @@ try
                             DFLogger.LogOutput(DFLogLevel.INFO, "Worker", $"No manager plan found for {issue.Key}; generating a plan locally.");
                             plan = await claude.RunAsync(
                                 workspacePath,
-                                PromptBuilder.BuildPlanPrompt(issue),
+                                PromptBuilder.BuildPlanPrompt(issue, agentHost.SystemPrompt),
                                 allowChanges: false,
                                 cancellation.Token);
                         }
@@ -311,7 +317,8 @@ try
                             PromptBuilder.BuildImplementationPrompt(
                                 issue,
                                 plan,
-                                issue.ParentKey is null ? null : JiraWorkflowRules.ParentBranchName(issue.ParentKey)),
+                                issue.ParentKey is null ? null : JiraWorkflowRules.ParentBranchName(issue.ParentKey),
+                                agentHost.SystemPrompt),
                             allowChanges: true,
                             cancellation.Token);
                         var pushResult = await GitHubRepository.CommitAndPushAsync(
