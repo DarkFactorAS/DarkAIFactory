@@ -79,7 +79,6 @@ public class AiDatabasePatcher : StartupDatabasePatcher
             && IntegrationSettingsPatcher.Run(_dbPatcher)
             && WorkflowLabelPatcher.Run(_dbPatcher)
             && AgentTaskPatcher.Run(_dbPatcher)
-            && AgentConfigPatcher.Run(_dbPatcher)
             && ReviewCommentAttemptsPatcher.Run(_dbPatcher);
     }
 }

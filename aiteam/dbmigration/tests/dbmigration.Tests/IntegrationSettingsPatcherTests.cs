@@ -97,13 +97,6 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1),
-            ("AgentConfig", 2),
-            ("AgentConfig", 3),
-            ("AgentConfig", 4),
-            ("AgentConfig", 5),
-            ("AgentConfig", 6),
-            ("AgentConfig", 7),
             ("ReviewCommentAttempts", 1)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -215,13 +208,6 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1),
-            ("AgentConfig", 2),
-            ("AgentConfig", 3),
-            ("AgentConfig", 4),
-            ("AgentConfig", 5),
-            ("AgentConfig", 6),
-            ("AgentConfig", 7),
             ("ReviewCommentAttempts", 1)], patcher.Executed);
 
         patcher.Executed.Clear();
@@ -245,13 +231,6 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1),
-            ("AgentConfig", 2),
-            ("AgentConfig", 3),
-            ("AgentConfig", 4),
-            ("AgentConfig", 5),
-            ("AgentConfig", 6),
-            ("AgentConfig", 7),
             ("ReviewCommentAttempts", 1)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
