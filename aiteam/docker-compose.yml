@@ -210,22 +210,6 @@ services:
     cap_drop:
       - ALL
 
-  aiagent:
-    build:
-      context: ..
-      dockerfile: aiteam/aiagent/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    restart: unless-stopped
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
   aidashboard:
     build:
       context: ..
