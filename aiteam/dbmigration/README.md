@@ -46,6 +46,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
 | `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; `pull_request_id` FK to `pull_requests` with cascade delete, `github_comment_id`, unique per pull request, `attempts`, `status` Pending/InProgress/Resolved/Failed, created/updated, nullable `last_error`) |
+| `AgentConfig` | 1-6 | `new_agents` (unique `name`, `role`, `instructions`, `language_model_key`, created/updated), `new_language_models` (unique `model_key`, `enabled`), `new_agent_capabilities` (FK to `new_agents` with cascade, unique per agent and `capability`, `enabled`), `new_agent_metrics` (one row per agent: `tokens`, `tool_calls`, `duration_ms`, `success_count`, `failure_count`); all `CREATE TABLE IF NOT EXISTS`. Seeds model `gpt-5-mini` (enabled) and one `default` agent with `INSERT IGNORE`, so re-runs never duplicate or overwrite edits |
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database
