@@ -31,7 +31,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -56,7 +56,7 @@ services:
       # Shares the Claude Code CLI login with claude-cli; never the worker's /app/Config.
       - claude_config:/claude-config
       - review_workspaces:/workspaces
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       HOME: /tmp
@@ -88,7 +88,7 @@ services:
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
       - claude_workspaces:/workspaces
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -115,7 +115,7 @@ services:
       # The CLI runner receives only the checkout volume, never the worker's database configuration.
       - claude_config:/claude-config
       - claude_workspaces:/workspaces
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       HOME: /tmp
@@ -152,7 +152,7 @@ services:
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
       - review_workspaces:/workspaces
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -178,7 +178,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -200,7 +200,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -224,7 +224,7 @@ services:
 #      - ${AIDASHBOARD_CONFIG_PATH:-./aidashboard/Config}:/app/Config:ro
     ports:
       - "127.0.0.1:${AIDASHBOARD_PORT:-8281}:8080"
-    restart: unless-stopped
+    restart: "no"
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
@@ -235,7 +235,7 @@ services:
 
   adminer:
     image: adminer:latest
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       aiteam_database:
         condition: service_healthy
@@ -248,7 +248,7 @@ services:
 
   aiteam_database:
     image: mariadb:11
-    restart: unless-stopped
+    restart: "no"
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${MARIADB_DATABASE:-aiteam}
