@@ -104,6 +104,28 @@ try
                 var pullRequests = scope.ServiceProvider.GetRequiredService<PullRequestRepository>();
                 try
                 {
+                    await new PullRequestTrackingRecovery(
+                        configuration,
+                        project.JiraProjectKey,
+                        pullRequests,
+                        jira.GetIssueAsync,
+                        token => GitHubRepository.ListOpenPullRequestsAsync(configuration, token))
+                        .RunAsync(cancellation.Token);
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception) when (!cancellation.IsCancellationRequested)
+                {
+                    DFLogger.LogOutput(
+                        DFLogLevel.ERROR,
+                        "Manager",
+                        $"Pull-request tracking recovery failed for manager project {project.Id}: {exception.Message}");
+                }
+
+                try
+                {
                     await new PullRequestSanityCheck(
                         configuration, pullRequests, jira.GetIssueAsync, new GitHubSanityOperations(configuration))
                         .RunAsync(cancellation.Token);
@@ -162,7 +184,7 @@ try
                 var workspacePath = GitHubRepository.CreateWorkspacePath();
                 try
                 {
-                    await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token);
+                    await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token, issue.ParentKey);
                     return await copilot.RunAsync(workspacePath, PromptBuilder.BuildTriagePrompt(issue), token);
                 }
                 finally

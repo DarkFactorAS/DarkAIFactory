@@ -32,6 +32,22 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
             : throw new InvalidDataException($"Cannot read the pull request number from \"{pullRequestUrl}\".");
     }
 
+    /// <summary>Starts tracking a pull request; a row that already exists for the same URL is kept unchanged.</summary>
+    public void Record(string jiraKey, Uri repositoryUrl, string pullRequestUrl)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            INSERT INTO pull_requests (jira_key, repository_url, pr_number, pr_url)
+            VALUES (@jira_key, @repository_url, @pr_number, @pr_url)
+            ON DUPLICATE KEY UPDATE pr_url = pr_url
+            """);
+        command.AddParameter("@jira_key", jiraKey);
+        command.AddParameter("@repository_url", repositoryUrl.AbsoluteUri);
+        command.AddParameter("@pr_number", ParsePullRequestNumber(pullRequestUrl));
+        command.AddParameter("@pr_url", pullRequestUrl);
+        command.ExecuteNonQuery();
+    }
+
     // Rows may refer to closed or merged pull requests; callers must check the current GitHub state.
     public IReadOnlyList<TrackedPullRequest> ListTracked(Uri repositoryUrl)
     {
@@ -59,9 +75,26 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
         return command.ExecuteNonQuery() > 0;
     }
 
-    // Swaps the tracked row for a replacement pull request, keeping the row id and Jira key.
+    // Swaps the tracked row for a replacement pull request, consolidating a replacement already recorded for the same issue.
     public bool Replace(Uri repositoryUrl, long oldPullRequestNumber, string newPullRequestUrl)
     {
+        using var deleteDuplicate = connectionFactory.CreateCommand(
+            """
+            DELETE old
+            FROM pull_requests AS old
+            JOIN pull_requests AS replacement
+                ON replacement.repository_url = old.repository_url
+                AND replacement.jira_key = old.jira_key
+                AND replacement.pr_url = @new_pr_url
+            WHERE old.repository_url = @repository_url
+                AND old.pr_number = @old_pr_number
+                AND old.pr_url <> @new_pr_url
+            """);
+        deleteDuplicate.AddParameter("@new_pr_url", newPullRequestUrl);
+        deleteDuplicate.AddParameter("@repository_url", repositoryUrl.AbsoluteUri);
+        deleteDuplicate.AddParameter("@old_pr_number", oldPullRequestNumber);
+        var removedDuplicate = deleteDuplicate.ExecuteNonQuery() > 0;
+
         using var command = connectionFactory.CreateCommand(
             "UPDATE pull_requests SET pr_number = @new_pr_number, pr_url = @new_pr_url " +
             "WHERE repository_url = @repository_url AND pr_number = @old_pr_number");
@@ -69,6 +102,6 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
         command.AddParameter("@new_pr_url", newPullRequestUrl);
         command.AddParameter("@repository_url", repositoryUrl.AbsoluteUri);
         command.AddParameter("@old_pr_number", oldPullRequestNumber);
-        return command.ExecuteNonQuery() > 0;
+        return command.ExecuteNonQuery() > 0 || removedDuplicate;
     }
 }

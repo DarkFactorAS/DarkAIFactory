@@ -1,4 +1,5 @@
 using System.Text;
+using AiTeam.Configuration;
 
 namespace ManagerAgent;
 
@@ -44,6 +45,7 @@ internal static class PromptBuilder
         prompt.AppendLine("- Write every sub-task \"description\" in cleartext so that it is self-contained: what to do, the files involved and the acceptance criteria. Do not refer to information that exists only in your reasoning.");
         prompt.AppendLine("- The main task gets a branch named after its task key like normal. Every sub-task branches off that main task branch and its pull request is merged into the main task branch, not the default branch. The manager adds these branch and pull request instructions to each sub-task automatically; do not contradict them.");
         prompt.AppendLine("- Tasks that are blocked by other open tasks may still be triaged and planned. They are only handed to the worker when every blocking task is Done.");
+        AppendSubtaskBranchContext(prompt, issue);
         prompt.AppendLine();
         AppendIssue(prompt, issue);
         return prompt.ToString();
@@ -79,6 +81,18 @@ internal static class PromptBuilder
         return text.Length <= maximumLength
             ? text
             : text[..maximumLength] + "\n\n[Output truncated to fit in a Jira comment.]";
+    }
+
+    private static void AppendSubtaskBranchContext(StringBuilder prompt, JiraIssue issue)
+    {
+        if (string.IsNullOrWhiteSpace(issue.ParentKey))
+        {
+            return;
+        }
+
+        var parentBranch = JiraWorkflowRules.ParentBranchName(issue.ParentKey);
+        prompt.AppendLine($"- This is a sub-task of {issue.ParentKey.Trim()}. The checkout uses its parent integration branch `{parentBranch}` if it exists on origin; otherwise it remains on the default branch until the worker creates the integration branch. Plan against the available checkout.");
+        prompt.AppendLine($"- Branch creation and the pull request base (`{parentBranch}`) are handled automatically by the worker. Branch instructions in the description are workflow rules, not requirements: never ask for clarification about branches.");
     }
 
     private static void AppendIssue(StringBuilder prompt, JiraIssue issue)
