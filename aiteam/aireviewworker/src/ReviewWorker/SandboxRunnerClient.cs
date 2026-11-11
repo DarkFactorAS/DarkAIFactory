@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 
 namespace ReviewWorker;
 
-internal sealed class SandboxRunnerClient(string agentGitHubToken, string agentModel, Uri? runnerUrl = null)
+internal sealed class SandboxRunnerClient(string agentModel, Uri? runnerUrl = null)
     : IFixRunner, IProjectCommandRunner, IDisposable
 {
     private readonly HttpClient _httpClient = new()
@@ -15,9 +15,9 @@ internal sealed class SandboxRunnerClient(string agentGitHubToken, string agentM
     {
         using var response = await _httpClient.PostAsJsonAsync(
             "run",
-            new RunRequest(WorkspaceId(workspacePath), prompt, agentModel, agentGitHubToken),
+            new RunRequest(WorkspaceId(workspacePath), prompt, agentModel),
             cancellationToken);
-        await EnsureSuccessAsync(response, "Copilot", cancellationToken);
+        await EnsureSuccessAsync(response, "Claude Code", cancellationToken);
     }
 
     async Task<string?> IProjectCommandRunner.RunAsync(
@@ -54,6 +54,6 @@ internal sealed class SandboxRunnerClient(string agentGitHubToken, string agentM
             : throw new InvalidOperationException("The workspace is not in the shared sandbox volume.");
     }
 
-    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model, string GitHubToken);
+    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model);
     private sealed record CommandRequest(string WorkspaceId, string Command);
 }

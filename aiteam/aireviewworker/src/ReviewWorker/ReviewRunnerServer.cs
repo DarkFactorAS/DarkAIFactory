@@ -7,6 +7,8 @@ namespace ReviewWorker;
 
 internal static class ReviewRunnerServer
 {
+    private static readonly string[] DeniedTools = ["Bash(git push:*)", "Bash(git commit:*)", "Bash(gh:*)"];
+
     private static readonly string WorkspaceRoot = Path.GetFullPath(
         Environment.GetEnvironmentVariable("REVIEW_WORKSPACE_ROOT") ?? "/workspaces");
 
@@ -20,16 +22,15 @@ internal static class ReviewRunnerServer
         {
             try
             {
-                var (exitCode, output, error) = await RunProcessAsync(
-                    "copilot",
-                    BuildCopilotArguments(request),
-                    ResolveWorkspacePath(request.WorkspaceId),
-                    request.GitHubToken,
-                    cancellationToken);
+                var startInfo = CreateProcessStartInfo(
+                    "claude", BuildClaudeArguments(request.Model), ResolveWorkspacePath(request.WorkspaceId));
+                startInfo.RedirectStandardInput = true;
+                ApplyClaudeEnvironment(startInfo.Environment);
+                var (exitCode, output, error) = await ExecuteAsync(startInfo, cancellationToken, request.Prompt);
                 if (exitCode != 0)
                 {
                     throw new InvalidOperationException(
-                        $"Copilot CLI failed with exit code {exitCode}. {Limit(error.Length > 0 ? error : output, 2_000)}");
+                        $"Claude Code CLI failed with exit code {exitCode}. {Limit(error.Length > 0 ? error : output, 2_000)}");
                 }
 
                 return Results.Ok();
@@ -44,7 +45,7 @@ internal static class ReviewRunnerServer
             try
             {
                 var startInfo = CreateProcessStartInfo(
-                    "/bin/sh", ["-c", request.Command], ResolveWorkspacePath(request.WorkspaceId), null);
+                    "/bin/sh", ["-c", request.Command], ResolveWorkspacePath(request.WorkspaceId));
                 var (exitCode, output, error) = await ExecuteAsync(startInfo, cancellationToken);
                 if (exitCode != 0)
                 {
@@ -75,40 +76,41 @@ internal static class ReviewRunnerServer
             : throw new InvalidOperationException("The sandbox workspace does not exist.");
     }
 
-    private static IReadOnlyList<string> BuildCopilotArguments(RunRequest request)
+    /// <summary>
+    /// Headless <c>claude -p</c> arguments. The prompt is written to standard input. The worker commits
+    /// and pushes itself, so the agent may never commit, push or call the GitHub CLI; deny rules take
+    /// precedence over <c>bypassPermissions</c>.
+    /// </summary>
+    internal static IReadOnlyList<string> BuildClaudeArguments(string? model)
     {
-        var arguments = new List<string> { "--prompt", request.Prompt };
-        if (!string.IsNullOrEmpty(request.Model))
+        var arguments = new List<string> { "-p", "--output-format", "text" };
+        if (!string.IsNullOrWhiteSpace(model))
         {
             arguments.Add("--model");
-            arguments.Add(request.Model);
+            arguments.Add(model.Trim());
         }
 
-        arguments.AddRange([
-            "--silent",
-            "--trust-folder",
-            "--secret-env-vars=GH_TOKEN,GITHUB_TOKEN",
-            "--allow-all-tools",
-            "--deny-tool=shell(git push)",
-            "--deny-tool=shell(git commit)",
-            "--deny-tool=shell(gh)"
-        ]);
+        arguments.AddRange(["--permission-mode", "bypassPermissions"]);
+        foreach (var tool in DeniedTools)
+        {
+            arguments.Add("--disallowedTools");
+            arguments.Add(tool);
+        }
+
         return arguments;
     }
 
-    private static async Task<(int ExitCode, string Output, string Error)> RunProcessAsync(
-        string fileName,
-        IReadOnlyList<string> arguments,
-        string workingDirectory,
-        string? githubToken,
-        CancellationToken cancellationToken)
+    /// <summary>Claude Code uses the CLI login stored in <c>CLAUDE_CONFIG_DIR</c> (shared with claude-cli).</summary>
+    internal static void ApplyClaudeEnvironment(IDictionary<string, string?> environment)
     {
-        var startInfo = CreateProcessStartInfo(fileName, arguments, workingDirectory, githubToken);
-        return await ExecuteAsync(startInfo, cancellationToken);
+        environment["CLAUDE_CONFIG_DIR"] =
+            Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") ?? "/claude-config";
+        environment["DISABLE_AUTOUPDATER"] = "1";
+        environment["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1";
     }
 
     private static ProcessStartInfo CreateProcessStartInfo(
-        string fileName, IReadOnlyList<string> arguments, string workingDirectory, string? githubToken)
+        string fileName, IReadOnlyList<string> arguments, string workingDirectory)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -129,10 +131,6 @@ internal static class ReviewRunnerServer
         startInfo.Environment["HOME"] = "/tmp";
         startInfo.Environment["NO_COLOR"] = "1";
         startInfo.Environment["TERM"] = "dumb";
-        if (githubToken is not null)
-        {
-            startInfo.Environment["GH_TOKEN"] = githubToken;
-        }
 
         foreach (var argument in arguments)
         {
@@ -143,7 +141,7 @@ internal static class ReviewRunnerServer
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> ExecuteAsync(
-        ProcessStartInfo startInfo, CancellationToken cancellationToken)
+        ProcessStartInfo startInfo, CancellationToken cancellationToken, string? standardInput = null)
     {
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Could not start {startInfo.FileName}.");
@@ -151,6 +149,12 @@ internal static class ReviewRunnerServer
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
         try
         {
+            if (startInfo.RedirectStandardInput)
+            {
+                await process.StandardInput.WriteAsync((standardInput ?? string.Empty).AsMemory(), cancellationToken);
+                process.StandardInput.Close();
+            }
+
             await process.WaitForExitAsync(cancellationToken);
         }
         catch (OperationCanceledException)
@@ -169,6 +173,6 @@ internal static class ReviewRunnerServer
     private static string Limit(string text, int maximumLength) =>
         text.Length <= maximumLength ? text : text[..maximumLength] + "...";
 
-    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model, string GitHubToken);
+    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model);
     private sealed record CommandRequest(string WorkspaceId, string Command);
 }

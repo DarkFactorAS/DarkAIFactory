@@ -53,11 +53,14 @@ services:
         - nuget_token
     command: ["--runner-server"]
     volumes:
+      # Shares the Claude Code CLI login with claude-cli; never the worker's /app/Config.
+      - claude_config:/claude-config
       - review_workspaces:/workspaces
     restart: unless-stopped
     init: true
     environment:
       HOME: /tmp
+      CLAUDE_CONFIG_DIR: /claude-config
       REVIEW_WORKSPACE_ROOT: /workspaces
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]

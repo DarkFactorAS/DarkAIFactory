@@ -130,6 +130,8 @@ as `--model`; blank uses the CLI default. The `aiclaudeworker` client uses
 `Claude.AgentModel` (seeded as `claude-sonnet-5-5`) for the Claude Code CLI instead,
 and runs `claude -p` with the CLI's own login (`claude auth login`, stored in a Docker
 volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitHub.AgentGitHubToken`.
+The review worker (`aireviewworker`) also runs Claude Code, using the same shared CLI login;
+its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),

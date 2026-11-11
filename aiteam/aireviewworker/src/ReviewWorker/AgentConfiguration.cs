@@ -4,7 +4,6 @@ namespace ReviewWorker;
 
 internal sealed record AgentConfiguration(
     Uri GitHubRepositoryUrl,
-    string AgentGitHubToken,
     string GitHubRepositoryToken,
     string ReviewerLogin,
     TimeSpan PollInterval,
@@ -38,12 +37,11 @@ internal sealed record AgentConfiguration(
 
         return new AgentConfiguration(
             repositoryUri,
-            Required(settings.GitHub.AgentGitHubToken, "GitHub.AgentGitHubToken"),
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             Required(appSettings.ReviewerLogin, "ReviewerLogin"),
             TimeSpan.FromSeconds(appSettings.PollIntervalSeconds),
             appSettings.MaxAttemptsPerPullRequest,
-            settings.GitHub.AgentModel);
+            appSettings.ClaudeModel.Trim());
     }
 
     private static string Required(string? value, string name) =>

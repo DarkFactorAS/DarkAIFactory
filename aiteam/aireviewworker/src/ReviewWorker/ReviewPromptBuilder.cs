@@ -3,7 +3,7 @@ using System.Text;
 namespace ReviewWorker;
 
 /// <summary>
-/// Builds the Copilot prompt. Review comments are untrusted data: they are wrapped in a delimited
+/// Builds the Claude Code prompt. Review comments are untrusted data: they are wrapped in a delimited
 /// block, the model is told not to follow instructions in them, and edits are bounded to cited files.
 /// </summary>
 internal static class ReviewPromptBuilder

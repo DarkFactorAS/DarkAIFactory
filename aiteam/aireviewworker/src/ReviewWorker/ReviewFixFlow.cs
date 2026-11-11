@@ -64,7 +64,7 @@ internal static class FixDecision
 }
 
 /// <summary>
-/// Runs one fix attempt for a pull request: prompt, Copilot, bounds check, build/test, commit, push.
+/// Runs one fix attempt for a pull request: prompt, Claude Code, bounds check, build/test, commit, push.
 /// Pushes only to the PR head branch, never forced, and never when nothing changed.
 /// </summary>
 internal sealed class ReviewFixFlow(
@@ -110,8 +110,8 @@ internal sealed class ReviewFixFlow(
             var changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: Copilot made no changes; nothing to push.");
-                RecordUnsuccessfulAttempts(pullRequest, ids, used, "Copilot made no changes.");
+                DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.Number}: Claude Code made no changes; nothing to push.");
+                RecordUnsuccessfulAttempts(pullRequest, ids, used, "Claude Code made no changes.");
                 return new FixResult(FixOutcome.NoChanges);
             }
 
