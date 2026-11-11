@@ -32,6 +32,22 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
             : throw new InvalidDataException($"Cannot read the pull request number from \"{pullRequestUrl}\".");
     }
 
+    /// <summary>Starts tracking a pull request; a row that already exists for the same URL is kept unchanged.</summary>
+    public void Record(string jiraKey, Uri repositoryUrl, string pullRequestUrl)
+    {
+        using var command = connectionFactory.CreateCommand(
+            """
+            INSERT INTO pull_requests (jira_key, repository_url, pr_number, pr_url)
+            VALUES (@jira_key, @repository_url, @pr_number, @pr_url)
+            ON DUPLICATE KEY UPDATE pr_url = pr_url
+            """);
+        command.AddParameter("@jira_key", jiraKey);
+        command.AddParameter("@repository_url", repositoryUrl.AbsoluteUri);
+        command.AddParameter("@pr_number", ParsePullRequestNumber(pullRequestUrl));
+        command.AddParameter("@pr_url", pullRequestUrl);
+        command.ExecuteNonQuery();
+    }
+
     // Rows may refer to closed or merged pull requests; callers must check the current GitHub state.
     public IReadOnlyList<TrackedPullRequest> ListTracked(Uri repositoryUrl)
     {

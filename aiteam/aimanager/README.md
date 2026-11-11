@@ -152,7 +152,20 @@ GitHub API whether each one is merged:
 
 Failures are logged per issue and do not stop the polling cycle. The worker retries
 failed pull-request tracking writes from Jira without rerunning implementation.
-Pull requests created before the `pull_requests` table existed are not backfilled.
+
+## Recovering missing pull-request rows
+
+Before the sanity check and the merged-PR check, AITechLead lists the open pull requests
+in the project's GitHub repository. A pull request without a `pull_requests` row is
+recorded when all of these hold:
+
+- the Jira key is found in the head branch (`ai-agent/DFAI-100` or `ai-agent/DFAI-100-<id>`)
+  or, failing that, at the start of the title (`DFAI-100: ...`), and belongs to the project;
+- the Jira issue is in `Jira.JiraInReviewStatus` (`In Review`, case-insensitive).
+
+Closed and merged pull requests are never backfilled. Recording is idempotent, and a
+Jira lookup failure is logged and skips only that pull request. Recovered rows are then
+picked up by the review worker and the merged-PR check like any other row.
 
 ## Run
 1. Copy `aiteam/.env.example` to `aiteam/.env`.

@@ -431,6 +431,32 @@ internal static class GitHubRepository
         return ReadPullRequestInfo(document.RootElement);
     }
 
+    /// <summary>Lists every open pull request in the configured repository.</summary>
+    public static async Task<IReadOnlyList<PullRequestInfo>> ListOpenPullRequestsAsync(
+        AgentConfiguration configuration,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        const int pageSize = 100;
+        using var httpClient = CreateApiClient(configuration, handler);
+        var result = new List<PullRequestInfo>();
+        for (var page = 1; ; page++)
+        {
+            using var response = await httpClient.GetAsync(
+                $"{RepositoryApiPath(configuration)}/pulls?state=open&per_page={pageSize}&page={page}",
+                cancellationToken);
+            await EnsureSuccessAsync(response, "Listing open pull requests", cancellationToken);
+            using var document = System.Text.Json.JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(cancellationToken));
+            var items = document.RootElement.EnumerateArray().ToArray();
+            result.AddRange(items.Select(ReadPullRequestInfo));
+            if (items.Length < pageSize)
+            {
+                return result;
+            }
+        }
+    }
+
     /// <summary>
     /// Finds the newest pull request (any state) from <paramref name="headBranch"/> into <paramref name="baseBranch"/>,
     /// or null when none exists. Used to make PR creation idempotent.

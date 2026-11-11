@@ -40,6 +40,26 @@ public sealed class GitHubRepositoryHelperTests
     }
 
     [Fact]
+    public async Task ListOpenPullRequests_ReadsAllPages()
+    {
+        static string Item(int number) =>
+            $$"""{"number":{{number}},"html_url":"https://github.com/owner/repo/pull/{{number}}","state":"open","merged_at":null,"base":{"ref":"master"},"head":{"ref":"ai-agent/DFAI-{{number}}"},"title":"DFAI-{{number}}: t"}""";
+        var handler = new FakeHandler(request =>
+            request.RequestUri!.Query.Contains("page=1&", StringComparison.Ordinal) ||
+            request.RequestUri.Query.EndsWith("page=1", StringComparison.Ordinal)
+                ? (HttpStatusCode.OK, "[" + string.Join(",", Enumerable.Range(1, 100).Select(Item)) + "]")
+                : (HttpStatusCode.OK, "[" + Item(101) + "]"));
+
+        var pullRequests = await GitHubRepository.ListOpenPullRequestsAsync(Configuration, CancellationToken.None, handler);
+
+        Assert.Equal(101, pullRequests.Count);
+        Assert.All(pullRequests, pr => Assert.Equal(GitHubRepository.PullRequestState.Open, pr.State));
+        Assert.Equal("ai-agent/DFAI-101", pullRequests[^1].HeadBranch);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, request => Assert.Equal("/repos/owner/repo/pulls", request.Path));
+    }
+
+    [Fact]
     public async Task GetPullRequestState_ThrowsOnFailure()
     {
         var handler = new FakeHandler(_ => (HttpStatusCode.Forbidden, "{}"));
