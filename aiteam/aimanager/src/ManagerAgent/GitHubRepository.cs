@@ -325,6 +325,8 @@ internal static class GitHubRepository
         var commit = await RunGitAsync(
             configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
         var isMergeCommit = commit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 2;
+        var initialRevision = (await RunGitAsync(
+            configuration, workspacePath, ["rev-parse", "--verify", "HEAD"], cancellationToken)).StandardOutput.Trim();
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -332,6 +334,15 @@ internal static class GitHubRepository
                 ? ["revert", "--no-edit", "-m", "1", mergeSha]
                 : ["revert", "--no-edit", mergeSha],
             cancellationToken);
+        var changedPaths = await RunGitAsync(
+            configuration, workspacePath, ["diff", "--name-only", "-z", initialRevision, "HEAD"], cancellationToken);
+        if (changedPaths.StandardOutput.Split('\0').Any(path =>
+                path.Equals("UserSettings", StringComparison.Ordinal) ||
+                path.StartsWith("UserSettings/", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Refusing to push commits that modify files under UserSettings/.");
+        }
+
         await RunGitAsync(
             configuration,
             workspacePath,
