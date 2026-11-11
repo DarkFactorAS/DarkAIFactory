@@ -5,7 +5,7 @@ COPY aiteam/aiagent/src/AiAgent/ /aiagent/src/AiAgent/
 COPY aiteam/aiclaudeworker/src/ClaudeCodingAgent/ClaudeCodingAgent.csproj src/ClaudeCodingAgent/
 RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
     --mount=type=secret,id=nuget_token,env=NUGET_TOKEN \
-    dotnet restore src/ClaudeCodingAgent/ClaudeCodingAgent.csproj
+    dotnet restore src/ClaudeCodingAgent/ClaudeCodingAgent.csproj --configfile /src/NuGet.config
 COPY aiteam/aiclaudeworker/src/ClaudeCodingAgent/ src/ClaudeCodingAgent/
 COPY aiteam/shared/ /shared/
 RUN dotnet publish src/ClaudeCodingAgent/ClaudeCodingAgent.csproj --configuration Release --no-restore --output /app/publish
