@@ -184,7 +184,7 @@ try
                 var workspacePath = GitHubRepository.CreateWorkspacePath();
                 try
                 {
-                    await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token);
+                    await GitHubRepository.CloneForPlanningAsync(configuration, workspacePath, token, issue.ParentKey);
                     return await copilot.RunAsync(workspacePath, PromptBuilder.BuildTriagePrompt(issue), token);
                 }
                 finally

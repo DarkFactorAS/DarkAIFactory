@@ -1,3 +1,4 @@
+using AiTeam.Configuration;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
@@ -22,10 +23,16 @@ internal static class GitHubRepository
         return workspacePath;
     }
 
+    /// <summary>
+    /// Clones the repository for triage. For a sub-task (<paramref name="parentKey"/> set) the checkout is the
+    /// parent task's integration branch, created from the default branch when it does not exist yet, so the
+    /// planner sees the same code the worker will branch from.
+    /// </summary>
     public static async Task CloneForPlanningAsync(
         AgentConfiguration configuration,
         string workspacePath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? parentKey = null)
     {
         await RunGitAsync(
             configuration,
@@ -44,7 +51,52 @@ internal static class GitHubRepository
             useRepository: false,
             requiresGitHubCredentials: true);
 
+        if (!string.IsNullOrWhiteSpace(parentKey))
+        {
+            await CheckOutParentBranchAsync(configuration, workspacePath, parentKey, cancellationToken);
+        }
+
         ProtectGitConfiguration(workspacePath);
+    }
+
+    /// <summary>
+    /// Ensures the parent integration branch exists on origin (pushing the default branch when it is missing,
+    /// as the worker does for the first sub-task) and checks it out.
+    /// </summary>
+    private static async Task CheckOutParentBranchAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string parentKey,
+        CancellationToken cancellationToken)
+    {
+        var parentBranch = JiraWorkflowRules.ParentBranchName(parentKey);
+        var existing = await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["ls-remote", "--heads", "origin", $"refs/heads/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        if (string.IsNullOrWhiteSpace(existing.StandardOutput))
+        {
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["push", "--quiet", "origin", $"HEAD:refs/heads/{parentBranch}"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["fetch", "--quiet", "origin", $"+refs/heads/{parentBranch}:refs/remotes/origin/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["switch", "--quiet", "--force-create", parentBranch, $"origin/{parentBranch}"],
+            cancellationToken);
     }
 
     public static async Task<bool> IsPullRequestMergedAsync(

@@ -122,7 +122,7 @@ legacy plan and handed off. Decisions:
 
 ### Rules for multi-step plans, blockers and feedback
 
-- **Branches:** the main task uses the branch `ai-agent/<PARENT-KEY>`. Every sub-task works on a branch created off it, and its pull request targets it (not the default branch). The worker creates `ai-agent/<PARENT-KEY>` from the default branch when the first sub-task starts. Each sub-task description states this in cleartext.
+- **Branches:** the main task uses the branch `ai-agent/<PARENT-KEY>`. Every sub-task works on a branch created off it, and its pull request targets it (not the default branch). The manager triages a sub-task on a checkout of `ai-agent/<PARENT-KEY>`, creating it from the default branch when it does not exist yet (the worker does the same when the first sub-task starts), and tells the triage that branch handling is automatic and never a reason to ask for clarification. Each sub-task description states this in cleartext.
 - **Approval:** the full plan is written in the parent task and approved before any sub-task is created or implemented.
 - **Blocked by:** a task is never handed to the worker (labels) or moved to `Jira.JiraStatusName` (for held sub-tasks) while any "is blocked by" link points to an issue that is not in `Jira.JiraDoneStatus`. This applies to every task, including links added by people. Blocked tasks are still triaged and planned, and can be approved, so the tech design is ready; the handoff is withheld with an `[AIManager] Not picked up` comment until all blockers are done.
 - **Feedback:** the triage prompt tells the manager to ask for clarification only when it is critical and to decide smaller matters itself, recording its assumptions in the plan.

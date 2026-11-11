@@ -32,6 +32,24 @@ public sealed class PromptBuilderTests
     }
 
     [Fact]
+    public void TriagePrompt_ForSubtask_StatesParentBranchIsHandled()
+    {
+        var prompt = PromptBuilder.BuildTriagePrompt(Issue with { ParentKey = "DFAI-52" });
+
+        Assert.Contains("sub-task of DFAI-52", prompt);
+        Assert.Contains("`ai-agent/DFAI-52`", prompt);
+        Assert.Contains("never ask for clarification about branches", prompt);
+    }
+
+    [Fact]
+    public void TriagePrompt_ForTopLevelTask_HasNoParentBranchContext()
+    {
+        var prompt = PromptBuilder.BuildTriagePrompt(Issue);
+
+        Assert.DoesNotContain("parent integration branch", prompt);
+    }
+
+    [Fact]
     public void PlanPrompt_ForbidsImplementation()
     {
         var prompt = PromptBuilder.BuildPlanPrompt(Issue);
