@@ -153,7 +153,7 @@ internal sealed class PullRequestSanityCheck(
 
         if (info.State == GitHubRepository.PullRequestState.Open)
         {
-            await EnsureParentBranchAsync(parentBranch, cancellationToken);
+            await EnsureParentBranchAsync(parentBranch, tracked.Number, cancellationToken);
             return await RepairOpenAsync(tracked, info, parentBranch, cancellationToken);
         }
 
@@ -190,10 +190,13 @@ internal sealed class PullRequestSanityCheck(
         return new SanityCheckAction(tracked.JiraKey, info.Number, RepairedByOpenPullRequest, replacement.Url);
     }
 
-    private async Task EnsureParentBranchAsync(string parentBranch, CancellationToken cancellationToken)
+    private async Task EnsureParentBranchAsync(
+        string parentBranch, long currentPullRequestNumber, CancellationToken cancellationToken)
     {
         if (!await gitHub.BranchExistsAsync(parentBranch, cancellationToken))
         {
+            await EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+                currentPullRequestNumber, parentBranch, cancellationToken);
             await gitHub.CreateBranchFromDefaultBranchAsync(parentBranch, cancellationToken);
         }
     }
@@ -265,6 +268,8 @@ internal sealed class PullRequestSanityCheck(
                     $"Parent branch {parentBranch} does not exist; merge the rollback pull request for #{info.Number} first.");
             }
 
+            await EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+                tracked.Number, parentBranch, cancellationToken);
             await gitHub.CreateBranchFromDefaultBranchAsync(parentBranch, cancellationToken);
         }
 
@@ -285,6 +290,45 @@ internal sealed class PullRequestSanityCheck(
         pullRequests.Replace(configuration.GitHubRepositoryUrl, info.Number, cherryPickUrl);
         DFLogger.LogOutput(DFLogLevel.INFO, "SanityCheck", $"Rolled back #{info.Number} of {tracked.JiraKey}; re-applied in {cherryPickUrl}.");
         return new SanityCheckAction(tracked.JiraKey, info.Number, RepairedByMergedPullRequest, cherryPickUrl);
+    }
+
+    private async Task EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+        long currentPullRequestNumber,
+        string parentBranch,
+        CancellationToken cancellationToken)
+    {
+        foreach (var other in pullRequests.ListTracked(configuration.GitHubRepositoryUrl))
+        {
+            if (other.Number == currentPullRequestNumber)
+            {
+                continue;
+            }
+
+            var issue = await getIssue(other.JiraKey, cancellationToken);
+            if (issue is null || string.IsNullOrWhiteSpace(issue.ParentKey) ||
+                !string.Equals(
+                    JiraWorkflowRules.ParentBranchName(issue.ParentKey),
+                    parentBranch,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var info = await gitHub.GetPullRequestAsync(other.Number, cancellationToken);
+            if (info.State != GitHubRepository.PullRequestState.Merged ||
+                string.Equals(info.BaseBranch, parentBranch, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var rollback = await gitHub.FindPullRequestAsync(
+                $"ai-agent/rollback-pr-{info.Number}", info.BaseBranch, cancellationToken);
+            if (rollback?.State != GitHubRepository.PullRequestState.Merged)
+            {
+                throw new InvalidOperationException(
+                    $"Parent branch {parentBranch} cannot be created until the rollback pull request for #{info.Number} is merged.");
+            }
+        }
     }
 
     // Reuses an existing pull request for the same head/base so reruns never create duplicates.

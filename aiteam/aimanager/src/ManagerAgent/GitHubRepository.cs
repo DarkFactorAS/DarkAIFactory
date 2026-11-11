@@ -325,8 +325,16 @@ internal static class GitHubRepository
         var commit = await RunGitAsync(
             configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
         var isMergeCommit = commit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 2;
-        var initialRevision = (await RunGitAsync(
-            configuration, workspacePath, ["rev-parse", "--verify", "HEAD"], cancellationToken)).StandardOutput.Trim();
+        if (!isMergeCommit &&
+            (!root.TryGetProperty("commits", out var prCommits) ||
+             !prCommits.TryGetInt32(out var prCommitCount) ||
+             prCommitCount != 1))
+        {
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has an ambiguous single-parent commit history and cannot be reverted automatically.");
+        }
+
+        var initialRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -334,14 +342,7 @@ internal static class GitHubRepository
                 ? ["revert", "--no-edit", "-m", "1", mergeSha]
                 : ["revert", "--no-edit", mergeSha],
             cancellationToken);
-        var changedPaths = await RunGitAsync(
-            configuration, workspacePath, ["diff", "--name-only", "-z", initialRevision, "HEAD"], cancellationToken);
-        if (changedPaths.StandardOutput.Split('\0').Any(path =>
-                path.Equals("UserSettings", StringComparison.Ordinal) ||
-                path.StartsWith("UserSettings/", StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException("Refusing to push commits that modify files under UserSettings/.");
-        }
+        await EnsureNoUserSettingsChangesAsync(configuration, workspacePath, initialRevision, cancellationToken);
 
         await RunGitAsync(
             configuration,
@@ -382,6 +383,7 @@ internal static class GitHubRepository
             workspacePath,
             ["switch", "--no-track", "--create", newBranchName, startPoint],
             cancellationToken);
+        var startRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
         try
         {
             await RunGitAsync(
@@ -401,6 +403,7 @@ internal static class GitHubRepository
             throw;
         }
 
+        await EnsureNoUserSettingsChangesAsync(configuration, workspacePath, startRevision, cancellationToken);
         await RunGitAsync(
             configuration,
             workspacePath,
@@ -500,9 +503,8 @@ internal static class GitHubRepository
     }
 
     /// <summary>
-    /// Cherry-picks the commits of a (merged) pull request onto a new branch started from
-    /// <paramref name="targetBranch"/> and pushes it. Works for squash, rebase and merge-commit merges because the
-    /// commits are read from the pull request itself.
+    /// Cherry-picks the net change of a merged pull request onto a new branch started from
+    /// <paramref name="targetBranch"/> and pushes it.
     /// </summary>
     public static async Task CherryPickPullRequestToNewBranchAsync(
         AgentConfiguration configuration,
@@ -514,7 +516,7 @@ internal static class GitHubRepository
         HttpMessageHandler? handler = null)
     {
         using var httpClient = CreateApiClient(configuration, handler);
-        var commits = new List<string>();
+        var commitCount = 0;
         for (var page = 1; ; page++)
         {
             using var response = await httpClient.GetAsync(
@@ -524,11 +526,30 @@ internal static class GitHubRepository
             using var document = System.Text.Json.JsonDocument.Parse(
                 await response.Content.ReadAsStringAsync(cancellationToken));
             var items = document.RootElement.EnumerateArray().ToArray();
-            commits.AddRange(items.Select(item => item.GetProperty("sha").GetString()!));
+            commitCount += items.Length;
             if (items.Length < 100)
             {
                 break;
             }
+        }
+
+        using var pullRequest = await GetPullRequestDocumentAsync(
+            configuration, pullRequestNumber, cancellationToken, handler);
+        var root = pullRequest.RootElement;
+        if (!root.TryGetProperty("merged", out var merged) ||
+            merged.ValueKind != System.Text.Json.JsonValueKind.True)
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} is not merged and cannot be cherry-picked.");
+        }
+
+        var mergeSha = root.TryGetProperty("merge_commit_sha", out var mergeShaElement)
+            ? mergeShaElement.GetString()
+            : null;
+        var baseBranch = root.GetProperty("base").GetProperty("ref").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return the pull request base branch.");
+        if (string.IsNullOrWhiteSpace(mergeSha))
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} has no merge commit to cherry-pick.");
         }
 
         await RunGitAsync(
@@ -536,13 +557,69 @@ internal static class GitHubRepository
             workspacePath,
             [
                 "fetch", "--quiet", "origin",
-                $"+refs/heads/{targetBranch}:refs/remotes/origin/{targetBranch}",
-                $"+refs/pull/{pullRequestNumber}/head:refs/remotes/origin/pr/{pullRequestNumber}"
+                $"+refs/heads/{baseBranch}:refs/remotes/origin/{baseBranch}",
+                $"+refs/heads/{targetBranch}:refs/remotes/origin/{targetBranch}"
             ],
             cancellationToken,
             requiresGitHubCredentials: true);
+
+        var mergeCommit = await RunGitAsync(
+            configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
+        var commitParts = mergeCommit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var isMergeCommit = commitParts.Length > 2;
+        if (commitParts.Length < 2)
+        {
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has no pre-merge base to determine its net changes.");
+        }
+
+        if (!isMergeCommit && commitCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has an ambiguous single-parent commit history and cannot be cherry-picked automatically.");
+        }
+
+        var preMergeBase = commitParts[1];
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["merge-base", "--is-ancestor", preMergeBase, $"origin/{baseBranch}"],
+            cancellationToken);
+        var netCommit = await RunGitAsync(
+            configuration,
+            workspacePath,
+            [
+                "commit-tree", $"{mergeSha}^{{tree}}",
+                "-p", preMergeBase,
+                "-m", $"Net changes of pull request {pullRequestNumber}"
+            ],
+            cancellationToken);
         await CherryPickToNewBranchAsync(
-            configuration, workspacePath, newBranchName, $"origin/{targetBranch}", commits, cancellationToken);
+            configuration, workspacePath, newBranchName, $"origin/{targetBranch}",
+            [netCommit.StandardOutput.Trim()], cancellationToken);
+    }
+
+    private static async Task<string> GetCurrentRevisionAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        CancellationToken cancellationToken) =>
+        (await RunGitAsync(
+            configuration, workspacePath, ["rev-parse", "--verify", "HEAD"], cancellationToken)).StandardOutput.Trim();
+
+    private static async Task EnsureNoUserSettingsChangesAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string initialRevision,
+        CancellationToken cancellationToken)
+    {
+        var changedPaths = await RunGitAsync(
+            configuration, workspacePath, ["diff", "--name-only", "-z", initialRevision, "HEAD"], cancellationToken);
+        if (changedPaths.StandardOutput.Split('\0').Any(path =>
+                path.Equals("UserSettings", StringComparison.Ordinal) ||
+                path.StartsWith("UserSettings/", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Refusing to push commits that modify files under UserSettings/.");
+        }
     }
 
     private static async Task<System.Text.Json.JsonDocument> GetPullRequestDocumentAsync(

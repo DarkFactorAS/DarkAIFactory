@@ -110,7 +110,7 @@ internal sealed class PullRequestSanityCheck(
                     issues[tracked.JiraKey] = issue;
                 }
 
-                if (issue is null || !issue.IsSubTask || string.IsNullOrWhiteSpace(issue.ParentKey))
+                if (issue is null || string.IsNullOrWhiteSpace(issue.ParentKey))
                 {
                     continue;
                 }
@@ -151,10 +151,13 @@ internal sealed class PullRequestSanityCheck(
             return await ReconcileClosedAsync(tracked, info, parentBranch, cancellationToken);
         }
 
-        await EnsureParentBranchAsync(parentBranch, cancellationToken);
-        return info.State == GitHubRepository.PullRequestState.Open
-            ? await RepairOpenAsync(tracked, info, parentBranch, cancellationToken)
-            : await RepairMergedAsync(tracked, info, parentBranch, cancellationToken);
+        if (info.State == GitHubRepository.PullRequestState.Open)
+        {
+            await EnsureParentBranchAsync(parentBranch, tracked.Number, cancellationToken);
+            return await RepairOpenAsync(tracked, info, parentBranch, cancellationToken);
+        }
+
+        return await RepairMergedAsync(tracked, info, parentBranch, cancellationToken);
     }
 
     // A previous run may have closed the original before the tracking update; move tracking to the replacement.
@@ -183,10 +186,13 @@ internal sealed class PullRequestSanityCheck(
         return new SanityCheckAction(tracked.JiraKey, info.Number, RepairedByOpenPullRequest, replacement.Url);
     }
 
-    private async Task EnsureParentBranchAsync(string parentBranch, CancellationToken cancellationToken)
+    private async Task EnsureParentBranchAsync(
+        string parentBranch, long currentPullRequestNumber, CancellationToken cancellationToken)
     {
         if (!await gitHub.BranchExistsAsync(parentBranch, cancellationToken))
         {
+            await EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+                currentPullRequestNumber, parentBranch, cancellationToken);
             await gitHub.CreateBranchFromDefaultBranchAsync(parentBranch, cancellationToken);
         }
     }
@@ -223,7 +229,14 @@ internal sealed class PullRequestSanityCheck(
         CancellationToken cancellationToken)
     {
         var rollbackBranch = $"ai-agent/rollback-pr-{info.Number}";
-        if (await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken) is null)
+        var rollback = await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken);
+        if (rollback?.State == GitHubRepository.PullRequestState.Closed)
+        {
+            throw new InvalidOperationException(
+                $"Rollback pull request {rollback.Url} for #{info.Number} was closed without merging; reopen or merge it to continue.");
+        }
+
+        if (rollback is null)
         {
             if (await gitHub.BranchExistsAsync(rollbackBranch, cancellationToken))
             {
@@ -239,6 +252,20 @@ internal sealed class PullRequestSanityCheck(
             {
                 await gitHub.CreateRevertPullRequestAsync(info.Number, rollbackBranch, cancellationToken);
             }
+        }
+
+        if (!await gitHub.BranchExistsAsync(parentBranch, cancellationToken))
+        {
+            rollback = await gitHub.FindPullRequestAsync(rollbackBranch, info.BaseBranch, cancellationToken);
+            if (rollback?.State != GitHubRepository.PullRequestState.Merged)
+            {
+                throw new InvalidOperationException(
+                    $"Parent branch {parentBranch} does not exist; merge the rollback pull request for #{info.Number} first.");
+            }
+
+            await EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+                tracked.Number, parentBranch, cancellationToken);
+            await gitHub.CreateBranchFromDefaultBranchAsync(parentBranch, cancellationToken);
         }
 
         var cherryPickBranch = $"ai-agent/cherry-pick-pr-{info.Number}";
@@ -260,6 +287,45 @@ internal sealed class PullRequestSanityCheck(
         return new SanityCheckAction(tracked.JiraKey, info.Number, RepairedByMergedPullRequest, cherryPickUrl);
     }
 
+    private async Task EnsureOtherMisplacedPullRequestsAreRolledBackAsync(
+        long currentPullRequestNumber,
+        string parentBranch,
+        CancellationToken cancellationToken)
+    {
+        foreach (var other in pullRequests.ListTracked(configuration.GitHubRepositoryUrl))
+        {
+            if (other.Number == currentPullRequestNumber)
+            {
+                continue;
+            }
+
+            var issue = await getIssue(other.JiraKey, cancellationToken);
+            if (issue is null || string.IsNullOrWhiteSpace(issue.ParentKey) ||
+                !string.Equals(
+                    JiraWorkflowRules.ParentBranchName(issue.ParentKey),
+                    parentBranch,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var info = await gitHub.GetPullRequestAsync(other.Number, cancellationToken);
+            if (info.State != GitHubRepository.PullRequestState.Merged ||
+                string.Equals(info.BaseBranch, parentBranch, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var otherRollback = await gitHub.FindPullRequestAsync(
+                $"ai-agent/rollback-pr-{info.Number}", info.BaseBranch, cancellationToken);
+            if (otherRollback?.State != GitHubRepository.PullRequestState.Merged)
+            {
+                throw new InvalidOperationException(
+                    $"Parent branch {parentBranch} cannot be created until the rollback pull request for #{info.Number} is merged.");
+            }
+        }
+    }
+
     // Reuses an existing pull request for the same head/base so reruns never create duplicates.
     private async Task<string> EnsurePullRequestAsync(
         string head,
@@ -271,7 +337,8 @@ internal sealed class PullRequestSanityCheck(
     {
         var existing = await gitHub.FindPullRequestAsync(head, baseBranch, cancellationToken);
         if (existing is not null &&
-            (!requireOpen || existing.State == GitHubRepository.PullRequestState.Open))
+            (existing.State == GitHubRepository.PullRequestState.Open ||
+             (!requireOpen && existing.State == GitHubRepository.PullRequestState.Merged)))
         {
             return existing.Url;
         }

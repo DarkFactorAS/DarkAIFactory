@@ -429,19 +429,13 @@ internal static partial class GitHubRepository
         var commit = await RunGitAsync(
             configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
         var isMergeCommit = commit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 2;
-        if (!isMergeCommit
-            && root.TryGetProperty("commits", out var prCommits) && prCommits.TryGetInt32(out var prCommitCount) && prCommitCount > 1)
+        if (!isMergeCommit &&
+            (!root.TryGetProperty("commits", out var prCommits) ||
+             !prCommits.TryGetInt32(out var prCommitCount) ||
+             prCommitCount != 1))
         {
-            var mergedFiles = await RunGitAsync(
-                configuration, workspacePath, ["diff", "--name-only", "-z", $"{mergeSha}^", mergeSha], cancellationToken);
-            var mergedFileCount = mergedFiles.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries).Length;
-            if (!root.TryGetProperty("changed_files", out var changedFiles)
-                || !changedFiles.TryGetInt32(out var changedFileCount)
-                || changedFileCount != mergedFileCount)
-            {
-                throw new InvalidOperationException(
-                    $"Pull request {pullRequestNumber} appears to be rebase-merged with multiple commits and cannot be reverted automatically.");
-            }
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has an ambiguous single-parent commit history and cannot be reverted automatically.");
         }
 
         var baseRevision = await GetCurrentRevisionAsync(configuration, workspacePath, cancellationToken);
@@ -612,9 +606,8 @@ internal static partial class GitHubRepository
     }
 
     /// <summary>
-    /// Cherry-picks the commits of a (merged) pull request onto a new branch started from
-    /// <paramref name="targetBranch"/> and pushes it. Works for squash, rebase and merge-commit merges because the
-    /// commits are read from the pull request itself.
+    /// Cherry-picks the net change of a merged pull request onto a new branch started from
+    /// <paramref name="targetBranch"/> and pushes it.
     /// </summary>
     public static async Task CherryPickPullRequestToNewBranchAsync(
         AgentConfiguration configuration,
@@ -626,9 +619,7 @@ internal static partial class GitHubRepository
         HttpMessageHandler? handler = null)
     {
         using var httpClient = CreateApiClient(configuration, handler);
-        var commits = new List<string>();
-        string? firstParent = null;
-        var hasMergeCommit = false;
+        var commitCount = 0;
         for (var page = 1; ; page++)
         {
             using var response = await httpClient.GetAsync(
@@ -638,23 +629,30 @@ internal static partial class GitHubRepository
             using var document = System.Text.Json.JsonDocument.Parse(
                 await response.Content.ReadAsStringAsync(cancellationToken));
             var items = document.RootElement.EnumerateArray().ToArray();
-            commits.AddRange(items.Select(item => item.GetProperty("sha").GetString()!));
-            foreach (var item in items)
-            {
-                var parents = item.TryGetProperty("parents", out var parentsElement)
-                    ? parentsElement.EnumerateArray().ToArray()
-                    : [];
-                hasMergeCommit |= parents.Length > 1;
-                if (firstParent is null && parents.Length > 0)
-                {
-                    firstParent = parents[0].GetProperty("sha").GetString();
-                }
-            }
-
+            commitCount += items.Length;
             if (items.Length < 100)
             {
                 break;
             }
+        }
+
+        using var pullRequest = await GetPullRequestDocumentAsync(
+            configuration, pullRequestNumber, cancellationToken, handler);
+        var root = pullRequest.RootElement;
+        if (!root.TryGetProperty("merged", out var merged) ||
+            merged.ValueKind != System.Text.Json.JsonValueKind.True)
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} is not merged and cannot be cherry-picked.");
+        }
+
+        var mergeSha = root.TryGetProperty("merge_commit_sha", out var mergeShaElement)
+            ? mergeShaElement.GetString()
+            : null;
+        var baseBranch = root.GetProperty("base").GetProperty("ref").GetString()
+            ?? throw new InvalidOperationException("GitHub did not return the pull request base branch.");
+        if (string.IsNullOrWhiteSpace(mergeSha))
+        {
+            throw new InvalidOperationException($"Pull request {pullRequestNumber} has no merge commit to cherry-pick.");
         }
 
         await RunGitAsync(
@@ -662,34 +660,46 @@ internal static partial class GitHubRepository
             workspacePath,
             [
                 "fetch", "--quiet", "origin",
-                $"+refs/heads/{targetBranch}:refs/remotes/origin/{targetBranch}",
-                $"+refs/pull/{pullRequestNumber}/head:refs/remotes/origin/pr/{pullRequestNumber}"
+                $"+refs/heads/{baseBranch}:refs/remotes/origin/{baseBranch}",
+                $"+refs/heads/{targetBranch}:refs/remotes/origin/{targetBranch}"
             ],
             cancellationToken,
             requiresGitHubCredentials: true);
-        if (hasMergeCommit)
-        {
-            // Merge commits cannot be cherry-picked without a mainline; apply the net change as one commit instead.
-            if (firstParent is null)
-            {
-                throw new InvalidOperationException(
-                    $"Pull request {pullRequestNumber} contains merge commits and its base cannot be determined.");
-            }
 
-            var netCommit = await RunGitAsync(
-                configuration,
-                workspacePath,
-                [
-                    "commit-tree", $"origin/pr/{pullRequestNumber}^{{tree}}",
-                    "-p", firstParent,
-                    "-m", $"Net changes of pull request {pullRequestNumber}"
-                ],
-                cancellationToken);
-            commits = [netCommit.StandardOutput.Trim()];
+        var mergeCommit = await RunGitAsync(
+            configuration, workspacePath, ["rev-list", "--parents", "-n", "1", mergeSha], cancellationToken);
+        var commitParts = mergeCommit.StandardOutput.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var isMergeCommit = commitParts.Length > 2;
+        if (commitParts.Length < 2)
+        {
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has no pre-merge base to determine its net changes.");
         }
 
+        if (!isMergeCommit && commitCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"Pull request {pullRequestNumber} has an ambiguous single-parent commit history and cannot be cherry-picked automatically.");
+        }
+
+        var preMergeBase = commitParts[1];
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["merge-base", "--is-ancestor", preMergeBase, $"origin/{baseBranch}"],
+            cancellationToken);
+        var netCommit = await RunGitAsync(
+            configuration,
+            workspacePath,
+            [
+                "commit-tree", $"{mergeSha}^{{tree}}",
+                "-p", preMergeBase,
+                "-m", $"Net changes of pull request {pullRequestNumber}"
+            ],
+            cancellationToken);
         await CherryPickToNewBranchAsync(
-            configuration, workspacePath, newBranchName, $"origin/{targetBranch}", commits, cancellationToken);
+            configuration, workspacePath, newBranchName, $"origin/{targetBranch}",
+            [netCommit.StandardOutput.Trim()], cancellationToken);
     }
 
     private static async Task<System.Text.Json.JsonDocument> GetPullRequestDocumentAsync(

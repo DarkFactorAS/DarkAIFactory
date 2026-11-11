@@ -99,6 +99,7 @@ public sealed class PullRequestSanityCheckTests
         public Dictionary<string, JiraIssue> Issues { get; } = new()
         {
             ["TASK-2"] = new JiraIssue("TASK-2", "S", "D") { IssueTypeName = "Sub-Task", ParentKey = "TASK-1" },
+            ["TASK-3"] = new JiraIssue("TASK-3", "S", "D") { IssueTypeName = "Sub-Task", ParentKey = "TASK-1" },
             ["TASK-9"] = new JiraIssue("TASK-9", "S", "D") { IssueTypeName = "Task" }
         };
 
@@ -245,6 +246,49 @@ public sealed class PullRequestSanityCheckTests
         Assert.DoesNotContain($"create-branch {Parent}", fixture.GitHub.Calls);
         Assert.DoesNotContain($"cherry-pick 5 onto {Parent}", fixture.GitHub.Calls);
         Assert.Empty(fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task MisplacedMergesForSameParent_WaitForAllRollbacksBeforeCreatingParentBranch()
+    {
+        var fixture = new Fixture(("TASK-2", 5), ("TASK-3", 6));
+        fixture.GitHub.Add(5, State.Merged, "ai-agent/TASK-2-abc", "master");
+        fixture.GitHub.Add(6, State.Merged, "ai-agent/TASK-3-abc", "master");
+
+        Assert.Empty(await fixture.RunAsync());
+        Assert.DoesNotContain($"create-branch {Parent}", fixture.GitHub.Calls);
+        foreach (var rollback in fixture.GitHub.PullRequests
+                     .Where(pr => pr.HeadBranch.StartsWith("ai-agent/rollback-pr-", StringComparison.Ordinal))
+                     .ToArray())
+        {
+            var index = fixture.GitHub.PullRequests.IndexOf(rollback);
+            fixture.GitHub.PullRequests[index] = rollback with { State = State.Merged };
+        }
+
+        fixture.GitHub.Calls.Clear();
+        var actions = await fixture.RunAsync();
+
+        Assert.Equal(2, actions.Count);
+        Assert.Single(fixture.GitHub.Calls, call => call == $"create-branch {Parent}");
+        Assert.True(
+            fixture.GitHub.Calls.IndexOf($"create-branch {Parent}") <
+            fixture.GitHub.Calls.FindIndex(call => call.StartsWith("cherry-pick", StringComparison.Ordinal)));
+        Assert.Equal(2, fixture.GitHub.Calls.Count(call => call.StartsWith("cherry-pick", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task OpenPullRequest_DoesNotSeedParentWhileAnotherMisplacedMergeIsUnrolledBack()
+    {
+        var fixture = new Fixture(("TASK-2", 5), ("TASK-3", 6));
+        fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
+        fixture.GitHub.Add(6, State.Merged, "ai-agent/TASK-3-abc", "master");
+
+        Assert.Empty(await fixture.RunAsync());
+
+        Assert.DoesNotContain($"create-branch {Parent}", fixture.GitHub.Calls);
+        Assert.DoesNotContain(
+            fixture.GitHub.Calls,
+            call => call.StartsWith("create-pr ai-agent/TASK-2-abc->", StringComparison.Ordinal));
     }
 
     [Fact]
