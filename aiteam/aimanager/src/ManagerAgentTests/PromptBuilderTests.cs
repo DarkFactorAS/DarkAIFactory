@@ -32,12 +32,13 @@ public sealed class PromptBuilderTests
     }
 
     [Fact]
-    public void TriagePrompt_ForSubtask_StatesParentBranchIsHandled()
+    public void TriagePrompt_ForSubtask_ExplainsParentBranchFallback()
     {
         var prompt = PromptBuilder.BuildTriagePrompt(Issue with { ParentKey = "DFAI-52" });
 
         Assert.Contains("sub-task of DFAI-52", prompt);
         Assert.Contains("`ai-agent/DFAI-52`", prompt);
+        Assert.Contains("otherwise it remains on the default branch", prompt);
         Assert.Contains("never ask for clarification about branches", prompt);
     }
 

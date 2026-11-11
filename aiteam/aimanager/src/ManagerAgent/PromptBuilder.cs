@@ -91,7 +91,7 @@ internal static class PromptBuilder
         }
 
         var parentBranch = JiraWorkflowRules.ParentBranchName(issue.ParentKey);
-        prompt.AppendLine($"- This is a sub-task of {issue.ParentKey.Trim()}. The checkout is already on its parent integration branch `{parentBranch}`, which exists on origin and contains the parent's work so far. Plan against this branch.");
+        prompt.AppendLine($"- This is a sub-task of {issue.ParentKey.Trim()}. The checkout uses its parent integration branch `{parentBranch}` if it exists on origin; otherwise it remains on the default branch until the worker creates the integration branch. Plan against the available checkout.");
         prompt.AppendLine($"- Branch creation and the pull request base (`{parentBranch}`) are handled automatically by the worker. Branch instructions in the description are workflow rules, not requirements: never ask for clarification about branches.");
     }
 

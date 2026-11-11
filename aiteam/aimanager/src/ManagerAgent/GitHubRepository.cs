@@ -54,14 +54,25 @@ internal static class GitHubRepository
         if (!string.IsNullOrWhiteSpace(parentKey))
         {
             await CheckOutParentBranchAsync(configuration, workspacePath, parentKey, cancellationToken);
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["submodule", "sync", "--recursive"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["submodule", "update", "--init", "--recursive"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
         }
 
         ProtectGitConfiguration(workspacePath);
     }
 
     /// <summary>
-    /// Ensures the parent integration branch exists on origin (pushing the default branch when it is missing,
-    /// as the worker does for the first sub-task) and checks it out.
+    /// Checks out the parent integration branch when it exists on origin. The worker creates it when needed.
     /// </summary>
     private static async Task CheckOutParentBranchAsync(
         AgentConfiguration configuration,
@@ -78,12 +89,7 @@ internal static class GitHubRepository
             requiresGitHubCredentials: true);
         if (string.IsNullOrWhiteSpace(existing.StandardOutput))
         {
-            await RunGitAsync(
-                configuration,
-                workspacePath,
-                ["push", "--quiet", "origin", $"HEAD:refs/heads/{parentBranch}"],
-                cancellationToken,
-                requiresGitHubCredentials: true);
+            return;
         }
 
         await RunGitAsync(
