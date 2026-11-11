@@ -14,8 +14,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAgentConfigRepository>(p => p.GetRequiredService<MySqlAgentConfigRepository>());
         services.AddSingleton<AgentConfigLoader>(provider => new AgentConfigLoader(
             new ScopedRepository(provider), provider.GetRequiredService<AgentConfigOptions>()));
-        services.AddScoped(provider => new AgentHost(
-            provider.GetRequiredService<IAgentConfigRepository>(),
+        // Singleton so refreshed settings (and the fallback to the last good config) survive across
+        // polling scopes; DB access still goes through per-call scopes via ScopedRepository.
+        services.AddSingleton(provider => new AgentHost(
+            new ScopedRepository(provider),
             provider.GetRequiredService<AgentConfigLoader>(), defaults));
         return services;
     }

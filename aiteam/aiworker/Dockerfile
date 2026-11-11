@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY aiteam/aiworker/NuGet.config ./
+COPY aiteam/aiagent/NuGet.config /aiagent/
 COPY aiteam/aiagent/src/AiAgent/ /aiagent/src/AiAgent/
 COPY aiteam/aiworker/src/CodingAgent/CodingAgent.csproj src/CodingAgent/
 RUN --mount=type=secret,id=nuget_username,env=NUGET_USERNAME \
