@@ -50,6 +50,15 @@ internal sealed class PullRequestRepository(IDbConnectionFactory connectionFacto
         return result;
     }
 
+    public bool DeleteByNumber(Uri repositoryUrl, long pullRequestNumber)
+    {
+        using var command = connectionFactory.CreateCommand(
+            "DELETE FROM pull_requests WHERE repository_url = @repository_url AND pr_number = @pr_number");
+        command.AddParameter("@repository_url", repositoryUrl.AbsoluteUri);
+        command.AddParameter("@pr_number", pullRequestNumber);
+        return command.ExecuteNonQuery() > 0;
+    }
+
     // Swaps the tracked row for a replacement pull request, keeping the row id and Jira key.
     public bool Replace(Uri repositoryUrl, long oldPullRequestNumber, string newPullRequestUrl)
     {

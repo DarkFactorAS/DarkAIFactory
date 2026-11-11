@@ -65,6 +65,13 @@ public sealed class PullRequestSanityCheckTests
             return Task.CompletedTask;
         }
 
+        public Task AddPullRequestCommentAsync(long number, string comment, CancellationToken cancellationToken)
+        {
+            Calls.Add($"comment {number}");
+            Comments.Add(comment);
+            return Task.CompletedTask;
+        }
+
         public Task<string> CreateRevertPullRequestAsync(long number, string branch, CancellationToken cancellationToken)
         {
             Calls.Add($"revert {number}");
@@ -87,6 +94,7 @@ public sealed class PullRequestSanityCheckTests
         public FakeGitHub GitHub { get; } = new();
         public DatabaseStub Database { get; } = new();
         public List<string> Replaced { get; } = [];
+        public List<string> Deleted { get; } = [];
         public List<string> JiraLookups { get; } = [];
         public Dictionary<string, JiraIssue> Issues { get; } = new()
         {
@@ -110,6 +118,11 @@ public sealed class PullRequestSanityCheckTests
                 if (command.CommandText.StartsWith("UPDATE pull_requests", StringComparison.Ordinal))
                 {
                     Replaced.Add($"{command.Values["@old_pr_number"]}->{command.Values["@new_pr_number"]}");
+                }
+
+                if (command.CommandText.StartsWith("DELETE FROM pull_requests", StringComparison.Ordinal))
+                {
+                    Deleted.Add($"{command.Values["@pr_number"]}");
                 }
 
                 return 1;
@@ -247,6 +260,50 @@ public sealed class PullRequestSanityCheckTests
 
         Assert.Equal("https://github.com/owner/repo/pull/9", Assert.Single(actions).NewPullRequestUrl);
         Assert.Equal(["get 5"], fixture.GitHub.Calls);
+        Assert.Empty(fixture.Deleted);
+    }
+
+    [Fact]
+    public async Task ClosedUnmergedPullRequestWithWrongBase_IsCommentedOnceAndRowDeleted()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Closed, "ai-agent/TASK-2-abc", "master");
+
+        var actions = await fixture.RunAsync();
+
+        var action = Assert.Single(actions);
+        Assert.Equal(PullRequestSanityCheck.RemovedClosedPullRequest, action.Kind);
+        Assert.Equal(["5"], fixture.Deleted);
+        Assert.Equal(["subtask was created from the wrong branch"], fixture.GitHub.Comments);
+        Assert.Single(fixture.GitHub.Calls, call => call == "comment 5");
+        Assert.Empty(fixture.Replaced);
+    }
+
+    [Fact]
+    public async Task ClosedPullRequestWithClosedReplacement_IsCleanedUp()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Closed, "ai-agent/TASK-2-abc", "master");
+        fixture.GitHub.Add(6, State.Closed, "ai-agent/TASK-2-abc", Parent);
+
+        await fixture.RunAsync();
+
+        Assert.Equal(["5"], fixture.Deleted);
+        Assert.Single(fixture.GitHub.Comments);
+    }
+
+    [Fact]
+    public async Task ClosedPullRequestWithOpenReplacement_MovesTrackingWithoutComment()
+    {
+        var fixture = new Fixture(("TASK-2", 5));
+        fixture.GitHub.Add(5, State.Closed, "ai-agent/TASK-2-abc", "master");
+        fixture.GitHub.Add(6, State.Open, "ai-agent/TASK-2-abc", Parent);
+
+        await fixture.RunAsync();
+
+        Assert.Equal(["5->6"], fixture.Replaced);
+        Assert.Empty(fixture.Deleted);
+        Assert.Empty(fixture.GitHub.Comments);
     }
 
     [Fact]
@@ -282,11 +339,11 @@ public sealed class PullRequestSanityCheckTests
     [InlineData("Open")]
     [InlineData("Merged")]
     [InlineData("Closed")]
-    public async Task CorrectBaseOrClosedPullRequests_AreLeftAlone(string stateName)
+    public async Task CorrectBasePullRequests_AreLeftAlone(string stateName)
     {
         var state = Enum.Parse<State>(stateName);
         var fixture = new Fixture(("TASK-2", 5));
-        fixture.GitHub.Add(5, state, "ai-agent/TASK-2-abc", state == State.Closed ? "master" : Parent);
+        fixture.GitHub.Add(5, state, "ai-agent/TASK-2-abc", Parent);
 
         Assert.Empty(await fixture.RunAsync());
         Assert.Equal(["get 5"], fixture.GitHub.Calls);
