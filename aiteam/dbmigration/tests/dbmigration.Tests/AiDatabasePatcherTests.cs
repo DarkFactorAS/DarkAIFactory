@@ -118,6 +118,18 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("'sample-agent'", dbPatcher.Sql[25]);
             Assert.Contains("INSERT IGNORE INTO `agent_capabilities`", dbPatcher.Sql[26]);
             Assert.Contains("INSERT IGNORE INTO `agent_metrics_totals`", dbPatcher.Sql[27]);
+            Assert.Contains("ALTER TABLE `agent_task_metrics`", dbPatcher.Sql[28]);
+            Assert.Contains("MODIFY COLUMN `input_tokens` BIGINT NULL DEFAULT NULL", dbPatcher.Sql[28]);
+            Assert.Contains("MODIFY COLUMN `output_tokens` BIGINT NULL DEFAULT NULL", dbPatcher.Sql[28]);
+            Assert.DoesNotContain("NOT NULL", dbPatcher.Sql[28]);
+            Assert.Contains("ALTER TABLE `agent_task_metrics`", dbPatcher.Sql[29]);
+            Assert.Contains("ADD COLUMN IF NOT EXISTS `status` ENUM('success', 'failed') NULL", dbPatcher.Sql[29]);
+            Assert.DoesNotContain("NOT NULL", dbPatcher.Sql[29]);
+            Assert.Contains("UPDATE `agent_task_metrics`", dbPatcher.Sql[30]);
+            Assert.Contains("SET `status` = IF(`succeeded`, 'success', 'failed')", dbPatcher.Sql[30]);
+            Assert.Contains("WHERE `status` IS NULL", dbPatcher.Sql[30]);
+            Assert.Contains("ALTER TABLE `agent_task_metrics`", dbPatcher.Sql[31]);
+            Assert.Contains("MODIFY COLUMN `status` ENUM('success', 'failed') NOT NULL", dbPatcher.Sql[31]);
         }
     }
 
