@@ -431,6 +431,7 @@ public sealed class PullRequestSanityCheckTests
     public async Task FailureForOnePullRequest_DoesNotStopTheOthers()
     {
         var fixture = new Fixture(("TASK-2", 4), ("TASK-2", 5));
+        fixture.GitHub.Branches.Add(Parent);
         fixture.GitHub.Add(5, State.Open, "ai-agent/TASK-2-abc", "master");
 
         var actions = await fixture.RunAsync();
