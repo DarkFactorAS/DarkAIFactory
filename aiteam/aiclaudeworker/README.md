@@ -188,6 +188,10 @@ The **build aiclaudeworker** task is also available from **Terminal > Run Build 
 
 When an issue is in the trigger status but the worker skips it (manager plan stale, not yet posted, or missing), it posts one comment `[AIClaudeWorker] Not picked up: <reason>`. Existing comments are checked first, so the same reason is never posted twice; a changed reason posts a new comment. Comment failures are logged as warnings and do not stop processing. The issue is also given the generic `ai-ignored` label (added in addition to all other labels, regardless of reason, purely as a visual marker on the Jira dashboard). The label is added on every skip, even when the comment already exists, and is removed once the worker claims the task. Label failures are logged as warnings.
 
+## Pull request sanity check
+
+Every polling cycle, after pull-request record recovery and before new-task pickup, the worker verifies that tracked sub-task pull requests target the parent task's integration branch (`ai-agent/<PARENT-KEY>`). Wrong-base pull requests are repaired (a replacement pull request is opened, or a merged one is rolled back) and closed-unmerged pull requests are removed from tracking. Pull requests of issues that are not sub-tasks are never touched. Each repair is logged. Any error is logged and does not stop the polling loop; the check is simply repeated on the next cycle.
+
 ## Tests
 
 Unit tests (xunit) live in `ClaudeCodingAgent.Tests.csproj` and the `*Tests.cs` files
