@@ -24,8 +24,18 @@ public sealed class AgentConfigurationTests
         Assert.Equal("reviewer", config.ReviewerLogin);
         Assert.Equal(TimeSpan.FromSeconds(30), config.PollInterval);
         Assert.Equal(3, config.MaxAttemptsPerPullRequest);
-        Assert.Equal("gh-token", config.AgentGitHubToken);
+        Assert.Equal(string.Empty, config.AgentModel);
         Assert.Equal("repo-token", config.GitHubRepositoryToken);
+    }
+
+    [Fact]
+    public void Load_UsesClaudeModelFromAppSettings()
+    {
+        var settings = Settings();
+        settings.GitHub.AgentModel = "gpt-5";
+        var config = AgentConfiguration.Load(settings, new AgentSettings { ReviewerLogin = "r", ClaudeModel = " sonnet " });
+
+        Assert.Equal("sonnet", config.AgentModel);
     }
 
     [Fact]

@@ -11,14 +11,17 @@ RUN dotnet publish src/ReviewWorker/ReviewWorker.csproj --configuration Release 
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS worker-runtime
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends bash ca-certificates curl git \
-    && curl -fsSL https://gh.io/copilot-install --output /tmp/copilot-install \
-    && PREFIX=/usr/local bash /tmp/copilot-install \
-    && rm /tmp/copilot-install \
+    && apt-get install --yes --no-install-recommends bash ca-certificates curl git nodejs npm \
+    && npm install --global --no-fund --no-audit @anthropic-ai/claude-code \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
+# The Claude Code CLI login is kept in CLAUDE_CONFIG_DIR; Compose mounts the shared claude_config volume here.
+ENV DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    CLAUDE_CONFIG_DIR=/claude-config
 WORKDIR /app
 COPY --from=build /app/publish/ .
-RUN mkdir -p /workspaces && chown app:app /workspaces
+RUN mkdir -p /workspaces /claude-config && chown app:app /workspaces /claude-config
 USER app
 ENTRYPOINT ["dotnet", "/app/ReviewWorker.dll"]
 

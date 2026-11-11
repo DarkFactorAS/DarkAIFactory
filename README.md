@@ -13,7 +13,7 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   instead of Copilot (`aiteam/aiclaudeworker`). See
   [the AI Claude worker README](aiteam/aiclaudeworker/README.md).
 - **Review Worker** — a polling scaffold that loads and validates configuration
-  (`aiteam/aireviewworker`). Review fetching, Copilot fixes, pushes and attempt
+  (`aiteam/aireviewworker`). Review fetching, Claude Code fixes, pushes and attempt
   persistence shown below are planned, not active service behavior. See
   [the review worker README](aiteam/aireviewworker/README.md).
 - **aidashboard** — a minimal ASP.NET Core application.

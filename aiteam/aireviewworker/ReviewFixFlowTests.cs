@@ -25,7 +25,7 @@ public sealed class ReviewFixFlowTests
         public Task<string> GetRevisionAsync(string w, CancellationToken c) => Task.FromResult("baseline");
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
-            Calls.Add("copilot");
+            Calls.Add("agent");
             return RunnerError is null ? Task.CompletedTask : Task.FromException(RunnerError);
         }
         public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, string baseline, CancellationToken c)
@@ -67,7 +67,7 @@ public sealed class ReviewFixFlowTests
         var f = new Fakes();
         var result = await Run(f, new FixOptions(3, "build", "test"));
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
-        Assert.Equal(["copilot", "build", "test", "commit", "push"], f.Calls);
+        Assert.Equal(["agent", "build", "test", "commit", "push"], f.Calls);
         Assert.All(f.Baselines, baseline => Assert.Equal("baseline", baseline));
         Assert.Equal("feature/x", f.Pushed);
         Assert.Equal(("InProgress", true, null), (f.Records[0].Status, f.Records[0].Count, f.Records[0].Error));
@@ -155,7 +155,7 @@ public sealed class ReviewFixFlowTests
         var f = new Fakes { CommandFailure = "exit code 1" };
         var result = await Run(f, new FixOptions(3, null, "test"));
         Assert.Equal(FixOutcome.Failed, result.Outcome);
-        Assert.Equal(["copilot", "test", "discard"], f.Calls);
+        Assert.Equal(["agent", "test", "discard"], f.Calls);
         Assert.Contains("test", f.Records[^1].Error);
     }
 
@@ -171,7 +171,7 @@ public sealed class ReviewFixFlowTests
         var result = await Run(f, new FixOptions(3, TestCommand: "test"));
 
         Assert.Equal(FixOutcome.Failed, result.Outcome);
-        Assert.Equal(["copilot", "test", "discard"], f.Calls);
+        Assert.Equal(["agent", "test", "discard"], f.Calls);
         Assert.Contains("src/Generated.cs", result.Error);
     }
 
@@ -217,7 +217,7 @@ public sealed class ReviewFixFlowTests
         var f = new Fakes { Changed = ["src/A.cs", "src/Other.cs"] };
         var result = await Run(f);
         Assert.Equal(FixOutcome.Failed, result.Outcome);
-        Assert.Equal(["copilot", "discard"], f.Calls);
+        Assert.Equal(["agent", "discard"], f.Calls);
         Assert.Contains("src/Other.cs", result.Error);
     }
 

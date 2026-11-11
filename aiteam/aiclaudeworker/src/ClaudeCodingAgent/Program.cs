@@ -96,6 +96,24 @@ try
                     $"Pull-request tracking recovery failed for {configuration.GitHubRepositoryUrl}: {exception.Message}");
             }
 
+            try
+            {
+                await new PullRequestSanityCheck(
+                    configuration, pullRequests, jira.GetIssueAsync, new GitHubSanityOperations(configuration))
+                    .RunAsync(cancellation.Token);
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (!cancellation.IsCancellationRequested)
+            {
+                DFLogger.LogOutput(
+                    DFLogLevel.ERROR,
+                    "Worker",
+                    $"Pull-request sanity check failed for {configuration.GitHubRepositoryUrl}: {exception.Message}");
+            }
+
             if (loggedConfigurations.Add(configuration))
             {
                 await claude.CheckAvailableAsync(cancellation.Token);

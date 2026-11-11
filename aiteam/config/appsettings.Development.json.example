@@ -4,6 +4,7 @@
   "PollIntervalSeconds": 30,
   "ReviewerLogin": "",
   "MaxAttemptsPerPullRequest": 3,
+  "ClaudeModel": "",
   "BuildCommand": "",
   "TestCommand": "",
   "DatabaseConnection": {

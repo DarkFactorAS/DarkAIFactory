@@ -101,9 +101,28 @@ try
             }
             try
             {
+                var pullRequests = scope.ServiceProvider.GetRequiredService<PullRequestRepository>();
+                try
+                {
+                    await new PullRequestSanityCheck(
+                        configuration, pullRequests, jira.GetIssueAsync, new GitHubSanityOperations(configuration))
+                        .RunAsync(cancellation.Token);
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception) when (!cancellation.IsCancellationRequested)
+                {
+                    DFLogger.LogOutput(
+                        DFLogLevel.ERROR,
+                        "Manager",
+                        $"Pull-request sanity check failed for manager project {project.Id}: {exception.Message}");
+                }
+
                 await new PullRequestCloser(
                     configuration,
-                    scope.ServiceProvider.GetRequiredService<PullRequestRepository>(),
+                    pullRequests,
                     jira,
                     (record, token) => GitHubRepository.IsPullRequestMergedAsync(
                         configuration, record.RepositoryUrl, record.Number, token))

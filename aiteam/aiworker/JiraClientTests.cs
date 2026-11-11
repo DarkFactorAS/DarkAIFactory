@@ -194,6 +194,39 @@ public sealed class JiraClientTests
         Assert.Empty(issue.Blockers);
     }
 
+    [Theory]
+    [InlineData("Sub-task", true, "DFAI-2", true)]
+    [InlineData("Sub-Task", true, "DFAI-2", true)]
+    [InlineData("Task", false, "DFAI-EPIC", false)]
+    [InlineData("Sub-task", true, null, true)]
+    public async Task GetIssueAsync_ExposesIssueTypeParentAndIsSubTask(
+        string typeName, bool subtaskFlag, string? parent, bool expectedIsSubTask)
+    {
+        var parentJson = parent is null ? string.Empty : $",\"parent\":{{\"key\":\"{parent}\"}}";
+        var handler = new SequenceHandler((HttpStatusCode.OK,
+            $"{{\"key\":\"DFAI-3\",\"fields\":{{\"summary\":\"S\",\"issuetype\":{{\"name\":\"{typeName}\",\"subtask\":{subtaskFlag.ToString().ToLowerInvariant()}}}{parentJson}}}}}"));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("DFAI-3", CancellationToken.None);
+
+        Assert.Equal(typeName, issue.IssueTypeName);
+        Assert.Equal(expectedIsSubTask, issue.IsSubTask);
+        Assert.Equal(expectedIsSubTask ? parent : null, issue.ParentKey);
+    }
+
+    [Fact]
+    public async Task GetIssueAsync_MissingIssueType_IsNotSubTask()
+    {
+        var handler = new SequenceHandler((HttpStatusCode.OK, """{"key":"DFAI-3","fields":{"summary":"S"}}"""));
+        using var client = new JiraClient(CreateConfiguration(), handler);
+
+        var issue = await client.GetIssueAsync("DFAI-3", CancellationToken.None);
+
+        Assert.Equal(string.Empty, issue.IssueTypeName);
+        Assert.False(issue.IsSubTask);
+        Assert.Null(issue.ParentKey);
+    }
+
     private sealed class StubHandler(HttpStatusCode status, string responseBody = "{}") : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }
