@@ -1,3 +1,4 @@
+using AiTeam.Configuration;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
@@ -22,10 +23,16 @@ internal static class GitHubRepository
         return workspacePath;
     }
 
+    /// <summary>
+    /// Clones the repository for triage. For a sub-task (<paramref name="parentKey"/> set) the checkout is the
+    /// parent task's integration branch, created from the default branch when it does not exist yet, so the
+    /// planner sees the same code the worker will branch from.
+    /// </summary>
     public static async Task CloneForPlanningAsync(
         AgentConfiguration configuration,
         string workspacePath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? parentKey = null)
     {
         await RunGitAsync(
             configuration,
@@ -44,7 +51,58 @@ internal static class GitHubRepository
             useRepository: false,
             requiresGitHubCredentials: true);
 
+        if (!string.IsNullOrWhiteSpace(parentKey))
+        {
+            await CheckOutParentBranchAsync(configuration, workspacePath, parentKey, cancellationToken);
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["submodule", "sync", "--recursive"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
+            await RunGitAsync(
+                configuration,
+                workspacePath,
+                ["submodule", "update", "--init", "--recursive"],
+                cancellationToken,
+                requiresGitHubCredentials: true);
+        }
+
         ProtectGitConfiguration(workspacePath);
+    }
+
+    /// <summary>
+    /// Checks out the parent integration branch when it exists on origin. The worker creates it when needed.
+    /// </summary>
+    private static async Task CheckOutParentBranchAsync(
+        AgentConfiguration configuration,
+        string workspacePath,
+        string parentKey,
+        CancellationToken cancellationToken)
+    {
+        var parentBranch = JiraWorkflowRules.ParentBranchName(parentKey);
+        var existing = await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["ls-remote", "--heads", "origin", $"refs/heads/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        if (string.IsNullOrWhiteSpace(existing.StandardOutput))
+        {
+            return;
+        }
+
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["fetch", "--quiet", "origin", $"+refs/heads/{parentBranch}:refs/remotes/origin/{parentBranch}"],
+            cancellationToken,
+            requiresGitHubCredentials: true);
+        await RunGitAsync(
+            configuration,
+            workspacePath,
+            ["switch", "--quiet", "--force-create", parentBranch, $"origin/{parentBranch}"],
+            cancellationToken);
     }
 
     public static async Task<bool> IsPullRequestMergedAsync(
@@ -429,6 +487,32 @@ internal static class GitHubRepository
         using var document = await GetPullRequestDocumentAsync(
             configuration, pullRequestNumber, cancellationToken, handler);
         return ReadPullRequestInfo(document.RootElement);
+    }
+
+    /// <summary>Lists every open pull request in the configured repository.</summary>
+    public static async Task<IReadOnlyList<PullRequestInfo>> ListOpenPullRequestsAsync(
+        AgentConfiguration configuration,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        const int pageSize = 100;
+        using var httpClient = CreateApiClient(configuration, handler);
+        var result = new List<PullRequestInfo>();
+        for (var page = 1; ; page++)
+        {
+            using var response = await httpClient.GetAsync(
+                $"{RepositoryApiPath(configuration)}/pulls?state=open&per_page={pageSize}&page={page}",
+                cancellationToken);
+            await EnsureSuccessAsync(response, "Listing open pull requests", cancellationToken);
+            using var document = System.Text.Json.JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(cancellationToken));
+            var items = document.RootElement.EnumerateArray().ToArray();
+            result.AddRange(items.Select(ReadPullRequestInfo));
+            if (items.Length < pageSize)
+            {
+                return result;
+            }
+        }
     }
 
     /// <summary>

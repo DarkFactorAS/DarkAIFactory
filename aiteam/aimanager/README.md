@@ -122,7 +122,7 @@ legacy plan and handed off. Decisions:
 
 ### Rules for multi-step plans, blockers and feedback
 
-- **Branches:** the main task uses the branch `ai-agent/<PARENT-KEY>`. Every sub-task works on a branch created off it, and its pull request targets it (not the default branch). The worker creates `ai-agent/<PARENT-KEY>` from the default branch when the first sub-task starts. Each sub-task description states this in cleartext.
+- **Branches:** the main task uses the branch `ai-agent/<PARENT-KEY>`. Every sub-task works on a branch created off it, and its pull request targets it (not the default branch). The manager triages a sub-task on `ai-agent/<PARENT-KEY>` when it exists; otherwise it uses the default branch, and the worker creates the integration branch from the default branch when the first sub-task starts. The manager tells triage that branch handling is automatic and never a reason to ask for clarification. Each sub-task description states this in cleartext.
 - **Approval:** the full plan is written in the parent task and approved before any sub-task is created or implemented.
 - **Blocked by:** a task is never handed to the worker (labels) or moved to `Jira.JiraStatusName` (for held sub-tasks) while any "is blocked by" link points to an issue that is not in `Jira.JiraDoneStatus`. This applies to every task, including links added by people. Blocked tasks are still triaged and planned, and can be approved, so the tech design is ready; the handoff is withheld with an `[AIManager] Not picked up` comment until all blockers are done.
 - **Feedback:** the triage prompt tells the manager to ask for clarification only when it is critical and to decide smaller matters itself, recording its assumptions in the plan.
@@ -152,7 +152,20 @@ GitHub API whether each one is merged:
 
 Failures are logged per issue and do not stop the polling cycle. The worker retries
 failed pull-request tracking writes from Jira without rerunning implementation.
-Pull requests created before the `pull_requests` table existed are not backfilled.
+
+## Recovering missing pull-request rows
+
+Before the sanity check and the merged-PR check, AITechLead lists the open pull requests
+in the project's GitHub repository. A pull request without a `pull_requests` row is
+recorded when all of these hold:
+
+- the Jira key is found in the head branch (`ai-agent/DFAI-100` or `ai-agent/DFAI-100-<id>`)
+  or, failing that, at the start of the title (`DFAI-100: ...`), and belongs to the project;
+- the Jira issue is in `Jira.JiraInReviewStatus` (`In Review`, case-insensitive).
+
+Closed and merged pull requests are never backfilled. Recording is idempotent, and a
+Jira lookup failure is logged and skips only that pull request. Recovered rows are then
+picked up by the review worker and the merged-PR check like any other row.
 
 ## Run
 1. Copy `aiteam/.env.example` to `aiteam/.env`.
