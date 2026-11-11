@@ -87,6 +87,55 @@ public static class AgentConfigPatcher
             INSERT IGNORE INTO `new_agents` (`name`, `role`, `instructions`, `language_model_key`)
             VALUES ('default', 'general', 'You are a helpful general-purpose coding agent.', 'gpt-5-mini')
             """);
+        if (!patcher.Successful()) return false;
+
+        patcher.Patch(system, 7,
+            """
+            CREATE TABLE IF NOT EXISTS `new_agent_task_metrics` (
+                `id` BIGINT NOT NULL AUTO_INCREMENT,
+                `agent_id` BIGINT NOT NULL,
+                `task_id` BIGINT NULL,
+                `jira_key` VARCHAR(64) NULL,
+                `tokens` BIGINT NOT NULL DEFAULT 0,
+                `tool_calls` BIGINT NOT NULL DEFAULT 0,
+                `duration_ms` BIGINT NOT NULL DEFAULT 0,
+                `status` ENUM('success','failed') NOT NULL,
+                `created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`),
+                KEY `ix_new_agent_task_metrics_agent` (`agent_id`, `created`),
+                CONSTRAINT `fk_new_agent_task_metrics_agent` FOREIGN KEY (`agent_id`)
+                    REFERENCES `new_agents` (`id`) ON DELETE CASCADE
+            )
+            """);
+        if (!patcher.Successful()) return false;
+
+        patcher.Patch(system, 8,
+            """
+            CREATE TABLE IF NOT EXISTS `new_agent_language_models` (
+                `id` BIGINT NOT NULL AUTO_INCREMENT,
+                `agent_id` BIGINT NOT NULL,
+                `model_key` VARCHAR(255) NOT NULL,
+                `enabled` BOOLEAN NOT NULL DEFAULT FALSE,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `uq_new_agent_language_models_agent_model` (`agent_id`, `model_key`),
+                CONSTRAINT `fk_new_agent_language_models_agent` FOREIGN KEY (`agent_id`)
+                    REFERENCES `new_agents` (`id`) ON DELETE CASCADE
+            )
+            """);
+        if (!patcher.Successful()) return false;
+
+        patcher.Patch(system, 9,
+            """
+            INSERT IGNORE INTO `new_agent_capabilities` (`agent_id`, `capability`, `enabled`)
+            SELECT `id`, 'code-editing', TRUE FROM `new_agents` WHERE `name` = 'default'
+            """);
+        if (!patcher.Successful()) return false;
+
+        patcher.Patch(system, 10,
+            """
+            INSERT IGNORE INTO `new_agent_language_models` (`agent_id`, `model_key`, `enabled`)
+            SELECT `id`, 'gpt-5-mini', TRUE FROM `new_agents` WHERE `name` = 'default'
+            """);
         return patcher.Successful();
     }
 }
