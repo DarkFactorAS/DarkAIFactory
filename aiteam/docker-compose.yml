@@ -43,6 +43,33 @@ services:
     cap_drop:
       - ALL
 
+  review-runner:
+    build:
+      context: ..
+      dockerfile: aiteam/aireviewworker/Dockerfile
+      target: runner
+      secrets:
+        - nuget_username
+        - nuget_token
+    command: ["--runner-server"]
+    volumes:
+      - review_workspaces:/workspaces
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /tmp
+      REVIEW_WORKSPACE_ROOT: /workspaces
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   claude-coding-agent:
     build:
       context: ..
@@ -106,6 +133,36 @@ services:
     networks:
       - claude-runner
 
+  review-worker:
+    build:
+      context: ..
+      dockerfile: aiteam/aireviewworker/Dockerfile
+      target: worker
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      dbmigration:
+        condition: service_completed_successfully
+      review-runner:
+        condition: service_healthy
+    volumes:
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+      - review_workspaces:/workspaces
+    restart: unless-stopped
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      NUGET_USERNAME: ${NUGET_USERNAME}
+      NUGET_TOKEN: ${NUGET_TOKEN}
+      HOME: /tmp
+      REVIEW_RUNNER_URL: http://review-runner:8080/
+      REVIEW_WORKSPACE_ROOT: /workspaces
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
   manager-agent:
     build:
       context: ..
@@ -145,6 +202,22 @@ services:
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
       HOME: /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  aiagent:
+    build:
+      context: ..
+      dockerfile: aiteam/aiagent/Dockerfile
+      secrets:
+        - nuget_username
+        - nuget_token
+    restart: unless-stopped
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -208,12 +281,20 @@ services:
       - "127.0.0.1:8206:3306"
 
 volumes:
-  # docker volume create claude_config
+
+  # docker volume create review_workspaces
+  review_workspaces:
+    name: ${REVIEW_WORKSPACES_VOLUME_NAME:-aiteam_review_workspaces}
+
+  # docker volume create aiteam_claude_config
+  # docker volume rm aiteam_claude_config
   claude_config:
     name: ${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}
+
   # docker volume create claude_workspaces
   claude_workspaces:
     name: ${CLAUDE_WORKSPACES_VOLUME_NAME:-aiteam_claude_workspaces}
+
   # docker volume create aiteam_mariadb_data
   aiteam_mariadb_data:
     external: true

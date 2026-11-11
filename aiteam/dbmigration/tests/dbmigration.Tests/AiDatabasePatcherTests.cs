@@ -54,7 +54,17 @@ public sealed class AiDatabasePatcherTests
                 "patch:AgentConfig:4", "successful",
                 "patch:AgentConfig:5", "successful",
                 "patch:AgentConfig:6", "successful",
-                "patch:AgentConfig:7", "successful"]);
+                "patch:AgentConfig:7", "successful",
+                "init:AgentDefinitions",
+                "patch:AgentDefinitions:1", "successful",
+                "patch:AgentDefinitions:2", "successful",
+                "patch:AgentDefinitions:3", "successful",
+                "patch:AgentDefinitions:4", "successful",
+                "patch:AgentDefinitions:5", "successful",
+                "patch:AgentDefinitions:6", "successful",
+                "patch:AgentDefinitions:7", "successful",
+                "init:ReviewCommentAttempts",
+                "patch:ReviewCommentAttempts:1", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -97,6 +107,29 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`", dbPatcher.Sql[19]);
             Assert.Contains("WHERE `agent_name` = 'aiworker'", dbPatcher.Sql[19]);
             Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[20]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agents`", dbPatcher.Sql[21]);
+            Assert.Contains("`behavior_prompt` LONGTEXT NOT NULL", dbPatcher.Sql[21]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_capabilities`", dbPatcher.Sql[22]);
+            Assert.Contains("PRIMARY KEY (`agent_id`, `capability`, `language_model`)", dbPatcher.Sql[22]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_task_metrics`", dbPatcher.Sql[23]);
+            Assert.Contains("`input_tokens`", dbPatcher.Sql[23]);
+            Assert.Contains("`tool_calls`", dbPatcher.Sql[23]);
+            Assert.Contains("`duration_ms`", dbPatcher.Sql[23]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_metrics_totals`", dbPatcher.Sql[24]);
+            Assert.Contains("`tasks_succeeded`", dbPatcher.Sql[24]);
+            Assert.Contains("`tasks_failed`", dbPatcher.Sql[24]);
+            Assert.Contains("WHERE NOT EXISTS", dbPatcher.Sql[25]);
+            Assert.Contains("'sample-agent'", dbPatcher.Sql[25]);
+            Assert.Contains("INSERT IGNORE INTO `agent_capabilities`", dbPatcher.Sql[26]);
+            Assert.Contains("INSERT IGNORE INTO `agent_metrics_totals`", dbPatcher.Sql[27]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_definitions`", dbPatcher.Sql[28]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_definition_capabilities`", dbPatcher.Sql[29]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `language_models`", dbPatcher.Sql[30]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_metrics`", dbPatcher.Sql[31]);
+            Assert.Contains("INSERT INTO `language_models`", dbPatcher.Sql[32]);
+            Assert.Contains("INSERT INTO `agent_definitions`", dbPatcher.Sql[33]);
+            Assert.Contains("INSERT INTO `agent_metrics`", dbPatcher.Sql[34]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `review_comment_attempts`", dbPatcher.Sql[35]);
         }
     }
 

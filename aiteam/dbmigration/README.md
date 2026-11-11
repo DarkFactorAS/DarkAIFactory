@@ -45,7 +45,21 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
-| `AgentConfig` | 1-7 | `agent_definitions` (name, role, instructions, language model key), `agent_capabilities` and `language_models` enable flags, `agent_metrics` (tokens, tool calls, duration, success/failure counts); seeds model `gpt-5-mini`, one `default` agent and its metrics row. All statements are idempotent (`IF NOT EXISTS` / `ON DUPLICATE KEY`) |
+| `AgentConfig` | 1 | `agents` (unique `name`, `role`, `behavior_prompt` generic task/behavior prompt, `language_model`, `enabled`, created/updated) |
+| `AgentConfig` | 2 | `agent_capabilities` (PK `agent_id`, `capability`, `language_model`; `enabled` flag per capability and per language model; cascades with agent) |
+| `AgentConfig` | 3 | `agent_task_metrics`: one row per task run (`agent_id`, optional `agent_task_id`/`jira_key`, `language_model`, `input_tokens`, `output_tokens`, `tool_calls`, `duration_ms`, `succeeded`, `started`, `finished`) |
+| `AgentConfig` | 4 | `agent_metrics_totals`: per-agent running totals (tokens, tool calls, `total_duration_ms`, `tasks_succeeded`, `tasks_failed`) |
+| `AgentConfig` | 5-7 | Seed `sample-agent` (role Software developer, model `claude-sonnet-5-5`), its capabilities (`read_files`, `edit_files`, `run_shell` on; `web_search` off) and an empty totals row. Seeding is guarded so reruns do not duplicate or overwrite rows |
+| `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; `pull_request_id` FK to `pull_requests` with cascade delete, `github_comment_id`, unique per pull request, `attempts`, `status` Pending/InProgress/Resolved/Failed, created/updated, nullable `last_error`) |
+| `AgentDefinitions` | 1-7 | `agent_definitions`, `agent_definition_capabilities`, `language_models`, and `agent_metrics`; seeds model `gpt-5-mini`, a default agent, and its metrics row with idempotent statements |
+
+`AgentConfig` and `AgentDefinitions` use separate migration systems because they
+define different agent schemas. `AgentDefinitions` uses a distinct capabilities
+table so it does not conflict with `AgentConfig`'s `agent_capabilities`.
+The patches only create new tables (`CREATE TABLE IF NOT EXISTS`,
+guarded seeds), so they apply on an empty database and on an existing one without
+altering existing tables or data. `agent_task_id` in the `agent_task_metrics` table
+intentionally has no foreign key to `agent_tasks`, leaving that table unchanged.
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database

@@ -7,6 +7,18 @@ public sealed class PromptBuilderTests
     private static readonly JiraIssue Issue = new("DFAI-1", "My title", "My description");
 
     [Fact]
+    public void ImplementationPrompt_ForSubtaskNamesParentBranchAsTarget()
+    {
+        var prompt = PromptBuilder.BuildImplementationPrompt(
+            new JiraIssue("DFAI-3", "T", "D") { ParentKey = "DFAI-2" }, "step one", "ai-agent/DFAI-2");
+
+        Assert.Contains("sub-task of DFAI-2", prompt);
+        Assert.Contains("`ai-agent/DFAI-2`", prompt);
+        Assert.Contains("not the default branch", prompt);
+        Assert.DoesNotContain("sub-task of", PromptBuilder.BuildImplementationPrompt(Issue, "step one"));
+    }
+
+    [Fact]
     public void PlanPrompt_ContainsIssueAndUntrustedWarning()
     {
         var prompt = PromptBuilder.BuildPlanPrompt(Issue);

@@ -97,8 +97,21 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
-            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)]);
+            ("AgentConfig", 1),
+            ("AgentConfig", 2),
+            ("AgentConfig", 3),
+            ("AgentConfig", 4),
+            ("AgentConfig", 5),
+            ("AgentConfig", 6),
+            ("AgentConfig", 7),
+            ("AgentDefinitions", 1),
+            ("AgentDefinitions", 2),
+            ("AgentDefinitions", 3),
+            ("AgentDefinitions", 4),
+            ("AgentDefinitions", 5),
+            ("AgentDefinitions", 6),
+            ("AgentDefinitions", 7),
+            ("ReviewCommentAttempts", 1)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -127,11 +140,11 @@ public sealed class IntegrationSettingsPatcherTests
     [InlineData(1, false, 1)]
     [InlineData(4, false, 4)]
     [InlineData(7, false, 7)]
-    public void AgentConfigPatcher_CreatesTablesAndSeedsIdempotently(int failingPatch, bool expected, int count)
+    public void AgentDefinitionsPatcher_CreatesTablesAndSeedsIdempotently(int failingPatch, bool expected, int count)
     {
         var patcher = new SettingsPatcherStub(failingPatch);
-        Assert.Equal(expected, AgentConfigPatcher.Run(patcher));
-        Assert.Equal("AgentConfig", patcher.System);
+        Assert.Equal(expected, AgentDefinitionsPatcher.Run(patcher));
+        Assert.Equal("AgentDefinitions", patcher.System);
         Assert.Equal(count, patcher.Sql.Count);
         if (!expected)
         {
@@ -144,7 +157,7 @@ public sealed class IntegrationSettingsPatcherTests
             Assert.Contains(column, patcher.Sql[0]);
         }
 
-        Assert.Contains("`agent_capabilities`", patcher.Sql[1]);
+        Assert.Contains("`agent_definition_capabilities`", patcher.Sql[1]);
         Assert.Contains("`enabled`", patcher.Sql[1]);
         Assert.Contains("`language_models`", patcher.Sql[2]);
         Assert.Contains("`enabled`", patcher.Sql[2]);
@@ -156,6 +169,26 @@ public sealed class IntegrationSettingsPatcherTests
 
         Assert.All(patcher.Sql.Skip(4), sql => Assert.Contains("ON DUPLICATE KEY UPDATE", sql));
         Assert.Contains("VALUES ('default'", patcher.Sql[5]);
+    }
+
+    [Fact]
+    public void ReviewCommentAttemptsPatcher_CreatesTableIdempotentlyAndPropagatesFailure()
+    {
+        var patcher = new SettingsPatcherStub(0);
+        Assert.True(ReviewCommentAttemptsPatcher.Run(patcher));
+        Assert.Equal("ReviewCommentAttempts", patcher.System);
+        var sql = Assert.Single(patcher.Sql);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `review_comment_attempts`", sql);
+        foreach (var column in new[]
+            { "`id`", "`pull_request_id`", "`github_comment_id`", "`attempts`", "`status`",
+              "`created`", "`updated`", "`last_error`" })
+        {
+            Assert.Contains(column, sql);
+        }
+        Assert.Contains("UNIQUE KEY `uq_review_comment_attempts_pr_comment` (`pull_request_id`, `github_comment_id`)", sql);
+        Assert.Contains("REFERENCES `pull_requests` (`id`)", sql);
+
+        Assert.False(ReviewCommentAttemptsPatcher.Run(new SettingsPatcherStub(1)));
     }
 
     [Fact]
@@ -225,8 +258,21 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
-            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 1),
+            ("AgentConfig", 2),
+            ("AgentConfig", 3),
+            ("AgentConfig", 4),
+            ("AgentConfig", 5),
+            ("AgentConfig", 6),
+            ("AgentConfig", 7),
+            ("AgentDefinitions", 1),
+            ("AgentDefinitions", 2),
+            ("AgentDefinitions", 3),
+            ("AgentDefinitions", 4),
+            ("AgentDefinitions", 5),
+            ("AgentDefinitions", 6),
+            ("AgentDefinitions", 7),
+            ("ReviewCommentAttempts", 1)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -249,8 +295,21 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
             ("AgentTasks", 1),
-            ("AgentConfig", 1), ("AgentConfig", 2), ("AgentConfig", 3), ("AgentConfig", 4),
-            ("AgentConfig", 5), ("AgentConfig", 6), ("AgentConfig", 7)], patcher.Executed);
+            ("AgentConfig", 1),
+            ("AgentConfig", 2),
+            ("AgentConfig", 3),
+            ("AgentConfig", 4),
+            ("AgentConfig", 5),
+            ("AgentConfig", 6),
+            ("AgentConfig", 7),
+            ("AgentDefinitions", 1),
+            ("AgentDefinitions", 2),
+            ("AgentDefinitions", 3),
+            ("AgentDefinitions", 4),
+            ("AgentDefinitions", 5),
+            ("AgentDefinitions", 6),
+            ("AgentDefinitions", 7),
+            ("ReviewCommentAttempts", 1)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
