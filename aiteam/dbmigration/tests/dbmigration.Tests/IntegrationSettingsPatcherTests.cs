@@ -173,7 +173,8 @@ public sealed class IntegrationSettingsPatcherTests
             Assert.Contains($"'Jira.{name}'", patcher.Sql[2]);
         }
 
-        Assert.Contains("SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`", patcher.Sql[3]);
+        Assert.Contains("SELECT 'aiclaudeworker' AS `agent_name`, `code_key`, `label_name`, `description`", patcher.Sql[3]);
+        Assert.Contains(") AS `source`", patcher.Sql[3]);
         Assert.Contains("FROM `workflow_labels`", patcher.Sql[3]);
         Assert.Contains("WHERE `agent_name` = 'aiworker'", patcher.Sql[3]);
         Assert.Contains("('PickupLabel', 'FailureLabel', 'AnalyzedLabel')", patcher.Sql[3]);

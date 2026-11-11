@@ -56,13 +56,18 @@ public static class WorkflowLabelPatcher
 
         // The Claude worker shares the aiworker labels so the manager handoff, the manager query
         // exclusion and the dashboard keep working whichever worker picks an issue up.
+        // The source rows are read through a derived table: selecting directly from the insert
+        // target makes `workflow_labels` ambiguous in ON DUPLICATE KEY UPDATE (MariaDB error 1052).
         patcher.Patch(system, 4,
             """
             INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`)
-            SELECT 'aiclaudeworker', `code_key`, `label_name`, `description`
-            FROM `workflow_labels`
-            WHERE `agent_name` = 'aiworker'
-                AND `code_key` IN ('PickupLabel', 'FailureLabel', 'AnalyzedLabel')
+            SELECT `source`.`agent_name`, `source`.`code_key`, `source`.`label_name`, `source`.`description`
+            FROM (
+                SELECT 'aiclaudeworker' AS `agent_name`, `code_key`, `label_name`, `description`
+                FROM `workflow_labels`
+                WHERE `agent_name` = 'aiworker'
+                    AND `code_key` IN ('PickupLabel', 'FailureLabel', 'AnalyzedLabel')
+            ) AS `source`
             ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
             """);
         return patcher.Successful();
