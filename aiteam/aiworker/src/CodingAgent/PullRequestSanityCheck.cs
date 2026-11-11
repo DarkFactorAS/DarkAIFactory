@@ -14,6 +14,7 @@ internal interface IPullRequestSanityGitHub
     Task<GitHubRepository.PullRequestInfo?> FindPullRequestAsync(string head, string baseBranch, CancellationToken cancellationToken);
     Task<string> CreatePullRequestAsync(string head, string baseBranch, string title, string body, CancellationToken cancellationToken);
     Task ClosePullRequestWithCommentAsync(long number, string comment, CancellationToken cancellationToken);
+    Task AddPullRequestCommentAsync(long number, string comment, CancellationToken cancellationToken);
 
     /// <summary>Pushes a revert of a merged pull request on <paramref name="branch"/> and opens the revert pull request.</summary>
     Task<string> CreateRevertPullRequestAsync(long number, string branch, CancellationToken cancellationToken);
@@ -43,6 +44,9 @@ internal sealed class GitHubSanityOperations(AgentConfiguration configuration) :
 
     public Task ClosePullRequestWithCommentAsync(long number, string comment, CancellationToken cancellationToken) =>
         GitHubRepository.ClosePullRequestWithCommentAsync(configuration, number, comment, cancellationToken);
+
+    public Task AddPullRequestCommentAsync(long number, string comment, CancellationToken cancellationToken) =>
+        GitHubRepository.AddPullRequestCommentAsync(configuration, number, comment, cancellationToken);
 
     public Task<string> CreateRevertPullRequestAsync(long number, string branch, CancellationToken cancellationToken) =>
         WithWorkspaceAsync(workspace => GitHubRepository.CreateRevertPullRequestAsync(
@@ -88,6 +92,8 @@ internal sealed class PullRequestSanityCheck(
 {
     public const string RepairedByOpenPullRequest = "reopened";
     public const string RepairedByMergedPullRequest = "rolled-back";
+    public const string RemovedClosedPullRequest = "removed";
+    public const string WrongBranchComment = "subtask was created from the wrong branch";
 
     public async Task<IReadOnlyList<SanityCheckAction>> RunAsync(CancellationToken cancellationToken)
     {
@@ -155,6 +161,7 @@ internal sealed class PullRequestSanityCheck(
     }
 
     // A previous run may have closed the original before the tracking update; move tracking to the replacement.
+    // Without a live replacement the pull request was closed unmerged: comment once and stop tracking it.
     private async Task<SanityCheckAction?> ReconcileClosedAsync(
         TrackedPullRequest tracked,
         GitHubRepository.PullRequestInfo info,
@@ -166,7 +173,12 @@ internal sealed class PullRequestSanityCheck(
             await gitHub.FindPullRequestAsync($"ai-agent/cherry-pick-pr-{info.Number}", parentBranch, cancellationToken);
         if (replacement is null || replacement.State == GitHubRepository.PullRequestState.Closed)
         {
-            return null;
+            // Comment first, then delete the row: the row is the only record that the cleanup is still pending,
+            // and once it is gone the comment is never posted again.
+            await gitHub.AddPullRequestCommentAsync(info.Number, WrongBranchComment, cancellationToken);
+            pullRequests.DeleteByNumber(configuration.GitHubRepositoryUrl, info.Number);
+            DFLogger.LogOutput(DFLogLevel.INFO, "SanityCheck", $"Removed closed unmerged pull request #{info.Number} of {tracked.JiraKey}.");
+            return new SanityCheckAction(tracked.JiraKey, info.Number, RemovedClosedPullRequest, string.Empty);
         }
 
         pullRequests.Replace(configuration.GitHubRepositoryUrl, info.Number, replacement.Url);
