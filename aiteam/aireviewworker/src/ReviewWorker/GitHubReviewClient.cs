@@ -20,6 +20,7 @@ internal sealed class GitHubReviewClient : IDisposable
           repository(owner: $owner, name: $name) {
             pullRequest(number: $number) {
               state
+              headRefName
               headRefOid
               reviewThreads(first: 100, after: $cursor) {
                 pageInfo { hasNextPage endCursor }
@@ -95,22 +96,41 @@ internal sealed class GitHubReviewClient : IDisposable
         return open;
     }
 
+    /// <summary>Head branch name and commit of the pull request.</summary>
+    public async Task<(string Branch, string Sha)> GetHeadAsync(
+        TrackedPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var page = await FetchThreadsPageAsync(pullRequest, null, cancellationToken);
+        return (page.HeadBranch, page.HeadSha);
+    }
+
     /// <summary>
     /// Comments by the reviewer that are not resolved, not outdated and not already handled.
     /// Returns nothing when the pull request is not open.
     /// </summary>
     public async Task<IReadOnlyList<ReviewComment>> GetActionableCommentsAsync(
+        TrackedPullRequest pullRequest, CancellationToken cancellationToken) =>
+        (await ScanCommentsAsync(pullRequest, cancellationToken)).Actionable;
+
+    /// <summary>
+    /// Actionable comments plus counts of the other unresolved, current comments, for diagnostics.
+    /// Returns an empty scan when the pull request is not open.
+    /// </summary>
+    public async Task<ReviewCommentScan> ScanCommentsAsync(
         TrackedPullRequest pullRequest, CancellationToken cancellationToken)
     {
         var handled = _attempts.GetHandledCommentIds(pullRequest.Id, _maxAttempts);
         var result = new List<ReviewComment>();
+        var otherAuthors = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var openComments = 0;
+        var handledComments = 0;
         string? cursor = null;
         while (true)
         {
             var page = await FetchThreadsPageAsync(pullRequest, cursor, cancellationToken);
             if (!string.Equals(page.State, "OPEN", StringComparison.OrdinalIgnoreCase))
             {
-                return [];
+                return ReviewCommentScan.Empty;
             }
 
             foreach (var thread in page.Threads)
@@ -140,7 +160,7 @@ internal sealed class GitHubReviewClient : IDisposable
 
             if (!page.HasNextPage || page.EndCursor is null)
             {
-                return result;
+                return new ReviewCommentScan(result, openComments, handledComments, otherAuthors);
             }
 
             cursor = page.EndCursor;
@@ -150,8 +170,17 @@ internal sealed class GitHubReviewClient : IDisposable
         {
             foreach (var comment in comments)
             {
-                if (string.Equals(comment.Author, _reviewerLogin, StringComparison.OrdinalIgnoreCase) &&
-                    !handled.Contains(comment.Id))
+                openComments++;
+                if (!string.Equals(comment.Author, _reviewerLogin, StringComparison.OrdinalIgnoreCase))
+                {
+                    var author = string.IsNullOrEmpty(comment.Author) ? "(unknown)" : comment.Author;
+                    otherAuthors[author] = otherAuthors.GetValueOrDefault(author) + 1;
+                }
+                else if (handled.Contains(comment.Id))
+                {
+                    handledComments++;
+                }
+                else
                 {
                     result.Add(new ReviewComment(
                         comment.Id, pullRequest.Id, pullRequest.Number, comment.Path, comment.Line,
@@ -208,6 +237,7 @@ internal sealed class GitHubReviewClient : IDisposable
         return new ThreadsPage(
             node["state"]?.GetValue<string>() ?? string.Empty,
             node["headRefOid"]?.GetValue<string>() ?? string.Empty,
+            node["headRefName"]?.GetValue<string>() ?? string.Empty,
             list,
             threads?["pageInfo"]?["hasNextPage"]?.GetValue<bool>() ?? false,
             threads?["pageInfo"]?["endCursor"]?.GetValue<string>());
@@ -289,5 +319,5 @@ internal sealed class GitHubReviewClient : IDisposable
         bool HasNextCommentPage, string? CommentEndCursor);
     private sealed record CommentsPage(List<CommentInfo> Comments, bool HasNextPage, string? EndCursor);
     private sealed record ThreadsPage(
-        string State, string HeadSha, List<ThreadInfo> Threads, bool HasNextPage, string? EndCursor);
+        string State, string HeadSha, string HeadBranch, List<ThreadInfo> Threads, bool HasNextPage, string? EndCursor);
 }

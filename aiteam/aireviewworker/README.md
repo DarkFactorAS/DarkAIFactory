@@ -1,8 +1,17 @@
 # Review worker (aireviewworker)
 
-Scaffold for the agent that solves pull-request review comments (DFAI-137). It starts a
-.NET generic host with DI, loads configuration and runs a polling loop. Comment handling
-is added in follow-up sub-tasks; the loop currently only loads and validates configuration.
+Agent that solves pull-request review comments (DFAI-137). Every polling cycle it:
+
+1. Lists pull requests in the `pull_requests` table whose `repository_url` matches
+   `GitHub.TargetRepositoryUrl`, and keeps the ones still open on GitHub.
+2. Collects unresolved, current inline comments by `ReviewerLogin` that are not yet handled.
+3. For each pull request with comments: clones the head branch into the shared workspace,
+   runs Copilot in `review-runner`, checks that only the cited files changed, runs the optional
+   build and test commands, then commits and pushes (never forced) to the head branch.
+   Attempts are recorded in `review_comment_attempts`, so each comment is retried at most
+   `MaxAttemptsPerPullRequest` times.
+
+Each step is logged with the cycle number.
 
 ## Configuration
 
@@ -16,6 +25,8 @@ Loaded like [aiworker](../aiworker/README.md):
   | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 |
   | `ReviewerLogin` | required | GitHub login whose review comments are handled |
   | `MaxAttemptsPerPullRequest` | `3` | Max fix attempts per pull request, minimum 1 |
+  | `BuildCommand` | empty | Optional shell command run in `review-runner` before pushing; failure discards the fix |
+  | `TestCommand` | empty | Optional shell command run after the build; failure discards the fix |
 
 - Database `settings` table via `aiteam/shared` `IntegrationSettingsRepository`. The worker reuses
   the `aiworker` settings client (agent/repository tokens, `GitHub.TargetRepositoryUrl`), so no
