@@ -168,9 +168,13 @@ internal sealed class PullRequestSanityCheck(
         string parentBranch,
         CancellationToken cancellationToken)
     {
-        var replacement =
-            await gitHub.FindPullRequestAsync(info.HeadBranch, parentBranch, cancellationToken) ??
-            await gitHub.FindPullRequestAsync($"ai-agent/cherry-pick-pr-{info.Number}", parentBranch, cancellationToken);
+        var replacement = await gitHub.FindPullRequestAsync(info.HeadBranch, parentBranch, cancellationToken);
+        if (replacement is null || replacement.State == GitHubRepository.PullRequestState.Closed)
+        {
+            replacement = await gitHub.FindPullRequestAsync(
+                $"ai-agent/cherry-pick-pr-{info.Number}", parentBranch, cancellationToken) ?? replacement;
+        }
+
         if (replacement is null || replacement.State == GitHubRepository.PullRequestState.Closed)
         {
             // Comment first, then delete the row: the row is the only record that the cleanup is still pending,
