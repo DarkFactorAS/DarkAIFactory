@@ -12,10 +12,10 @@ public sealed class AgentConfigPatcherTests
         var patcher = new StubPatcher(0);
         Assert.True(AgentConfigPatcher.Run(patcher));
         Assert.Equal("AgentConfig", patcher.System);
-        Assert.Equal(6, patcher.Sql.Count);
+        Assert.Equal(10, patcher.Sql.Count);
 
         var creates = patcher.Sql.Where(s => s.StartsWith("CREATE TABLE", StringComparison.Ordinal)).ToList();
-        Assert.Equal(4, creates.Count);
+        Assert.Equal(6, creates.Count);
         foreach (var sql in creates)
         {
             Assert.Matches(@"^CREATE TABLE IF NOT EXISTS `new_\w+`", sql);
@@ -40,6 +40,13 @@ public sealed class AgentConfigPatcherTests
         Assert.StartsWith("INSERT IGNORE INTO `new_agents`", patcher.Sql[5]);
         Assert.Contains("'default'", patcher.Sql[5]);
         Assert.Contains("'gpt-5-mini'", patcher.Sql[5]);
+
+        AssertColumns(patcher.Sql[6], "`agent_id`", "`task_id`", "`jira_key`", "`tokens`", "`tool_calls`",
+            "`duration_ms`", "`status`");
+        Assert.Contains("REFERENCES `new_agents` (`id`)", patcher.Sql[6]);
+        AssertColumns(patcher.Sql[7], "`agent_id`", "`model_key`", "`enabled`", "UNIQUE KEY");
+        Assert.StartsWith("INSERT IGNORE INTO `new_agent_capabilities`", patcher.Sql[8]);
+        Assert.StartsWith("INSERT IGNORE INTO `new_agent_language_models`", patcher.Sql[9]);
     }
 
     [Theory]
@@ -49,6 +56,10 @@ public sealed class AgentConfigPatcherTests
     [InlineData(4, 4)]
     [InlineData(5, 5)]
     [InlineData(6, 6)]
+    [InlineData(7, 7)]
+    [InlineData(8, 8)]
+    [InlineData(9, 9)]
+    [InlineData(10, 10)]
     public void Patcher_PropagatesFailureAndStops(int failingPatch, int expectedCount)
     {
         var patcher = new StubPatcher(failingPatch);
@@ -63,9 +74,9 @@ public sealed class AgentConfigPatcherTests
         var executed = 0;
         var patcher = new HistoryStub(applied, () => executed++);
         Assert.True(AgentConfigPatcher.Run(patcher));
-        Assert.Equal(6, executed);
+        Assert.Equal(10, executed);
         Assert.True(AgentConfigPatcher.Run(patcher));
-        Assert.Equal(6, executed);
+        Assert.Equal(10, executed);
     }
 
     private static void AssertColumns(string sql, params string[] columns)
