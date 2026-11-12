@@ -516,6 +516,7 @@ implemented by the existing worker, so the following must hold when the tasks ar
 | Parent is not an epic | "New Agent Stage 1" is a normal **Task** (the worker skips epics). Sub-tasks 1.1–1.7 are Jira sub-tasks, so the worker branches them off `ai-agent/<STAGE-1-KEY>`. |
 | Title | The Stage 1 task is named exactly **New Agent Stage 1** (Stages 2 and 3: "New Agent Stage 2" / "New Agent Stage 3"). |
 | Blockers | The worker skips issues with an open "is blocked by" link. Chain sub-tasks: 1.2 and 1.1 first, then 1.3, then 1.4–1.7 each blocked by 1.3. Stage 2 is blocked by Stage 1, Stage 3 by Stage 2. |
+| Stage integration | Sub-task PRs merge into `ai-agent/<STAGE-KEY>`, not the default branch, and the manager's automatic stage-to-default PR needs a stored split state that this manual process doesn't create. For each stage, once all sub-task PRs are merged, open an explicit integration PR from `ai-agent/<STAGE-KEY>` to the default branch. Mark the stage `Done` only after that PR is merged, so the next stage (blocked by it) starts from code that is already on the default branch. |
 | Manager gate | The worker only picks up issues with the manager's `ai-analyzed` label and a current stored plan. The manager must plan each sub-task first. Each sub-task description must therefore be self-contained: files or projects touched, acceptance criteria, and the test commands. |
 | Approval gates | The manager adds `ai-awaiting-approval` to tasks touching the database, architecture, Docker or deployment (1.1, 1.2, 1.3, 2.1, 3.1). Expect to approve these with `ai-approved`. Say so in those descriptions. |
 | Repo mapping | The DFAI project needs a `manager_projects` row whose repository the worker token can reach. |
@@ -529,3 +530,4 @@ implemented by the existing worker, so the following must hold when the tasks ar
 2. Add the label `ai-awaiting-approval` to DFAI-151.
 3. Do **not** create the stage tasks until `ai-approved` is present.
 4. After approval, create "New Agent Stage 1" with sub-tasks, blockers and project/repo mapping as above.
+5. When all of a stage's sub-task PRs are merged, open the stage integration PR to the default branch. Mark the stage `Done` only after that PR is merged.
