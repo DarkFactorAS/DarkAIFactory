@@ -134,7 +134,8 @@ The work is split into three stages, each with its own Jira task:
 | 20 | Metrics view | All-time and last-7-days totals, plus USD cost for Claude. Copilot shows N/A for tokens and tool calls. |
 | 21 | Stage order | Chained: Stage 1 → Stage 2 → Stage 3. All three block the parent. |
 | 22 | Releasing blocked tasks | Done by the aiAgent Jira capability. Stage 2 has to be moved by hand, because that code ships in Stage 1. |
-| – | Claiming work | MariaDB `GET_LOCK` on the issue key (the pattern copied from `JiraIssueClaimRepository`) plus aiAgent's pickup label. |
+| – | Claiming work | MariaDB `GET_LOCK` on the issue key (the pattern copied from `JiraIssueClaimRepository`) plus aiAgent's pickup label. Intake has no issue key yet, so it uses a separate `GET_LOCK` on the `agent_tasks` id (`aiagent-task-<id>`): take the lock, re-read the row and skip it unless it is still `New` with no Jira key, then create the issue and persist the Jira key and status while still holding the lock. |
+| – | Branch and PR naming | aiAgent branches use `aiagent/<KEY>-…` (never `ai-agent/`), and PR titles start with `aiagent: <KEY> …` (never with the bare key or `[KEY]`). Neither matches the `PullRequestTrackingRecovery` patterns, so `aimanager` never imports aiAgent PRs into `pull_requests` for the old review worker. |
 | – | Deleting an agent | Soft delete (`deleted_at`). Run history is kept, so all-time totals stay correct. |
 
 ---
@@ -169,7 +170,7 @@ The work is split into three stages, each with its own Jira task:
 | Service | Image target | Volumes | Networks | Secrets it can see |
 |---|---|---|---|---|
 | `aiagent` | `aiteam/aiagent/Dockerfile` target `orchestrator` | `Config:ro`, `aiagent_workspaces` | default, `aiagent-runner` | DB, Jira, GitHub repository token, Copilot token (sent per request) |
-| `aiagent-runner` | same Dockerfile, target `runner`, command `--runner-server` | `aiagent_workspaces`, `aiteam_aiagent_claude_config` | `aiagent-runner` only | Claude login (volume). The Copilot token arrives per request and is never stored |
+| `aiagent-runner` | same Dockerfile, target `runner`, command `--runner-server` | `aiagent_workspaces`, `aiteam_aiagent_claude_config` | `aiagent-runner` only | Claude login (volume), read-only `NUGET_USERNAME` / `NUGET_TOKEN` for package restore. The Copilot token arrives per request and is never stored |
 
 Both containers keep today's hardening: `cap_drop: ALL`, `no-new-privileges`,
 `init: true`, `HOME=/tmp`, and a `/health` healthcheck on the runner.
@@ -201,6 +202,10 @@ It returns `{ exitCode, output, usage?, toolCalls?, llmDurationMs }`.
   - `implement` / `review`: edits allowed, `git push` and `gh` denied.
 - **Prompt delivery:** the prompt goes in on stdin. Credentials are stripped from
   the environment just as in `ClaudeRunner.cs` and `CopilotRunner.cs`.
+- **Package feed:** the runner receives read-only `NUGET_USERNAME` / `NUGET_TOKEN`
+  (as the `claude-cli` service does today) and keeps them in the sanitized
+  build/CLI environment, so `NuGet.config` can restore `DarkFactor.Common.Lib`
+  packages. Repository-write, Jira and database credentials are still excluded.
 
 ### 3.3 Folder layout
 
@@ -242,7 +247,8 @@ public interface IAgentCapability
 1. Reload the agent row.
 2. If the agent is disabled or deleted, idle.
 3. Otherwise run each enabled capability in a fixed order: Jira → Planning → Builder → Review.
-4. Write a heartbeat to `agent_status`.
+4. **Stage 2 onwards only:** write a heartbeat to `agent_status`. Stage 1 has no
+   `agent_status` table and skips this step.
 
 ### 3.4 Database (all tables created by `dbmigration`)
 
@@ -302,7 +308,11 @@ NULL means "not available" (Copilot), which the dashboard shows as N/A.
 ### 4.3 Coexistence with the old agents
 
 aiAgent uses its own labels and tables, so the old workers ignore its issues and it
-ignores theirs. **Two overlaps remain, and they're handled by configuration:**
+ignores theirs. Labels and tables alone don't isolate PRs: `PullRequestTrackingRecovery`
+imports open PRs for `In Review` issues by branch (`ai-agent/<KEY>`) or title
+(`<KEY>` / `[<KEY>]` prefix) without checking labels. aiAgent therefore uses its own
+branch and title namespace (`aiagent/<KEY>-…`, `aiagent: <KEY> …`, see section 2) so
+neither pattern matches. **Two overlaps remain, and they're handled by configuration:**
 
 1. **The `agent_tasks` intake.** The old `jira-manager-agent` also processes
    `New` rows. Turn on aiAgent's intake (the first part of the Jira capability) only
@@ -310,9 +320,12 @@ ignores theirs. **Two overlaps remain, and they're handled by configuration:**
    intake is on.
 2. **The TechLead's projects.** `aimanager` plans every issue in
    `Selected for Development` in its mapped projects. An agent with Planning turned
-   on shouldn't share projects with a running `manager-agent`. Stage 1 checks how
-   TechLead treats issues that already have aiAgent labels, and the README documents
-   the outcome.
+   on shouldn't share projects with a running `manager-agent`. Every aiAgent project
+   must exist in `manager_projects`, and the manager loads and polls every row in
+   that table, so an aiAgent-only project is also polled by TechLead; `aiagent-*`
+   labels don't exclude it. Before turning on aiAgent Planning, either set the
+   manager's `Jira.JiraJql` to exclude the aiAgent-owned projects/issues, or stop
+   `manager-agent`. The README documents this.
 
 ### 4.4 Acceptance criteria
 
@@ -441,6 +454,13 @@ blocked task to `Selected for Development` once its blockers are `Done`.
 - **Stage 1:** move by hand when you approve the plan.
 - **Stage 2:** move by hand when Stage 1 is Done, because the capability isn't running yet.
 - **Stage 3, and the parent:** released by aiAgent automatically, if an aiAgent with the Jira capability is set up for the DFAI project.
+
+**Stage integration gate:** the sub-task PRs merge into the stage branch
+(`ai-agent/<STAGE-KEY>`). The manager's automatic stage-to-default PR needs a
+stored split state that this manual process doesn't create, so for each stage:
+open an explicit integration PR from the stage branch to the default branch once
+all sub-task PRs are merged, and mark the stage `Done` only after that PR is
+merged. The next stage is not released until then.
 
 ### Parent – aiAgent: new configurable agent (analysis and decisions)
 This plan, and the decisions in section 2.
