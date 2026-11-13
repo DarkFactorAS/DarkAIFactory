@@ -30,6 +30,12 @@ internal sealed class PullRequestCloser(
         foreach (var issue in issues)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (issue.Labels.Contains(PullRequestTrackingRecovery.PendingLabel, StringComparer.OrdinalIgnoreCase))
+            {
+                // Tracking recovery has not yet persisted every pull request URL; the stored set may be incomplete.
+                continue;
+            }
+
             try
             {
                 var records = byKey[issue.Key].ToList();
