@@ -157,7 +157,7 @@ public sealed class ReviewFixFlowTests
 
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(2, result.PushedCount);
-        Assert.Equal(["agent", "commit", "push", "resolve", "agent", "commit", "push", "resolve"], f.Calls);
+        Assert.Equal(["agent", "commit", "push", "agent", "commit", "push", "resolve", "resolve"], f.Calls);
         Assert.Equal(2, f.RefreshCount);
         Assert.Equal(
             ["DFAI-1: Null check is missing (src/A.cs:3)", "DFAI-1: Dispose the client (src/B.cs:3)"],
