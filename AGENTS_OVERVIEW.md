@@ -236,3 +236,12 @@ rules. If the target repository's `AGENTS.md` points to `.agents/skills/...`,
 for example the git skill, the coding LLM reads and follows it as ordinary
 instructions. The `create-playfield` and `unity-cli` skills are for the BOTS
 repository, not this one.
+
+## AiAgent (new agent, scaffold)
+
+`aiteam/aiagent` contains the scaffold for the replacement agent (DFAI-154, stage 1).
+Compose services: `aiagent` (orchestrator, depends on `dbmigration` and a healthy
+`aiagent-runner`) and `aiagent-runner` (`--runner-server`, `/health` on port 8080, on the
+isolated `aiagent-runner` network, with only read-only `NUGET_USERNAME`/`NUGET_TOKEN`).
+It has no workflow yet and does not replace the existing agents. See
+[aiteam/aiagent/README.md](aiteam/aiagent/README.md).

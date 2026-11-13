@@ -16,6 +16,9 @@ contains a Jira-driven coding agent and a small ASP.NET Core web application.
   (`aiteam/aireviewworker`). Review fetching, Claude Code fixes, pushes and attempt
   persistence shown below are planned, not active service behavior. See
   [the review worker README](aiteam/aireviewworker/README.md).
+- **AiAgent** — scaffold of the new agent (`aiteam/aiagent`): an orchestrator
+  (`aiagent`) and a sandbox runner (`aiagent-runner`, `--runner-server`). Stage 1
+  has no workflow yet. See [the AiAgent README](aiteam/aiagent/README.md).
 - **aidashboard** — a minimal ASP.NET Core application.
   See [the aidashboard README](aiteam/aidashboard/README.md).
 - **dbmigration** — a one-shot executable that creates and upgrades the shared
@@ -149,11 +152,11 @@ with deployment branch restrictions for `main` and `develop`, containing:
 
 The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
 DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker, AIClaudeWorker
-(`aiteam/aiclaudeworker`), AIReviewWorker (`aiteam/aireviewworker`) and AIJiraManager
+(`aiteam/aiclaudeworker`), AIReviewWorker (`aiteam/aireviewworker`), AiAgent (`aiteam/aiagent`) and AIJiraManager
 (`aiteam/aijiramanager`) using the reusable
 `infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
-order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIReviewWorker, then AIJiraManager. Deployments are serialized.
+order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIReviewWorker, then AiAgent, then AIJiraManager. Deployments are serialized.
 
 The [AI dashboard](.github/workflows/aidashboard-deploy.yml) keeps its own
 separate deployment workflow.
