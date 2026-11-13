@@ -99,7 +99,7 @@ public sealed class JiraCapabilityTests
             }));
 
     private static AgentContext Context(params string[] projects) =>
-        new(new AgentDefinition(1, "a", "r", "b", "Claude", null, true, false), projects, new NoLock());
+        new(new AgentDefinition(1, "a", "r", "b", "Claude", null, true, false), projects, new AlwaysLock());
 
     private static JiraIssue Issue(string key, string status, params JiraBlocker[] blockers) =>
         new(key, "s", "d", status) { Blockers = blockers };
@@ -289,7 +289,7 @@ public sealed class JiraCapabilityTests
         tasks.Add("DFAI");
         var repo = new FakeRepository();
         var loop = new AgentLoop(
-            1, repo, [Capability(jira, tasks, new FakePullRequests(), Config())], new NoLock(), TimeSpan.FromMilliseconds(10));
+            1, repo, [Capability(jira, tasks, new FakePullRequests(), Config())], new AlwaysLock(), TimeSpan.FromMilliseconds(10));
 
         await loop.RunCycleAsync(default);
         Assert.Empty(jira.Created);

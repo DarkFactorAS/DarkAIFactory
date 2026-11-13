@@ -69,7 +69,7 @@ parent, sub-tasks created with dependency links after approval, at most 10).
 Copied from `aiclaudeworker` (Program.cs flow, PromptBuilder). For each assigned project key it picks
 planned issues (`aiagent-analyzed`, not `aiagent-picked`), requires a posted stored plan in `agent_plans`
 whose `requirements_hash` matches the current issue, claims the issue, branches (sub-tasks branch off and
-target the parent's `ai-agent/<KEY>` branch), runs the runner in `implement` mode (with build/test commands
+target the parent's `aiagent/parent/<KEY>` branch), runs the runner in `implement` mode (with build/test commands
 from `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND`), pushes, opens the PR through `GitHubCore`
 (recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
 `aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is

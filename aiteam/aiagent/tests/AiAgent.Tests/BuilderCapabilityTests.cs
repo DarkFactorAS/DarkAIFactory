@@ -219,7 +219,7 @@ public sealed class BuilderCapabilityTests : IDisposable
         var runner = new FakeRunner();
         var (capability, _) = Create(jira, CurrentPlan(issue), runner);
         await capability.RunCycleAsync(Context(), default);
-        Assert.Contains("ai-agent/DFAI-154", runner.Requests[0].Prompt);
+        Assert.Contains("aiagent/parent/DFAI-154", runner.Requests[0].Prompt);
     }
 
     [Fact]

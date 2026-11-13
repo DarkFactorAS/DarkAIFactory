@@ -297,7 +297,7 @@ public sealed class PlanningTests
         Assert.Contains("aiagent-analyzed", f.Jira.Issues[a.Key].Labels);
         Assert.DoesNotContain("aiagent-analyzed", f.Jira.Issues[b.Key].Labels);
         Assert.StartsWith("[triage:dependency_hold]", f.Plans.Plans[b.Key].Plan);
-        Assert.Contains("ai-agent/DFAI-1", a.Description);
+        Assert.Contains("aiagent/parent/DFAI-1", a.Description);
     }
 
     [Fact]
