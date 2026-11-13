@@ -9,6 +9,8 @@ namespace ManagerAgent;
 
 internal sealed class JiraClient : IDisposable
 {
+    public const string TaskCorrelationLabelPrefix = "manager-task-correlation-";
+
     private readonly AgentConfiguration _configuration;
     private readonly HttpClient _httpClient;
 
@@ -76,6 +78,22 @@ internal sealed class JiraClient : IDisposable
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         return ReadIssue(document.RootElement);
+    }
+
+    public async Task<string?> FindTaskByCorrelationIdAsync(
+        string projectKey, string correlationId, CancellationToken cancellationToken)
+    {
+        var label = TaskCorrelationLabelPrefix + correlationId;
+        var jql =
+            $"project = \"{AiTeam.Configuration.JiraQuery.EscapeJql(projectKey)}\" " +
+            $"AND labels = \"{AiTeam.Configuration.JiraQuery.EscapeJql(label)}\"";
+        var matches = await SearchAsync(jql, cancellationToken);
+        return matches.Count switch
+        {
+            0 => null,
+            1 => matches[0].Key,
+            _ => throw new InvalidDataException($"Multiple Jira tasks have correlation label \"{label}\".")
+        };
     }
 
     public async Task<IReadOnlyList<string>> GetCommentsAsync(string issueKey, CancellationToken cancellationToken)
@@ -231,14 +249,15 @@ internal sealed class JiraClient : IDisposable
 
     /// <summary>Creates a top-level issue of <see cref="AgentConfiguration.TaskIssueType"/> in the project.</summary>
     public Task<string> CreateTaskAsync(
-        string projectKey, string summary, string description, CancellationToken cancellationToken)
+        string projectKey, string summary, string description, string correlationId, CancellationToken cancellationToken)
     {
         var fields = new JsonObject
         {
             ["project"] = new JsonObject { ["key"] = projectKey },
             ["issuetype"] = new JsonObject { ["name"] = _configuration.TaskIssueType },
             ["summary"] = summary,
-            ["description"] = CreateAdfDocument(description)
+            ["description"] = CreateAdfDocument(description),
+            ["labels"] = new JsonArray(JsonValue.Create(TaskCorrelationLabelPrefix + correlationId))
         };
         return CreateIssueAsync(fields, "task", cancellationToken);
     }

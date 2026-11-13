@@ -355,6 +355,109 @@ public sealed class ManagerPlannerSplitTests
         Assert.Equal("Done", handler.GetIssue("TASK-1").StatusName);
     }
 
+    [Fact]
+    public async Task PlanAsync_ReconcilesTaskWhenCreateResponseIsLost()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler { LoseCreateResponseAttempt = 1 };
+        using var jira = new JiraClient(Configuration, handler);
+        var generated = 0;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            generated++;
+            return Task.FromResult(CreateTasksJson);
+        });
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+
+        Assert.Single(handler.CreatedKeys);
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal(1, generated);
+        Assert.Equal(3, handler.CreatedKeys.Count);
+        Assert.Equal(["Report API", "Report page", "Report docs"],
+            handler.CreatedKeys.Select(key => handler.GetIssue(key).Summary));
+    }
+
+    [Fact]
+    public async Task PlanAsync_DoesNotReplaceStaleTaskStateAfterCreatingTasks()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler { FailCreateAttempt = 2 };
+        using var jira = new JiraClient(Configuration, handler);
+        var generated = 0;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            generated++;
+            return Task.FromResult(CreateTasksJson);
+        });
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+        handler.SetDescription("TASK-1", "Changed source description");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+
+        Assert.Equal(1, generated);
+        Assert.Single(handler.CreatedKeys);
+        Assert.StartsWith("[triage:create_tasks]", new ManagerPlanRepository(database).Find("TASK-1")!.Plan);
+    }
+
+    [Fact]
+    public async Task PlanAsync_RetriesMissingDependencyLinksBeforeCompletingSource()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler { FailNextLink = true };
+        using var jira = new JiraClient(Configuration, handler);
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => Task.FromResult(CreateTasksJson));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+
+        Assert.Equal("Selected for Development", handler.GetIssue("TASK-1").StatusName);
+        Assert.Empty(handler.Links);
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Single(handler.Links);
+        Assert.Equal((handler.CreatedKeys[0], handler.CreatedKeys[1]), handler.Links[0]);
+        Assert.Equal("Done", handler.GetIssue("TASK-1").StatusName);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SplitsLongTaskCompletionCommentAndMarksPostedAfterAllParts()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler { FailParentCommentAttempt = 2 };
+        using var jira = new JiraClient(Configuration, handler);
+        var longPlan = new string('p', 50_000);
+        var output = $$"""
+            {"decision":"create_tasks","plan":"{{longPlan}}","tasks":[
+              {"title":"Report API","description":"Add the report endpoint","dependsOn":[]},
+              {"title":"Report page","description":"Show the report","dependsOn":["Report API"]},
+              {"title":"Report docs","description":"Document the report","dependsOn":[]}]}
+            """;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira,
+            (_, _) => Task.FromResult(output));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+
+        Assert.False(new ManagerPlanRepository(database).Find("TASK-1")!.PostedToJira);
+        Assert.Single(handler.Comments["TASK-1"]);
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.True(new ManagerPlanRepository(database).Find("TASK-1")!.PostedToJira);
+        Assert.Equal(4, handler.Comments["TASK-1"].Count);
+        var completedComments = handler.Comments["TASK-1"].Skip(1);
+        Assert.Contains(longPlan, string.Concat(completedComments.Select(comment =>
+            comment[(comment.IndexOf('\n') + 1)..])));
+        Assert.All(handler.Comments["TASK-1"], comment => Assert.True(comment.Length < 25_000));
+    }
+
     private static DatabaseStub CreateDatabase()
     {
         var database = new DatabaseStub();
@@ -433,12 +536,19 @@ public sealed class ManagerPlannerSplitTests
         public int? FailCreateAttempt { get; set; }
         public List<(string Blocker, string Blocked)> Links { get; } = [];
         public bool FailNextParentComment { get; set; }
+        public int? FailParentCommentAttempt { get; set; }
+        public bool FailNextLink { get; set; }
+        public int? LoseCreateResponseAttempt { get; set; }
         public Dictionary<string, List<string>> Comments { get; } = [];
+        private int _parentCommentAttempts;
 
         public JiraIssue GetIssue(string key) => _issues[key];
 
         public void SetStatus(string key, string status) =>
             _issues[key] = _issues[key] with { StatusName = status };
+
+        public void SetDescription(string key, string description) =>
+            _issues[key] = _issues[key] with { Description = description };
 
         public void SetBlockers(string key, params JiraBlocker[] blockers) =>
             _issues[key] = _issues[key] with { Blockers = blockers };
@@ -450,6 +560,20 @@ public sealed class ManagerPlannerSplitTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path == "/rest/api/3/search/jql")
+            {
+                var query = Uri.UnescapeDataString(request.RequestUri.Query);
+                var label = query.Split("labels = \"", StringSplitOptions.None)[1].Split('"')[0];
+                var matchingIssues = new List<JsonElement>();
+                foreach (var issue in _issues.Values.Where(issue => issue.Labels.Contains(label)))
+                {
+                    using var document = JsonDocument.Parse(SerializeIssue(issue));
+                    matchingIssues.Add(document.RootElement.Clone());
+                }
+
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { issues = matchingIssues }));
+            }
+
             if (request.Method == HttpMethod.Get && path.EndsWith("/comment", StringComparison.Ordinal))
             {
                 var comments = Comments.GetValueOrDefault(IssueKey(path), []);
@@ -487,7 +611,8 @@ public sealed class ManagerPlannerSplitTests
 
             if (request.Method == HttpMethod.Post && path == "/rest/api/3/issue")
             {
-                if (FailCreateAttempt == ++_createAttempts)
+                var attempt = ++_createAttempts;
+                if (FailCreateAttempt == attempt)
                 {
                     return Json(HttpStatusCode.InternalServerError, "{}");
                 }
@@ -501,25 +626,43 @@ public sealed class ManagerPlannerSplitTests
                 var description = ReadAdfText(fields.GetProperty("description"));
                 _issues[key] = new JiraIssue(key, title, description, status)
                 {
-                    UpdatedAt = "2026-11-02T13:00:00Z"
+                    UpdatedAt = "2026-11-02T13:00:00Z",
+                    Labels = fields.TryGetProperty("labels", out var labels)
+                        ? labels.EnumerateArray().Select(label => label.GetString()!).ToArray()
+                        : []
                 };
                 CreatedKeys.Add(key);
+                if (LoseCreateResponseAttempt == attempt)
+                {
+                    return Json(HttpStatusCode.InternalServerError, "{}");
+                }
+
                 return Json(HttpStatusCode.Created, JsonSerializer.Serialize(new { key }));
             }
 
             if (request.Method == HttpMethod.Post && path.EndsWith("/issueLink", StringComparison.Ordinal))
             {
+                if (FailNextLink)
+                {
+                    FailNextLink = false;
+                    return Json(HttpStatusCode.InternalServerError, "{}");
+                }
+
                 using var link = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
-                Links.Add((
-                    link.RootElement.GetProperty("inwardIssue").GetProperty("key").GetString()!,
-                    link.RootElement.GetProperty("outwardIssue").GetProperty("key").GetString()!));
+                var blocker = link.RootElement.GetProperty("inwardIssue").GetProperty("key").GetString()!;
+                var blocked = link.RootElement.GetProperty("outwardIssue").GetProperty("key").GetString()!;
+                Links.Add((blocker, blocked));
+                var blockers = _issues[blocked].Blockers.Append(
+                    new JiraBlocker(blocker, _issues[blocker].StatusName)).ToArray();
+                _issues[blocked] = _issues[blocked] with { Blockers = blockers };
                 return Json(HttpStatusCode.NoContent, "{}");
             }
 
             var issueKey = IssueKey(path);
             if (request.Method == HttpMethod.Post && path.EndsWith("/comment", StringComparison.Ordinal))
             {
-                if (issueKey == "TASK-1" && FailNextParentComment)
+                if (issueKey == "TASK-1" &&
+                    (FailNextParentComment || FailParentCommentAttempt == ++_parentCommentAttempts))
                 {
                     FailNextParentComment = false;
                     return Json(HttpStatusCode.InternalServerError, "{}");
