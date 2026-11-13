@@ -49,6 +49,11 @@ internal static class ReviewCycleRunner
             LogScan(cycle, pullRequest, configuration.ReviewerLogin, scan);
             if (comments.Count == 0)
             {
+                if (IsReadyToMerge(scan.OpenComments, 0))
+                {
+                    LogReadyToMerge(cycle, pullRequest);
+                }
+
                 continue;
             }
 
@@ -57,13 +62,30 @@ internal static class ReviewCycleRunner
                 Log($"Cycle {cycle}:   comment {comment.Id} at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
             }
 
-            await FixPullRequestAsync(cycle, configuration, fixOptions, client, attempts, pullRequest, comments, cancellationToken);
+            var failedCount = await FixPullRequestAsync(cycle, configuration, fixOptions, client, attempts, pullRequest, comments, cancellationToken);
+            if (failedCount == 0)
+            {
+                var rescan = await client.ScanCommentsAsync(pullRequest, cancellationToken);
+                if (IsReadyToMerge(rescan.OpenComments, 0))
+                {
+                    LogReadyToMerge(cycle, pullRequest);
+                }
+            }
         }
 
         Log($"Cycle {cycle}: {total} actionable comment(s) across {open.Count} open pull request(s).");
     }
 
-    private static async Task FixPullRequestAsync(
+    /// <summary>A pull request is ready to merge when no review thread is unresolved and no fix failed.</summary>
+    internal static bool IsReadyToMerge(int openComments, int failedCount) =>
+        openComments == 0 && failedCount == 0;
+
+    private static void LogReadyToMerge(long cycle, TrackedPullRequest pullRequest) =>
+        Log($"Cycle {cycle}: PR #{pullRequest.Number} ({pullRequest.JiraKey}) is ready to be merged: " +
+            "all review comments are resolved.");
+
+    /// <summary>Returns the failed count, or null when the run did not complete (head moved, branch mismatch, abandoned).</summary>
+    private static async Task<int?> FixPullRequestAsync(
         long cycle,
         AgentConfiguration configuration,
         FixOptions fixOptions,
@@ -73,11 +95,12 @@ internal static class ReviewCycleRunner
         IReadOnlyList<ReviewComment> comments,
         CancellationToken cancellationToken)
     {
+        int? completedFailedCount = null;
         var (branch, headSha) = await client.GetHeadAsync(pullRequest, cancellationToken);
         if (comments.Any(comment => !string.Equals(comment.HeadSha, headSha, StringComparison.OrdinalIgnoreCase)))
         {
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: head moved while reading comments; retrying next cycle.");
-            return;
+            return null;
         }
 
         var git = new ProcessGit(configuration.GitHubRepositoryToken);
@@ -92,7 +115,7 @@ internal static class ReviewCycleRunner
             {
                 Log($"Cycle {cycle}: PR #{pullRequest.Number}: branch is at {Short(revision)}, " +
                     $"expected {Short(headSha)}; retrying next cycle.");
-                return;
+                return null;
             }
 
             using var runner = new SandboxRunnerClient(configuration.AgentModel, configuration.RunnerTimeout);
@@ -102,6 +125,7 @@ internal static class ReviewCycleRunner
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix run finished with {result.Outcome}; " +
                 $"{result.PushedCount} pushed, {result.FailedCount} failed" +
                 (result.Error is null ? "." : $". Last error: {result.Error}"));
+            completedFailedCount = result.FailedCount;
         }
         catch (SandboxWorkspaceAbandonedException exception)
         {
@@ -128,6 +152,8 @@ internal static class ReviewCycleRunner
                 }
             }
         }
+
+        return completedFailedCount;
     }
 
     private static void LogScan(long cycle, TrackedPullRequest pullRequest, string reviewerLogin, ReviewCommentScan scan)

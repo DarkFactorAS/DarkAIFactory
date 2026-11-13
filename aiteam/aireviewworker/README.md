@@ -21,7 +21,8 @@ Agent that solves pull-request review comments (DFAI-137). Every polling cycle i
    `MaxAttemptsPerPullRequest` times. A sandbox timeout (`RunnerTimeoutMinutes`) counts as a failed
    attempt; a worker shutdown during a run records `Cancelled by worker shutdown.` and does not count.
 
-Each step is logged with the cycle number.
+Each step is logged with the cycle number. When a pull request has no unresolved review threads (and no
+fix failed), a `... is ready to be merged` line is logged.
 
 ## Configuration
 
