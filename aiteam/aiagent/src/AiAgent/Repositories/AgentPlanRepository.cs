@@ -26,7 +26,8 @@ public sealed class AgentPlanRepository(IDbConnectionFactory connectionFactory)
         using var command = connectionFactory.CreateCommand(
             "INSERT INTO `agent_plans` (`agent_id`, `manager_project_id`, `jira_key`, `plan`, `posted_to_jira`) " +
             "VALUES (@agent_id, @project_id, @jira_key, @plan, @posted) " +
-            "ON DUPLICATE KEY UPDATE `plan` = VALUES(`plan`), `posted_to_jira` = VALUES(`posted_to_jira`)");
+            "ON DUPLICATE KEY UPDATE `manager_project_id` = VALUES(`manager_project_id`), " +
+            "`plan` = VALUES(`plan`), `posted_to_jira` = VALUES(`posted_to_jira`)");
         command.AddParameter("@agent_id", plan.AgentId);
         command.AddParameter("@project_id", plan.ManagerProjectId);
         command.AddParameter("@jira_key", plan.JiraKey);
