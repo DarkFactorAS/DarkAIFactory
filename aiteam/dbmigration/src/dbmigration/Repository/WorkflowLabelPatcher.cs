@@ -75,7 +75,10 @@ public static class WorkflowLabelPatcher
             return false;
         }
 
-        // The configurable aiAgent uses its own aiagent-* labels so the old agents ignore its issues.
+        // The configurable aiAgent uses its own aiagent-* labels so the old workers ignore its issues.
+        // The labels do not isolate it from aimanager, which plans every Selected for Development
+        // issue in its mapped projects; an aiAgent with Planning on must not share projects with a
+        // running manager-agent (see docs/aiagent-plan.md section 4.3).
         patcher.Patch(system, 5,
             """
             INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`) VALUES
