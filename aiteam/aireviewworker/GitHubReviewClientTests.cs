@@ -87,7 +87,7 @@ public sealed class GitHubReviewClientTests
             .ToJsonString();
 
     private static (GitHubReviewClient Client, DatabaseStub Db) Create(
-        Handler handler, Action<DatabaseStub>? setup = null)
+        Handler handler, Action<DatabaseStub>? setup = null, long[]? failedIds = null)
     {
         var db = new DatabaseStub();
         db.OnReader = command =>
@@ -102,7 +102,7 @@ public sealed class GitHubReviewClientTests
                     table.Rows.Add(id, "Resolved");
                 }
 
-                foreach (var id in FailedIds ?? [])
+                foreach (var id in failedIds ?? [])
                 {
                     table.Rows.Add(id, "Failed");
                 }
@@ -126,7 +126,6 @@ public sealed class GitHubReviewClientTests
     }
 
     [ThreadStatic] private static long[] HandledIds = [];
-    [ThreadStatic] private static long[] FailedIds = [];
 
     [Fact]
     public async Task GetHeadReturnsBranchAndSha()
@@ -146,7 +145,6 @@ public sealed class GitHubReviewClientTests
     public async Task FiltersByReviewerResolvedOutdatedAndHandled()
     {
         HandledIds = [14];
-        FailedIds = [];
         var handler = new Handler(_ => Page("OPEN",
             string.Join(",",
                 Thread(10, "Copilot"), Thread(11, "someone"), Thread(12, "Copilot", resolved: true),
@@ -185,9 +183,8 @@ public sealed class GitHubReviewClientTests
     public async Task ScanCountsFailedCommentsSeparatelyFromHandled()
     {
         HandledIds = [14];
-        FailedIds = [10];
         var handler = new Handler(_ => Page("OPEN", string.Join(",", Thread(10, "Copilot"), Thread(14, "Copilot"))));
-        var (client, _) = Create(handler);
+        var (client, _) = Create(handler, failedIds: [10]);
 
         var scan = await client.ScanCommentsAsync(Pr, default);
 
