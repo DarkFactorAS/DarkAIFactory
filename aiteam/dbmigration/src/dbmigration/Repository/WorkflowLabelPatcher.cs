@@ -70,6 +70,22 @@ public static class WorkflowLabelPatcher
             ) AS `source`
             ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // The configurable aiAgent uses its own aiagent-* labels so the old agents ignore its issues.
+        patcher.Patch(system, 5,
+            """
+            INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`) VALUES
+                ('aiagent', 'PickupLabel', 'aiagent-picked', 'Added by aiAgent when it picks up a Jira issue, to avoid repeated pickup.'),
+                ('aiagent', 'FailureLabel', 'aiagent-failed', 'Added by aiAgent when processing a Jira issue fails; issues with this label are excluded from polling.'),
+                ('aiagent', 'AnalyzedLabel', 'aiagent-analyzed', 'Added by the aiAgent Planning capability once the plan is posted; the Builder capability only processes issues that have it.'),
+                ('aiagent', 'PlannedLabel', 'aiagent-planned', 'Added by aiAgent to a Jira issue once it has been planned, so it is not planned again.'),
+                ('aiagent', 'IgnoredLabel', 'aiagent-ignored', 'Added by a human to make aiAgent skip a Jira issue.')
+            ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
+            """);
         return patcher.Successful();
     }
 }

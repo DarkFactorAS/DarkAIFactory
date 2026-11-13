@@ -96,8 +96,20 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
+            ("WorkflowLabels", 5),
             ("AgentTasks", 1),
-            ("ReviewCommentAttempts", 1)]);
+            ("ReviewCommentAttempts", 1),
+            
+            ("AgentTables", 1),
+            ("AgentTables", 2),
+            ("AgentTables", 3),
+            ("AgentTables", 4),
+            ("AgentTables", 5),
+            ("AgentTables", 6),
+            ("AgentTables", 7),
+            ("AgentTables", 8),
+            ("AgentTables", 9),
+            ("AgentTables", 10)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -148,7 +160,7 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.True(WorkflowLabelPatcher.Run(patcher));
 
         Assert.Equal("WorkflowLabels", patcher.System);
-        Assert.Equal(4, patcher.Sql.Count);
+        Assert.Equal(5, patcher.Sql.Count);
         Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", patcher.Sql[0]);
         var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aidashboard)', '([^']+)', '([^']+)', '")
             .ToDictionary(match => (match.Groups[1].Value, match.Groups[2].Value), match => match.Groups[3].Value);
@@ -208,8 +220,20 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
+            ("WorkflowLabels", 5),
             ("AgentTasks", 1),
-            ("ReviewCommentAttempts", 1)], patcher.Executed);
+            ("ReviewCommentAttempts", 1),
+            
+            ("AgentTables", 1),
+            ("AgentTables", 2),
+            ("AgentTables", 3),
+            ("AgentTables", 4),
+            ("AgentTables", 5),
+            ("AgentTables", 6),
+            ("AgentTables", 7),
+            ("AgentTables", 8),
+            ("AgentTables", 9),
+            ("AgentTables", 10)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -231,8 +255,20 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
             ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
+            ("WorkflowLabels", 5),
             ("AgentTasks", 1),
-            ("ReviewCommentAttempts", 1)], patcher.Executed);
+            ("ReviewCommentAttempts", 1),
+            
+            ("AgentTables", 1),
+            ("AgentTables", 2),
+            ("AgentTables", 3),
+            ("AgentTables", 4),
+            ("AgentTables", 5),
+            ("AgentTables", 6),
+            ("AgentTables", 7),
+            ("AgentTables", 8),
+            ("AgentTables", 9),
+            ("AgentTables", 10)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
