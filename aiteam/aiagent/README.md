@@ -48,3 +48,14 @@ parent, sub-tasks created with dependency links after approval, at most 10).
 > **Warning:** Planning must not share projects with a running manager-agent. aimanager plans every
 > Selected-for-Development issue of its mapped projects regardless of the `aiagent-*` labels, so both would plan
 > the same issues. Either set the manager `Jira.JiraJql` to exclude the aiAgent projects, or stop manager-agent.
+
+## Builder capability (`Capabilities/Builder`)
+
+Copied from `aiclaudeworker` (Program.cs flow, PromptBuilder). For each assigned project key it picks
+planned issues (`aiagent-analyzed`, not `aiagent-picked`), requires a posted stored plan in `agent_plans`
+whose `requirements_hash` matches the current issue, claims the issue, branches (sub-tasks branch off and
+target the parent's `ai-agent/<KEY>` branch), runs the runner in `implement` mode (with build/test commands
+from `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND`), pushes, opens the PR through `GitHubCore`
+(recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
+`aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is
+generated (fallback). Settings are read from the `aiagent` client and the `aiagent` workflow labels.

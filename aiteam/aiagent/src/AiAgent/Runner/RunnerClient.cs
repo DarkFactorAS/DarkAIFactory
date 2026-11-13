@@ -4,7 +4,12 @@ using System.Net.Http.Json;
 namespace AiAgent.Runner;
 
 /// <summary>Orchestrator-side client for the runner container.</summary>
-public sealed class RunnerClient : IDisposable
+public interface IRunnerClient
+{
+    Task<RunnerResponse> RunAsync(RunnerRequest request, CancellationToken cancellationToken);
+}
+
+public sealed class RunnerClient : IRunnerClient, IDisposable
 {
     private readonly HttpClient _httpClient;
 

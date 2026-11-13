@@ -1,5 +1,7 @@
+using AiAgent.Capabilities.Builder;
 using AiAgent.Capabilities.Planning;
 using AiAgent.Core;
+using AiAgent.GitHub;
 using AiAgent.Providers;
 using AiAgent.Repositories;
 using AiAgent.Runner;
@@ -21,6 +23,22 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddSingleton<IAgentCapability>(services =>
+{
+    var factory = services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
+    var pullRequests = new AgentPullRequestRepository(factory);
+    return new BuilderCapability(
+        () => BuilderSettings.Load(
+            new IntegrationSettingsRepository(factory).Load("aiagent"),
+            new WorkflowLabelRepository(factory).Load("aiagent")),
+        () => new ManagerProjectRepository(factory).GetProjects(),
+        new AgentPlanRepository(factory),
+        settings => new BuilderJiraClient(settings),
+        (url, settings) => new GitHubCore(
+            new GitRunner(settings.GitHubRepositoryToken), url, settings.GitHubRepositoryToken, pullRequests),
+        new RunnerClient(),
+        RunnerPolicy.WorkspaceRoot);
+});
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
@@ -43,7 +61,7 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
-// Capabilities: Planning is registered here; Jira, Builder and Review follow in later sub-tasks.
+// Builder is registered above and Planning is registered below; Jira and Review follow in later sub-tasks.
 var connectionFactory = host.Services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
 using var runnerClient = new RunnerClient();
 var capabilities = host.Services.GetServices<IAgentCapability>().Append(new PlanningCapability(
