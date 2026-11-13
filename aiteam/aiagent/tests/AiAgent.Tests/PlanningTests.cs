@@ -18,7 +18,7 @@ internal sealed class FakePlanRepository : IAgentPlanRepository
         Plans[jiraKey] = Plans[jiraKey] with { ManagerProjectId = managerProjectId };
 }
 
-internal sealed class FakeJira : IPlanningJira
+internal sealed class FakePlanningJira : IPlanningJira
 {
     public Dictionary<string, JiraIssue> Issues { get; } = [];
     public Dictionary<string, List<string>> Comments { get; } = [];
@@ -141,7 +141,7 @@ public sealed class PlanningTests
 
     private sealed class Fixture
     {
-        public FakeJira Jira { get; } = new();
+        public FakePlanningJira Jira { get; } = new();
         public FakePlanRepository Plans { get; } = new();
         public FakePlanningRunner Runner { get; }
         public PlanningCapability Capability { get; }
