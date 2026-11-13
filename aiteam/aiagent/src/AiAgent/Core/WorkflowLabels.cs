@@ -14,6 +14,12 @@ public sealed class WorkflowLabels
 
     public string AgentName { get; }
 
+    /// <summary>Returns the configured label or <paramref name="defaultLabel"/> when none is configured.</summary>
+    public string GetOrDefault(string codeKey, string defaultLabel) =>
+        _labels.TryGetValue(codeKey, out var label) && !string.IsNullOrWhiteSpace(label)
+            ? label.Trim()
+            : defaultLabel;
+
     public string Get(string codeKey) =>
         _labels.TryGetValue(codeKey, out var label) && !string.IsNullOrWhiteSpace(label)
             ? label.Trim()
