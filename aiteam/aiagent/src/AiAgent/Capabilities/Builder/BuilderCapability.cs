@@ -371,9 +371,11 @@ internal sealed class BuilderCapability(
         BuilderSettings settings, IBuilderJira jira, BuilderIssue issue, bool inProgressCompleted,
         CancellationToken cancellationToken)
     {
+        var labelRemoved = false;
         try
         {
             await jira.RemoveLabelAsync(issue.Key, settings.PickupLabel, cancellationToken);
+            labelRemoved = true;
             if (inProgressCompleted && issue.StatusName.Length > 0 &&
                 !string.Equals(issue.StatusName, settings.InProgressStatus, StringComparison.OrdinalIgnoreCase))
             {
@@ -383,6 +385,29 @@ internal sealed class BuilderCapability(
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Could not release {issue.Key}: {exception.Message}");
+            if (!labelRemoved)
+            {
+                return;
+            }
+
+            // The pickup label is gone but the status was not restored, so the issue would no longer match the
+            // pickup query and would be silently stranded. Mark it failed and explain how to recover.
+            try
+            {
+                await jira.AddLabelAsync(issue.Key, settings.FailureLabel, cancellationToken);
+                await jira.AddCommentAsync(
+                    issue.Key,
+                    $"aiAgent could not finish releasing this issue: {PromptBuilder.LimitForComment(exception.Message)}\n\n" +
+                    $"The `{settings.PickupLabel}` label was removed, but the issue may still be in \"{settings.InProgressStatus}\". " +
+                    $"Move it back to \"{issue.StatusName}\" and remove the `{settings.FailureLabel}` label to allow it to be picked up again.",
+                    cancellationToken);
+            }
+            catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
+            {
+                DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+                    $"Could not report the incomplete release of {issue.Key} to Jira: {notificationException.Message}. " +
+                    $"Move it back to {issue.StatusName} manually.");
+            }
         }
     }
 
