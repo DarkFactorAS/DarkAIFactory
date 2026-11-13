@@ -91,19 +91,36 @@ internal static class RunnerServer
                     RunnerPolicy.ComposePrompt(request),
                     cancellationToken);
                 var elapsed = stopwatch.ElapsedMilliseconds;
-                if (!claude)
+                var exitCode = result.ExitCode;
+                string output;
+                RunnerUsage? usage = null;
+                var duration = elapsed;
+                if (claude)
                 {
-                    return Results.Json(new RunnerResponse(
-                        result.ExitCode, Combine(result), null, null, elapsed));
+                    (var parsed, usage, duration) = RunnerPolicy.ParseClaudeJson(result.Output, elapsed);
+                    output = exitCode == 0 ? parsed : Combine(result);
+                }
+                else
+                {
+                    output = Combine(result);
                 }
 
-                var (output, usage, duration) = RunnerPolicy.ParseClaudeJson(result.Output, elapsed);
-                return Results.Json(new RunnerResponse(
-                    result.ExitCode,
-                    result.ExitCode == 0 ? output : Combine(result),
-                    usage,
-                    null,
-                    duration));
+                // The model's exit code alone does not prove the change builds and passes tests,
+                // so the runner verifies it itself before the builder is allowed to commit.
+                if (exitCode == 0 && request.Mode != RunnerModes.Plan)
+                {
+                    var validationEnvironment = new Dictionary<string, string?>(environment);
+                    validationEnvironment.Remove("GH_TOKEN");
+                    var failure = await ValidateAsync(
+                        executor, request, workspace, validationEnvironment, cancellationToken);
+                    if (failure is not null)
+                    {
+                        exitCode = failure.Value.ExitCode;
+                        output = $"{output}\n\n{failure.Value.Message}".Trim();
+                    }
+                }
+
+                return Results.Json(new RunnerResponse(exitCode, output, usage, null, duration));
             }
             finally
             {
@@ -114,6 +131,32 @@ internal static class RunnerServer
     }
 
     public static Task RunAsync() => Build().RunAsync();
+
+    /// <summary>Runs the configured build and test commands; returns the first failure, if any.</summary>
+    private static async Task<(int ExitCode, string Message)?> ValidateAsync(
+        ProcessExecutor executor,
+        RunnerRequest request,
+        string workspace,
+        IDictionary<string, string?> environment,
+        CancellationToken cancellationToken)
+    {
+        foreach (var (name, command) in new[] { ("Build", request.BuildCommand), ("Test", request.TestCommand) })
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                continue;
+            }
+
+            var result = await executor("/bin/sh", ["-c", command], workspace, environment, string.Empty, cancellationToken);
+            if (result.ExitCode != 0)
+            {
+                var details = $"{result.Output}\n{result.Error}".Trim();
+                return (result.ExitCode, $"{name} command failed (exit code {result.ExitCode}): {command}\n{details}".Trim());
+            }
+        }
+
+        return null;
+    }
 
     private static string Combine(ProcessResult result) =>
         result.ExitCode == 0 || result.Error.Length == 0 ? result.Output : $"{result.Output}\n{result.Error}".Trim();
