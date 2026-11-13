@@ -40,7 +40,8 @@ public sealed partial class GitHubCore(
     public async Task<string> CloneAndBranchAsync(
         string checkoutPath, string issueKey, string summary, string? baseBranch, CancellationToken cancellationToken)
     {
-        var parent = Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(checkoutPath))!).FullName;
+        checkoutPath = Path.GetFullPath(checkoutPath);
+        var parent = Directory.CreateDirectory(Path.GetDirectoryName(checkoutPath)!).FullName;
         await git.RunAsync(
             parent,
             ["clone", "--quiet", "--recurse-submodules", "--", repositoryUrl.AbsoluteUri, checkoutPath],
