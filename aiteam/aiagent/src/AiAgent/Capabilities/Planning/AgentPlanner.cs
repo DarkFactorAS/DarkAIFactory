@@ -215,6 +215,14 @@ internal sealed class AgentPlanner(
                 approvalRequired = true;
             }
 
+            if (!configuration.AutoApproveSmallChanges && !approvalRequired)
+            {
+                plan = ManagerPlanMarker(TriageDecision.NeedsApproval, plan);
+                await jira.AddLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
+                hasApprovalLabel = true;
+                newlyHeld = true;
+                approvalRequired = true;
+            }
             plans.Save(projectId, issue.Key, plan, requirementsHash, issue.UpdatedAt);
             storedPlan = new ManagerPlan(plan, false, requirementsHash, issue.UpdatedAt);
         }
