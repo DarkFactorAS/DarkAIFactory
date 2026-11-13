@@ -418,17 +418,38 @@ internal sealed class BuilderCapability(
             return;
         }
 
+        DeleteDirectory(workspacePath, "temporary workspace");
+        // GitRunner keeps the trusted Git metadata outside the workspace; remove it together with the
+        // workspace so per-job object databases do not accumulate. Retained workspaces keep theirs.
+        DeleteDirectory(GitMetadataDirectoryFor(workspacePath), "Git metadata for workspace " + workspacePath);
+    }
+
+    private static void DeleteDirectory(string path, string description)
+    {
         try
         {
-            if (Directory.Exists(workspacePath))
+            if (Directory.Exists(path))
             {
-                Directory.Delete(workspacePath, recursive: true);
+                Directory.Delete(path, recursive: true);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Could not remove temporary workspace {workspacePath}: {exception.Message}");
+            DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Could not remove {description} at {path}: {exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// Mirrors the default metadata location used by <see cref="GitRunner"/> (the GitRunner the builder is
+    /// wired with in Program.cs uses the default metadata root). Keep in sync with GitRunner.MetadataDirectoryFor.
+    /// </summary>
+    internal static string GitMetadataDirectoryFor(string checkoutPath)
+    {
+        var normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(checkoutPath));
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalized)))[..32]
+            .ToLowerInvariant();
+        return Path.Combine(Path.GetFullPath(Path.Combine(Path.GetTempPath(), "aiagent-git-metadata")), hash);
     }
 
     private static async Task ReportFailureAsync(
