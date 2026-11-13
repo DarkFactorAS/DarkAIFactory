@@ -1,4 +1,8 @@
+using AiAgent.Capabilities.Builder;
+using AiAgent.Capabilities.Planning;
 using AiAgent.Core;
+using AiAgent.GitHub;
+using AiAgent.Providers;
 using AiAgent.Repositories;
 using AiAgent.Runner;
 using DFCommonLib.Config;
@@ -19,6 +23,22 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddSingleton<IAgentCapability>(services =>
+{
+    var factory = services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
+    var pullRequests = new AgentPullRequestRepository(factory);
+    return new BuilderCapability(
+        () => BuilderSettings.Load(
+            new IntegrationSettingsRepository(factory).Load("aiagent"),
+            new WorkflowLabelRepository(factory).Load("aiagent")),
+        () => new ManagerProjectRepository(factory).GetProjects(),
+        new AgentPlanRepository(factory),
+        settings => new BuilderJiraClient(settings),
+        (url, settings) => new GitHubCore(
+            new GitRunner(settings.GitHubRepositoryToken), url, settings.GitHubRepositoryToken, pullRequests),
+        new RunnerClient(),
+        RunnerPolicy.WorkspaceRoot);
+});
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
     ?? throw new InvalidOperationException("Expected typed agent JSON settings.");
@@ -41,11 +61,19 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
-// Capabilities (Jira, Planning, Builder, Review) are registered by later sub-tasks.
+// Builder is registered above and Planning is registered below; Jira and Review follow in later sub-tasks.
 var connectionFactory = host.Services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
+using var runnerClient = new RunnerClient();
+var capabilities = host.Services.GetServices<IAgentCapability>().Append(new PlanningCapability(
+    () => new IntegrationSettingsRepository(connectionFactory).Load("aiagent", appSettings.PollIntervalSeconds),
+    () => new WorkflowLabelRepository(connectionFactory).Load(PlanningCapability.AgentName),
+    () => new ManagerProjectRepository(connectionFactory).GetProjects(),
+    new AgentPlanRepository(connectionFactory),
+    settings => new JiraClient(settings.Jira),
+    new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory))));
 var agentHost = new AgentHost(
     new AgentRepository(connectionFactory),
-    host.Services.GetServices<IAgentCapability>(),
+    capabilities,
     new AgentClaimLock(connectionFactory),
     TimeSpan.FromSeconds(Math.Max(5, appSettings.PollIntervalSeconds)));
 await agentHost.RunAsync(cancellation.Token);
