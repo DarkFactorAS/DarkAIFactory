@@ -15,9 +15,10 @@ internal static partial class JiraWorkflowRules
     /// <summary>
     /// Name of the integration branch of a parent task. Sub-tasks branch off it and their pull requests
     /// target it, so the parent's changes are assembled on one branch and reviewed as a whole.
+    /// Uses the "aiagent/parent/" prefix, not the legacy "ai-agent/" one that aimanager adopts into legacy tracking.
     /// </summary>
     public static string ParentBranchName(string parentKey) =>
-        $"ai-agent/{BranchUnsafe().Replace(parentKey.Trim(), "-")}";
+        $"aiagent/parent/{BranchUnsafe().Replace(parentKey.Trim(), "-")}";
 
     /// <summary>Returns the blockers that are not in the done status. Unknown statuses count as open.</summary>
     public static IReadOnlyList<JiraBlocker> OpenBlockers(IEnumerable<JiraBlocker> blockers, string doneStatus) =>
