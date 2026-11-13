@@ -566,22 +566,30 @@ internal sealed class AgentPlanner(
             }
 
             var storedSubtaskPlan = plans.Find(subtask.Key);
-            if (storedSubtaskPlan is not null && IsDependencyHold(storedSubtaskPlan.Plan))
+            if (storedSubtaskPlan is null || !storedSubtaskPlan.IsCurrent(
+                current.Summary, current.Description, configuration.GitHubRepositoryUrl))
+            {
+                if (!string.Equals(current.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
+                {
+                    await jira.TransitionToAsync(subtask.Key, configuration.JiraStatusName, cancellationToken);
+                }
+                continue;
+            }
+            if (!storedSubtaskPlan.PostedToJira ||
+                TriageResult.ReadMarker(storedSubtaskPlan.Plan) is not null ||
+                IsSplitProposal(storedSubtaskPlan.Plan) ||
+                current.Labels.Contains(configuration.ApprovalLabel) ||
+                current.Labels.Contains(configuration.ClarificationLabel))
+            {
+                continue;
+            }
+            if (IsDependencyHold(storedSubtaskPlan.Plan))
             {
                 var dependencyHold = ReadDependencyHold(storedSubtaskPlan.Plan);
                 plans.ReplacePlan(
                     subtask.Key,
                     storedSubtaskPlan.RequirementsHash!,
                     dependencyHold.Plan);
-                if (!storedSubtaskPlan.IsCurrent(
-                    current.Summary, current.Description, configuration.GitHubRepositoryUrl))
-                {
-                    if (!string.Equals(current.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        await jira.TransitionToAsync(subtask.Key, configuration.JiraStatusName, cancellationToken);
-                    }
-                    continue;
-                }
             }
             if (!string.Equals(current.StatusName, configuration.JiraStatusName, StringComparison.OrdinalIgnoreCase))
             {
