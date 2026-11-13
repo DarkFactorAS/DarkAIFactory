@@ -544,8 +544,24 @@ public sealed class ManagerPlannerSplitTests
 
         public JiraIssue GetIssue(string key) => _issues[key];
 
-        public void SetStatus(string key, string status) =>
+        public void SetStatus(string key, string status)
+        {
             _issues[key] = _issues[key] with { StatusName = status };
+            foreach (var issue in _issues.Values.ToArray())
+            {
+                if (issue.Blockers.Any(blocker =>
+                    string.Equals(blocker.Key, key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _issues[issue.Key] = issue with
+                    {
+                        Blockers = issue.Blockers.Select(blocker =>
+                            string.Equals(blocker.Key, key, StringComparison.OrdinalIgnoreCase)
+                                ? blocker with { StatusName = status }
+                                : blocker).ToArray()
+                    };
+                }
+            }
+        }
 
         public void SetDescription(string key, string description) =>
             _issues[key] = _issues[key] with { Description = description };
