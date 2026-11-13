@@ -8,9 +8,9 @@ public sealed class ReviewFixFlowTests
     private static readonly TrackedPullRequest Pr = new(1, "DFAI-1", Repo, 7, "https://github.com/owner/repo/pull/7");
 
     private static ReviewComment Comment(long id, string path = "src/A.cs", string body = "rename x") =>
-        new(id, 1, 7, path, 3, body, "reviewer", "sha");
+        new(id, 1, 7, path, 3, body, "reviewer", "sha", $"thread-{id}");
 
-    private sealed class Fakes : IFixRunner, IReviewGit, IProjectCommandRunner, IAttemptStore
+    private sealed class Fakes : IFixRunner, IReviewGit, IProjectCommandRunner, IAttemptStore, IReviewThreadResolver
     {
         public List<string> Calls { get; } = [];
         public List<string> Changed { get; set; } = ["src/A.cs"];
@@ -29,6 +29,14 @@ public sealed class ReviewFixFlowTests
         public List<string> Prompts { get; } = [];
         public int RefreshCount { get; private set; }
         public Action? OnDiscard { get; set; }
+        public List<string> ResolvedThreads { get; } = [];
+        public Exception? ResolveError { get; set; }
+        public Task ResolveThreadAsync(TrackedPullRequest pr, string threadId, CancellationToken c)
+        {
+            Calls.Add("resolve");
+            ResolvedThreads.Add(threadId);
+            return ResolveError is null ? Task.CompletedTask : Task.FromException(ResolveError);
+        }
 
         private long? CurrentComment => ChangedByComment.Keys.Concat(RunnerErrorByComment.Keys)
             .Cast<long?>().FirstOrDefault(id => Prompts.Count > 0 && Prompts[^1].Contains($"[comment {id}]"));
@@ -95,7 +103,7 @@ public sealed class ReviewFixFlowTests
     private static Task<FixResult> Run(
         Fakes f, FixOptions? options = null, string branch = "feature/x", CancellationToken cancellationToken = default,
         params ReviewComment[] comments) =>
-        new ReviewFixFlow(f, f, f, f, options ?? new FixOptions(3)).RunAsync(
+        new ReviewFixFlow(f, f, f, f, f, options ?? new FixOptions(3)).RunAsync(
             Pr, branch, comments.Length == 0 ? [Comment(10)] : comments, "/tmp/ws", cancellationToken);
 
     [Fact]
@@ -105,11 +113,36 @@ public sealed class ReviewFixFlowTests
         var result = await Run(f, new FixOptions(3, "build", "test"));
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(1, result.PushedCount);
-        Assert.Equal(["agent", "build", "test", "commit", "push"], f.Calls);
+        Assert.Equal(["agent", "build", "test", "commit", "push", "resolve"], f.Calls);
+        Assert.Equal(["thread-10"], f.ResolvedThreads);
         Assert.All(f.Baselines, baseline => Assert.Equal("baseline", baseline));
         Assert.Equal("feature/x", f.Pushed);
         Assert.Equal(("InProgress", 1, null), (f.Records[0].Status, f.Records[0].Change, f.Records[0].Error));
         Assert.Equal(("Resolved", 0), (f.Records[^1].Status, f.Records[^1].Change));
+    }
+
+    [Fact]
+    public async Task ResolveFailureStillReturnsPushed()
+    {
+        var f = new Fakes { ResolveError = new HttpRequestException("403") };
+        var result = await Run(f);
+        Assert.Equal(FixOutcome.Pushed, result.Outcome);
+        Assert.Equal(1, result.PushedCount);
+        Assert.Equal(["thread-10"], f.ResolvedThreads);
+        Assert.Equal("Resolved", f.Records[^1].Status);
+        Assert.DoesNotContain(f.Records, r => r.Status is "Failed" or "Pending");
+    }
+
+    [Fact]
+    public async Task DoesNotResolveWhenNothingChangedOrPushFails()
+    {
+        var none = new Fakes { Changed = [] };
+        Assert.Equal(FixOutcome.NoChanges, (await Run(none)).Outcome);
+        Assert.Empty(none.ResolvedThreads);
+
+        var broken = new Fakes { PushError = new InvalidOperationException("rejected") };
+        Assert.Equal(FixOutcome.Failed, (await Run(broken)).Outcome);
+        Assert.Empty(broken.ResolvedThreads);
     }
 
     [Fact]
@@ -124,7 +157,7 @@ public sealed class ReviewFixFlowTests
 
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(2, result.PushedCount);
-        Assert.Equal(["agent", "commit", "push", "agent", "commit", "push"], f.Calls);
+        Assert.Equal(["agent", "commit", "push", "resolve", "agent", "commit", "push", "resolve"], f.Calls);
         Assert.Equal(2, f.RefreshCount);
         Assert.Equal(
             ["DFAI-1: Null check is missing (src/A.cs:3)", "DFAI-1: Dispose the client (src/B.cs:3)"],
@@ -275,7 +308,7 @@ public sealed class ReviewFixFlowTests
         var f = new CancellingFakes(cancellation);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => new ReviewFixFlow(f, f, f, f, new FixOptions(3)).RunAsync(
+            () => new ReviewFixFlow(f, f, f, f, new NoopResolver(), new FixOptions(3)).RunAsync(
                 Pr, "feature/x", [Comment(10), Comment(11)], "/tmp/ws", cancellation.Token));
 
         Assert.Equal(("InProgress", 1), (f.Records[0].Status, f.Records[0].Change));
@@ -314,6 +347,11 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(["InProgress", "Pending"], f.Records.Select(record => record.Status));
         Assert.Equal(("Pending", 0), (f.Records[^1].Status, f.Records[^1].Change));
         Assert.DoesNotContain("discard", f.Calls);
+    }
+
+    private sealed class NoopResolver : IReviewThreadResolver
+    {
+        public Task ResolveThreadAsync(TrackedPullRequest pr, string threadId, CancellationToken c) => Task.CompletedTask;
     }
 
     private sealed class CancellingFakes(CancellationTokenSource cancellation)

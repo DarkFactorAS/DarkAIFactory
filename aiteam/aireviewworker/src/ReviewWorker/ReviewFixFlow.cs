@@ -43,6 +43,12 @@ internal interface IAttemptStore
     void Record(long pullRequestId, IReadOnlyCollection<long> commentIds, string status, int attemptChange, string? error);
 }
 
+internal interface IReviewThreadResolver
+{
+    /// <summary>Resolves the review thread on GitHub.</summary>
+    Task ResolveThreadAsync(TrackedPullRequest pullRequest, string threadId, CancellationToken cancellationToken);
+}
+
 internal sealed record FixOptions(int MaxAttempts, string? BuildCommand = null, string? TestCommand = null);
 
 /// <summary>Decisions of the fix flow that do not need I/O.</summary>
@@ -80,6 +86,7 @@ internal sealed class ReviewFixFlow(
     IReviewGit git,
     IProjectCommandRunner commands,
     IAttemptStore attempts,
+    IReviewThreadResolver resolver,
     FixOptions options)
 {
     private const string Category = "ReviewFix";
@@ -212,7 +219,6 @@ internal sealed class ReviewFixFlow(
             attempts.Record(pullRequest.Id, ids, "Resolved", 0, null);
             DFLogger.LogOutput(DFLogLevel.INFO, Category,
                 $"PR #{pullRequest.Number}: pushed fix for comment {comment.Id} to '{headBranch}'.");
-            return new CommentResult(FixOutcome.Pushed);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -231,6 +237,35 @@ internal sealed class ReviewFixFlow(
             // A failed push leaves a local commit; stop so later comments do not push it.
             return await DiscardAndFailAsync(pullRequest, ids, attemptsUsed, workspacePath, baselineRevision,
                 exception.Message, cancellationToken, stopRemaining: committed);
+        }
+
+        // Outside the try above: a failure to resolve must not turn a pushed fix into a failure.
+        await ResolveThreadAsync(pullRequest, comment, cancellationToken);
+        return new CommentResult(FixOutcome.Pushed);
+    }
+
+    private async Task ResolveThreadAsync(
+        TrackedPullRequest pullRequest, ReviewComment comment, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(comment.ThreadId))
+        {
+            return;
+        }
+
+        try
+        {
+            await resolver.ResolveThreadAsync(pullRequest, comment.ThreadId, cancellationToken);
+            DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                $"PR #{pullRequest.Number}: resolved review thread for comment {comment.Id}.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                $"PR #{pullRequest.Number}: could not resolve review thread for comment {comment.Id}: {exception.Message}");
         }
     }
 

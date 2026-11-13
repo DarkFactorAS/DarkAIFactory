@@ -158,6 +158,34 @@ public sealed class GitHubReviewClientTests
         Assert.Equal("a.cs", comments[0].Path);
         Assert.Equal(3, comments[0].Line);
         Assert.Equal("fix 10", comments[0].Body);
+        Assert.Equal("thread-10", comments[0].ThreadId);
+    }
+
+    [Fact]
+    public async Task ResolveThreadSendsResolveReviewThreadMutation()
+    {
+        var handler = new Handler(_ => "{\"data\":{\"resolveReviewThread\":{\"thread\":{\"id\":\"thread-10\",\"isResolved\":true}}}}");
+        var (client, _) = Create(handler);
+        using (client)
+        {
+            await client.ResolveThreadAsync(Pr, "thread-10", default);
+        }
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Contains("resolveReviewThread", request["query"]!.GetValue<string>());
+        Assert.Equal("thread-10", request["variables"]!["threadId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task ResolveThreadThrowsOnGraphQlErrors()
+    {
+        var handler = new Handler(_ => "{\"errors\":[{\"message\":\"Resource not accessible\"}]}");
+        var (client, _) = Create(handler);
+        using (client)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => client.ResolveThreadAsync(Pr, "thread-10", default));
+        }
     }
 
     [Fact]

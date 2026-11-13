@@ -11,7 +11,7 @@ namespace ReviewWorker;
 /// Reads inline review comments through the GitHub GraphQL API (the REST API does not expose
 /// resolved state). Threads are paged with cursors.
 /// </summary>
-internal sealed class GitHubReviewClient : IDisposable
+internal sealed class GitHubReviewClient : IReviewThreadResolver, IDisposable
 {
     public const int PageSize = 100;
     private const string PullRequestQuery =
@@ -53,6 +53,9 @@ internal sealed class GitHubReviewClient : IDisposable
           }
         }
         """;
+
+    private const string ResolveThreadMutation =
+        "mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { id isResolved } } }";
 
     private readonly HttpClient _httpClient;
     private readonly PullRequestReader _pullRequests;
@@ -141,7 +144,7 @@ internal sealed class GitHubReviewClient : IDisposable
                     continue;
                 }
 
-                AddActionableComments(thread.Comments, page.HeadSha);
+                AddActionableComments(thread.Comments, page.HeadSha, thread.Id);
                 var hasNextCommentPage = thread.HasNextCommentPage;
                 var commentCursor = thread.CommentEndCursor;
                 while (hasNextCommentPage)
@@ -153,7 +156,7 @@ internal sealed class GitHubReviewClient : IDisposable
 
                     var commentPage = await FetchThreadCommentsPageAsync(
                         pullRequest, thread.Id, commentCursor, cancellationToken);
-                    AddActionableComments(commentPage.Comments, page.HeadSha);
+                    AddActionableComments(commentPage.Comments, page.HeadSha, thread.Id);
                     hasNextCommentPage = commentPage.HasNextPage;
                     commentCursor = commentPage.EndCursor;
                 }
@@ -167,7 +170,7 @@ internal sealed class GitHubReviewClient : IDisposable
             cursor = page.EndCursor;
         }
 
-        void AddActionableComments(IEnumerable<CommentInfo> comments, string headSha)
+        void AddActionableComments(IEnumerable<CommentInfo> comments, string headSha, string threadId)
         {
             foreach (var comment in comments)
             {
@@ -192,10 +195,22 @@ internal sealed class GitHubReviewClient : IDisposable
                 {
                     result.Add(new ReviewComment(
                         comment.Id, pullRequest.Id, pullRequest.Number, comment.Path, comment.Line,
-                        comment.Body, comment.Author, headSha));
+                        comment.Body, comment.Author, headSha, threadId));
                 }
             }
         }
+    }
+
+    /// <summary>Resolves a review thread on GitHub (needs a token allowed to resolve conversations).</summary>
+    public async Task ResolveThreadAsync(
+        TrackedPullRequest pullRequest, string threadId, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject
+        {
+            ["query"] = ResolveThreadMutation,
+            ["variables"] = new JsonObject { ["threadId"] = threadId }
+        };
+        await SendGraphQlAsync(body, pullRequest.Url, cancellationToken);
     }
 
     public void Dispose() => _httpClient.Dispose();

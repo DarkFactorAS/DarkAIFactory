@@ -96,7 +96,7 @@ internal static class ReviewCycleRunner
             }
 
             using var runner = new SandboxRunnerClient(configuration.AgentModel, configuration.RunnerTimeout);
-            var flow = new ReviewFixFlow(runner, git, runner, attempts, fixOptions);
+            var flow = new ReviewFixFlow(runner, git, runner, attempts, client, fixOptions);
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: fixing {comments.Count} comment(s) one at a time.");
             var result = await flow.RunAsync(pullRequest, branch, comments, workspacePath, cancellationToken);
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix run finished with {result.Outcome}; " +
