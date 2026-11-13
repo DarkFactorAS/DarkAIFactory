@@ -58,6 +58,9 @@ public sealed partial class GitHubCore(
                 ? ["switch", "--create", branch]
                 : ["switch", "--no-track", "--create", branch, $"origin/{baseBranch}"],
             false, cancellationToken);
+        // The recursive clone registered submodule URLs from the default branch; resync them so a
+        // base branch that changes a submodule URL fetches from the right repository.
+        await git.RunAsync(checkoutPath, ["submodule", "sync", "--quiet", "--recursive"], false, cancellationToken);
         await git.RunAsync(checkoutPath, ["submodule", "update", "--init", "--recursive"], true, cancellationToken);
         var head = await git.RunAsync(checkoutPath, ["rev-parse", "--verify", "HEAD^{commit}"], false, cancellationToken);
         var baseRevision = head.StandardOutput.Trim();
