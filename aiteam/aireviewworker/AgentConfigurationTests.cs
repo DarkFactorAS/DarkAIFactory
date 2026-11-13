@@ -26,7 +26,13 @@ public sealed class AgentConfigurationTests
         Assert.Equal(3, config.MaxAttemptsPerPullRequest);
         Assert.Equal(string.Empty, config.AgentModel);
         Assert.Equal("repo-token", config.GitHubRepositoryToken);
+        Assert.Equal(TimeSpan.FromMinutes(30), config.RunnerTimeout);
     }
+
+    [Fact]
+    public void Load_RejectsRunnerTimeoutBelowOneMinute() =>
+        Assert.Throws<InvalidOperationException>(() => AgentConfiguration.Load(
+            Settings(), new AgentSettings { ReviewerLogin = "r", RunnerTimeoutMinutes = 0 }));
 
     [Fact]
     public void Load_UsesClaudeModelFromAppSettings()

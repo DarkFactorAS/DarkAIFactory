@@ -28,6 +28,7 @@ Loaded like [aiworker](../aiworker/README.md):
   | `ClaudeModel` | empty | Optional Claude Code `--model` (for example `sonnet`); empty uses the CLI default |
   | `BuildCommand` | empty | Optional shell command run in `review-runner` before pushing; failure discards the fix |
   | `TestCommand` | empty | Optional shell command run after the build; failure discards the fix |
+  | `RunnerTimeoutMinutes` | `30` | Max minutes one sandbox call (Claude Code run, build or test) may take; a timeout counts as a failed attempt |
 
 - Database `settings` table via `aiteam/shared` `IntegrationSettingsRepository`. The worker reuses
   the `aiworker` settings client (repository token, `GitHub.TargetRepositoryUrl`), so no

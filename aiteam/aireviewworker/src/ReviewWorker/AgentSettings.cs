@@ -13,4 +13,6 @@ public sealed class AgentSettings : AppSettings
     public string BuildCommand { get; set; } = string.Empty;
     /// <summary>Optional shell command run in the sandbox after the build, before pushing.</summary>
     public string TestCommand { get; set; } = string.Empty;
+    /// <summary>Maximum minutes one sandbox call (Claude Code run, build or test) may take.</summary>
+    public int RunnerTimeoutMinutes { get; set; } = 30;
 }

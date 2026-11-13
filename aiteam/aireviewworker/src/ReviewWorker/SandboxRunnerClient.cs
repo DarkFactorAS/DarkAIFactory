@@ -2,29 +2,34 @@ using System.Net.Http.Json;
 
 namespace ReviewWorker;
 
-internal sealed class SandboxRunnerClient(string agentModel, Uri? runnerUrl = null)
+/// <summary>
+/// Calls the review-runner sandbox. A Claude Code run can take many minutes, so requests use
+/// <paramref name="timeout"/> instead of the 100-second HttpClient default. When it expires a
+/// <see cref="TimeoutException"/> is thrown, so a slow run is not mistaken for a worker shutdown.
+/// </summary>
+internal sealed class SandboxRunnerClient(
+    string agentModel, TimeSpan timeout, Uri? runnerUrl = null, HttpMessageHandler? handler = null)
     : IFixRunner, IProjectCommandRunner, IDisposable
 {
-    private readonly HttpClient _httpClient = new()
+    private readonly HttpClient _httpClient = new(handler ?? new HttpClientHandler())
     {
         BaseAddress = runnerUrl ?? new Uri(
-            Environment.GetEnvironmentVariable("REVIEW_RUNNER_URL") ?? "http://localhost:8080/")
+            Environment.GetEnvironmentVariable("REVIEW_RUNNER_URL") ?? "http://localhost:8080/"),
+        Timeout = timeout
     };
 
     public async Task RunAsync(string workspacePath, string prompt, CancellationToken cancellationToken)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
-            "run",
-            new RunRequest(WorkspaceId(workspacePath), prompt, agentModel),
-            cancellationToken);
+        using var response = await SendAsync(
+            "run", new RunRequest(WorkspaceId(workspacePath), prompt, agentModel), "Claude Code", cancellationToken);
         await EnsureSuccessAsync(response, "Claude Code", cancellationToken);
     }
 
     async Task<string?> IProjectCommandRunner.RunAsync(
         string command, string workspacePath, CancellationToken cancellationToken)
     {
-        using var response = await _httpClient.PostAsJsonAsync(
-            "command", new CommandRequest(WorkspaceId(workspacePath), command), cancellationToken);
+        using var response = await SendAsync(
+            "command", new CommandRequest(WorkspaceId(workspacePath), command), $"'{command}'", cancellationToken);
         if (response.IsSuccessStatusCode)
         {
             return null;
@@ -34,6 +39,20 @@ internal sealed class SandboxRunnerClient(string agentModel, Uri? runnerUrl = nu
     }
 
     public void Dispose() => _httpClient.Dispose();
+
+    private async Task<HttpResponseMessage> SendAsync<T>(
+        string path, T body, string processName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _httpClient.PostAsJsonAsync(path, body, cancellationToken);
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"{processName} did not finish within {_httpClient.Timeout.TotalMinutes:0} minute(s) in the sandbox.", exception);
+        }
+    }
 
     private static async Task EnsureSuccessAsync(
         HttpResponseMessage response, string processName, CancellationToken cancellationToken)
