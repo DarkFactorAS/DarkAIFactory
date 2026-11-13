@@ -1,5 +1,6 @@
 using AiAgent.Core;
 using AiAgent.GitHub;
+using AiAgent.LanguageModel;
 using AiAgent.Repositories;
 using AiAgent.Runner;
 using DFCommonLib.Logger;
@@ -317,17 +318,19 @@ internal sealed class BuilderCapability(
         CancellationToken cancellationToken)
     {
         var agent = context.Agent;
-        var provider = agent.LlmProvider.Trim().ToLowerInvariant();
+        // Resolve provider and model through the factory so provider defaults and model normalization apply.
+        var model = new LanguageModelFactory().Create(agent);
+        var isCopilot = model.Provider == "copilot";
         var response = await runner.RunAsync(
             new RunnerRequest(
-                provider is "copilot" or "github" ? "copilot" : "claude",
-                agent.LlmModel ?? string.Empty,
+                model.Provider,
+                model.Model,
                 mode,
                 workspace,
                 PromptComposer.Compose(agent, prompt),
                 settings.BuildCommand,
                 settings.TestCommand,
-                provider is "copilot" or "github" ? settings.AgentGitHubToken : null),
+                isCopilot ? settings.AgentGitHubToken : null),
             cancellationToken);
         return response.ExitCode == 0
             ? response.Output
