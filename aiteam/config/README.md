@@ -132,6 +132,9 @@ and runs `claude -p` with the CLI's own login (`claude auth login`, stored in a 
 volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitHub.AgentGitHubToken`.
 The review worker (`aireviewworker`) also runs Claude Code, using the same shared CLI login;
 its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
+The new agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
+`appsettings.<Environment>.json` (`PollIntervalSeconds`); its runner uses a separate
+Claude Code login in the `aiteam_aiagent_claude_config` volume (`./login_claude.sh --aiagent`).
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),
