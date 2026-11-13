@@ -79,3 +79,10 @@ internal static class CliProcess
         }
     }
 }
+
+/// <summary>Exposes the shared CLI process helper to other capabilities.</summary>
+internal static class CliProcessAccess
+{
+    internal static Task<ProcessResult> RunAsync(ProcessStartInfo startInfo, CancellationToken cancellationToken) =>
+        CliProcess.RunAsync(startInfo, cancellationToken);
+}
