@@ -55,6 +55,9 @@ public sealed class ReviewFixFlow(
             return new FixResult(FixOutcome.Skipped);
         }
 
+        // At most one comment per path, so a change to that path can retire exactly that comment.
+        // Further comments on the same path are handled in later cycles.
+        eligible = eligible.GroupBy(c => c.Path, StringComparer.Ordinal).Select(group => group.First()).ToList();
         var promptBatch = ReviewPromptBuilder.BuildBatch(eligible);
         eligible = promptBatch.Comments.ToList();
         var ids = eligible.Select(c => c.Id).ToList();
