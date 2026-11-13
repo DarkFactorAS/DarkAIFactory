@@ -27,6 +27,8 @@ public sealed class ClaudeLanguageModel(
             startInfo.ArgumentList.Add(argument);
         }
 
+        // "--" ends the variadic --disallowedTools list so the prompt is parsed as the positional argument.
+        startInfo.ArgumentList.Add("--");
         startInfo.ArgumentList.Add(request.Prompt);
         ApplyEnvironment(startInfo.Environment);
         var result = await (processRunner ?? CliProcess.RunAsync)(startInfo, cancellationToken);
