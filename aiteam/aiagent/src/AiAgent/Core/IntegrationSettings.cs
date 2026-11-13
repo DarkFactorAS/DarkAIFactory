@@ -23,6 +23,10 @@ public sealed class JiraSettings
     public string JiraDoneStatus { get; set; } = "Done";
     public string JiraSubtaskIssueType { get; set; } = "Sub-task";
     public string JiraAutoApproveSmallChanges { get; set; } = "true";
+    public string JiraTaskIssueType { get; set; } = "Task";
+    /// <summary>Comma-separated statuses an issue must be in to be moved to the selected status once unblocked.</summary>
+    public string JiraUnblockSourceStatuses { get; set; } = "To Do,Backlog";
+    public string JiraIntakeEnabled { get; set; } = "true";
 }
 
 public sealed class GitHubSettings

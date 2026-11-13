@@ -1,8 +1,8 @@
+using AiAgent.Capabilities.Jira;
 using AiAgent.Capabilities.Builder;
 using AiAgent.Capabilities.Planning;
 using AiAgent.Core;
 using AiAgent.GitHub;
-using AiAgent.Providers;
 using AiAgent.Repositories;
 using AiAgent.Runner;
 using DFCommonLib.Config;
@@ -11,6 +11,7 @@ using DFCommonLib.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Runtime.InteropServices;
+using PlanningJiraClient = AiAgent.Providers.JiraClient;
 
 if (args is ["--runner-server"])
 {
@@ -61,19 +62,35 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
-// Builder is registered above and Planning is registered below; Jira and Review follow in later sub-tasks.
 var connectionFactory = host.Services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
+var agentRepository = new AgentRepository(connectionFactory);
+var pollSeconds = Math.Max(5, appSettings.PollIntervalSeconds);
+JiraCapabilityConfig LoadJiraConfig() => JiraCapabilityConfig.From(
+    new IntegrationSettingsRepository(connectionFactory).Load("aiagent", pollSeconds),
+    new WorkflowLabelRepository(connectionFactory).Load("aiagent"));
+var jiraCapability = new JiraCapability(
+    LoadJiraConfig,
+    config => new JiraClient(config),
+    new AgentTaskRepository(connectionFactory),
+    new AgentPullRequestRepository(connectionFactory),
+    new GitHubMergeChecker(),
+    key => new ManagerProjectRepository(connectionFactory).GetProjects()
+        .Where(project => string.Equals(project.JiraProjectKey, key, StringComparison.OrdinalIgnoreCase))
+        .Select(project => Uri.TryCreate(project.TargetRepositoryUrl, UriKind.Absolute, out var url) ? url : null)
+        .FirstOrDefault());
+JiraCapability.LogIntakeWarning(agentRepository, LoadJiraConfig);
 using var runnerClient = new RunnerClient();
 var capabilities = host.Services.GetServices<IAgentCapability>().Append(new PlanningCapability(
-    () => new IntegrationSettingsRepository(connectionFactory).Load("aiagent", appSettings.PollIntervalSeconds),
+    () => new IntegrationSettingsRepository(connectionFactory).Load("aiagent", pollSeconds),
     () => new WorkflowLabelRepository(connectionFactory).Load(PlanningCapability.AgentName),
     () => new ManagerProjectRepository(connectionFactory).GetProjects(),
     new AgentPlanRepository(connectionFactory),
-    settings => new JiraClient(settings.Jira),
-    new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory))));
+    settings => new PlanningJiraClient(settings.Jira),
+    new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory))))
+    .Append(jiraCapability);
 var agentHost = new AgentHost(
-    new AgentRepository(connectionFactory),
+    agentRepository,
     capabilities,
     new AgentClaimLock(connectionFactory),
-    TimeSpan.FromSeconds(Math.Max(5, appSettings.PollIntervalSeconds)));
+    TimeSpan.FromSeconds(pollSeconds));
 await agentHost.RunAsync(cancellation.Token);
