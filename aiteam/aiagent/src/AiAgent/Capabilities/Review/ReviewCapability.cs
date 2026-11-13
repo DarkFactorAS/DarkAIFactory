@@ -108,6 +108,9 @@ public sealed class ReviewCapability(
         finally
         {
             TryDelete(Path.GetDirectoryName(workspace)!);
+            // GitRunner clones with --separate-git-dir into its private metadata root, outside the workspace;
+            // remove that object database too so per-attempt clones do not accumulate on disk.
+            TryDelete(Builder.BuilderCapability.GitMetadataDirectoryFor(workspace));
         }
     }
 
@@ -122,7 +125,7 @@ public sealed class ReviewCapability(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Category, $"Could not delete workspace '{path}': {exception.Message}");
+            DFLogger.LogOutput(DFLogLevel.WARNING, Category, $"Could not delete directory '{path}': {exception.Message}");
         }
     }
 
