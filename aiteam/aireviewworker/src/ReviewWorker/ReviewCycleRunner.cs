@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json.Nodes;
 using DFCommonLib.Logger;
 using Microsoft.Extensions.DependencyInjection;
 using ReviewWorker.Repository;
@@ -11,6 +14,20 @@ namespace ReviewWorker;
 internal static class ReviewCycleRunner
 {
     private const string Category = "Worker";
+    private const string UnresolvedThreadsQuery =
+        """
+        query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              state
+              reviewThreads(first: 100, after: $cursor) {
+                pageInfo { hasNextPage endCursor }
+                nodes { isResolved }
+              }
+            }
+          }
+        }
+        """;
 
     public static async Task RunAsync(
         long cycle,
@@ -49,6 +66,13 @@ internal static class ReviewCycleRunner
             LogScan(cycle, pullRequest, configuration.ReviewerLogin, scan);
             if (comments.Count == 0)
             {
+                var unresolved = await CountUnresolvedThreadsAsync(
+                    configuration.GitHubRepositoryToken, pullRequest, cancellationToken);
+                if (unresolved is { } count && IsReadyToMerge(count, 0))
+                {
+                    LogReadyToMerge(cycle, pullRequest);
+                }
+
                 continue;
             }
 
@@ -57,13 +81,106 @@ internal static class ReviewCycleRunner
                 Log($"Cycle {cycle}:   comment {comment.Id} at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
             }
 
-            await FixPullRequestAsync(cycle, configuration, fixOptions, client, attempts, pullRequest, comments, cancellationToken);
+            var failedCount = await FixPullRequestAsync(cycle, configuration, fixOptions, client, attempts, pullRequest, comments, cancellationToken);
+            if (failedCount == 0)
+            {
+                var unresolved = await CountUnresolvedThreadsAsync(
+                    configuration.GitHubRepositoryToken, pullRequest, cancellationToken);
+                if (unresolved is { } count && IsReadyToMerge(count, 0))
+                {
+                    LogReadyToMerge(cycle, pullRequest);
+                }
+            }
         }
 
         Log($"Cycle {cycle}: {total} actionable comment(s) across {open.Count} open pull request(s).");
     }
 
-    private static async Task FixPullRequestAsync(
+    /// <summary>A pull request is ready to merge when no review thread is unresolved and no fix failed.</summary>
+    internal static bool IsReadyToMerge(int openComments, int failedCount) =>
+        openComments == 0 && failedCount == 0;
+
+    /// <summary>
+    /// Counts every unresolved review thread, including outdated ones. Readiness must not ignore
+    /// outdated threads, even though they are not actionable for automatic fixes.
+    /// Returns null when the pull request is no longer open, since a closed or merged pull request
+    /// must never be reported as ready to merge.
+    /// </summary>
+    private static async Task<int?> CountUnresolvedThreadsAsync(
+        string token, TrackedPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var segments = pullRequest.RepositoryUrl.AbsolutePath.Trim('/').Split('/');
+        if (segments.Length < 2)
+        {
+            throw new InvalidDataException($"Cannot read owner and repository from \"{pullRequest.RepositoryUrl}\".");
+        }
+
+        var name = segments[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? segments[1][..^4] : segments[1];
+        using var httpClient = new HttpClient { BaseAddress = new Uri("https://api.github.com/") };
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ai-review-worker");
+
+        var unresolved = 0;
+        string? cursor = null;
+        while (true)
+        {
+            var body = new JsonObject
+            {
+                ["query"] = UnresolvedThreadsQuery,
+                ["variables"] = new JsonObject
+                {
+                    ["owner"] = segments[0],
+                    ["name"] = name,
+                    ["number"] = pullRequest.Number,
+                    ["cursor"] = cursor
+                }
+            };
+            using var request = new HttpRequestMessage(HttpMethod.Post, "graphql")
+            {
+                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+            };
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"GitHub GraphQL request failed with {(int)response.StatusCode} for pull request {pullRequest.Url}.");
+            }
+
+            var root = JsonNode.Parse(text) ?? throw new InvalidDataException("Empty GitHub response.");
+            if (root["errors"] is JsonArray { Count: > 0 } errors)
+            {
+                throw new InvalidOperationException(
+                    $"GitHub GraphQL returned errors for {pullRequest.Url}: {errors[0]?["message"]}");
+            }
+
+            var pullRequestNode = root["data"]?["repository"]?["pullRequest"]
+                ?? throw new InvalidDataException($"Pull request {pullRequest.Url} not found.");
+            var state = pullRequestNode["state"]?.GetValue<string>();
+            if (!string.Equals(state, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var threads = pullRequestNode["reviewThreads"]
+                ?? throw new InvalidDataException($"Pull request {pullRequest.Url} not found.");
+            unresolved += (threads["nodes"]?.AsArray() ?? [])
+                .Count(thread => !(thread?["isResolved"]?.GetValue<bool>() ?? false));
+            var hasNextPage = threads["pageInfo"]?["hasNextPage"]?.GetValue<bool>() ?? false;
+            cursor = threads["pageInfo"]?["endCursor"]?.GetValue<string>();
+            if (!hasNextPage || cursor is null)
+            {
+                return unresolved;
+            }
+        }
+    }
+
+    private static void LogReadyToMerge(long cycle, TrackedPullRequest pullRequest) =>
+        Log($"Cycle {cycle}: PR #{pullRequest.Number} ({pullRequest.JiraKey}) is ready to be merged: " +
+            "all review comments are resolved.");
+
+    /// <summary>Returns the failed count, or null when the run did not complete (head moved, branch mismatch, abandoned).</summary>
+    private static async Task<int?> FixPullRequestAsync(
         long cycle,
         AgentConfiguration configuration,
         FixOptions fixOptions,
@@ -73,11 +190,12 @@ internal static class ReviewCycleRunner
         IReadOnlyList<ReviewComment> comments,
         CancellationToken cancellationToken)
     {
+        int? completedFailedCount = null;
         var (branch, headSha) = await client.GetHeadAsync(pullRequest, cancellationToken);
         if (comments.Any(comment => !string.Equals(comment.HeadSha, headSha, StringComparison.OrdinalIgnoreCase)))
         {
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: head moved while reading comments; retrying next cycle.");
-            return;
+            return null;
         }
 
         var git = new ProcessGit(configuration.GitHubRepositoryToken);
@@ -92,7 +210,7 @@ internal static class ReviewCycleRunner
             {
                 Log($"Cycle {cycle}: PR #{pullRequest.Number}: branch is at {Short(revision)}, " +
                     $"expected {Short(headSha)}; retrying next cycle.");
-                return;
+                return null;
             }
 
             using var runner = new SandboxRunnerClient(configuration.AgentModel, configuration.RunnerTimeout);
@@ -102,6 +220,7 @@ internal static class ReviewCycleRunner
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix run finished with {result.Outcome}; " +
                 $"{result.PushedCount} pushed, {result.FailedCount} failed" +
                 (result.Error is null ? "." : $". Last error: {result.Error}"));
+            completedFailedCount = result.FailedCount;
         }
         catch (SandboxWorkspaceAbandonedException exception)
         {
@@ -128,6 +247,8 @@ internal static class ReviewCycleRunner
                 }
             }
         }
+
+        return completedFailedCount;
     }
 
     private static void LogScan(long cycle, TrackedPullRequest pullRequest, string reviewerLogin, ReviewCommentScan scan)
