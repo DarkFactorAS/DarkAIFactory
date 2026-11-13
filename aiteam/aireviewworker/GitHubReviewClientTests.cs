@@ -87,7 +87,7 @@ public sealed class GitHubReviewClientTests
             .ToJsonString();
 
     private static (GitHubReviewClient Client, DatabaseStub Db) Create(
-        Handler handler, Action<DatabaseStub>? setup = null)
+        Handler handler, Action<DatabaseStub>? setup = null, long[]? failedIds = null)
     {
         var db = new DatabaseStub();
         db.OnReader = command =>
@@ -96,9 +96,15 @@ public sealed class GitHubReviewClientTests
             if (command.CommandText.Contains("review_comment_attempts"))
             {
                 table.Columns.Add("id", typeof(long));
+                table.Columns.Add("status", typeof(string));
                 foreach (var id in HandledIds)
                 {
-                    table.Rows.Add(id);
+                    table.Rows.Add(id, "Resolved");
+                }
+
+                foreach (var id in failedIds ?? [])
+                {
+                    table.Rows.Add(id, "Failed");
                 }
             }
             else
@@ -169,7 +175,22 @@ public sealed class GitHubReviewClientTests
         Assert.Equal([10L], scan.Actionable.Select(c => c.Id));
         Assert.Equal(5, scan.OpenComments);
         Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(0, scan.FailedComments);
         Assert.Equal(new Dictionary<string, int> { ["bob"] = 1, ["someone"] = 2 }, scan.OtherAuthors);
+    }
+
+    [Fact]
+    public async Task ScanCountsFailedCommentsSeparatelyFromHandled()
+    {
+        HandledIds = [14];
+        var handler = new Handler(_ => Page("OPEN", string.Join(",", Thread(10, "Copilot"), Thread(14, "Copilot"))));
+        var (client, _) = Create(handler, failedIds: [10]);
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Empty(scan.Actionable);
+        Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(1, scan.FailedComments);
     }
 
     [Fact]
