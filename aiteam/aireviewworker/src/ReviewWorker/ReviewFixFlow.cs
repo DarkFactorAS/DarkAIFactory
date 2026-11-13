@@ -116,31 +116,43 @@ internal sealed class ReviewFixFlow(
         var pushed = 0;
         var failed = 0;
         string? lastError = null;
-        for (var index = 0; index < eligible.Count; index++)
+        var pushedIds = new HashSet<long>();
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var comment = eligible[index];
-            DFLogger.LogOutput(DFLogLevel.INFO, Category,
-                $"PR #{pullRequest.Number}: fixing comment {comment.Id} ({index + 1} of {eligible.Count}) " +
-                $"at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
-            var result = await FixCommentAsync(
-                pullRequest, headBranch, comment, used.GetValueOrDefault(comment.Id), workspacePath, cancellationToken);
-            switch (result.Outcome)
+            for (var index = 0; index < eligible.Count; index++)
             {
-                case FixOutcome.Pushed:
-                    pushed++;
-                    break;
-                case FixOutcome.Failed:
-                    failed++;
-                    lastError = result.Error;
-                    break;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                var comment = eligible[index];
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{pullRequest.Number}: fixing comment {comment.Id} ({index + 1} of {eligible.Count}) " +
+                    $"at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
+                var result = await FixCommentAsync(
+                    pullRequest, headBranch, comment, used.GetValueOrDefault(comment.Id), workspacePath, cancellationToken);
+                switch (result.Outcome)
+                {
+                    case FixOutcome.Pushed:
+                        pushed++;
+                        pushedIds.Add(comment.Id);
+                        break;
+                    case FixOutcome.Failed:
+                        failed++;
+                        lastError = result.Error;
+                        break;
+                }
 
-            if (result.StopRemaining)
+                if (result.StopRemaining)
+                {
+                    DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                        $"PR #{pullRequest.Number}: stopping; {eligible.Count - index - 1} comment(s) left for the next cycle.");
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(DFLogLevel.WARNING, Category,
-                    $"PR #{pullRequest.Number}: stopping; {eligible.Count - index - 1} comment(s) left for the next cycle.");
-                break;
+                await ResolveCompletedThreadsAsync(pullRequest, comments, pushedIds, cancellationToken);
             }
         }
 
@@ -239,24 +251,57 @@ internal sealed class ReviewFixFlow(
                 exception.Message, cancellationToken, stopRemaining: committed);
         }
 
-        // Outside the try above: a failure to resolve must not turn a pushed fix into a failure.
-        await ResolveThreadAsync(pullRequest, comment, cancellationToken);
         return new CommentResult(FixOutcome.Pushed);
     }
 
-    private async Task ResolveThreadAsync(
-        TrackedPullRequest pullRequest, ReviewComment comment, CancellationToken cancellationToken)
+    /// <summary>
+    /// Resolves each review thread whose outstanding comments were all pushed in this run. A thread with any
+    /// sibling comment that failed, made no changes, was skipped for exhausted attempts, or was not reached
+    /// stays open so that comment keeps its remaining retries.
+    /// </summary>
+    private async Task ResolveCompletedThreadsAsync(
+        TrackedPullRequest pullRequest,
+        IReadOnlyList<ReviewComment> comments,
+        IReadOnlySet<long> pushedIds,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(comment.ThreadId))
+        if (pushedIds.Count == 0)
         {
             return;
         }
 
+        var threads = comments
+            .Where(c => !string.IsNullOrEmpty(c.ThreadId))
+            .GroupBy(c => c.ThreadId, StringComparer.Ordinal);
+        foreach (var thread in threads)
+        {
+            if (!thread.Any(c => pushedIds.Contains(c.Id)))
+            {
+                continue;
+            }
+
+            var unfinished = thread.Where(c => !pushedIds.Contains(c.Id)).Select(c => c.Id).ToList();
+            if (unfinished.Count > 0)
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{pullRequest.Number}: leaving review thread open; comment(s) {string.Join(", ", unfinished)} not fixed yet.");
+                continue;
+            }
+
+            // A failure to resolve must not turn a pushed fix into a failure.
+            await ResolveThreadAsync(pullRequest, thread.Key, thread.Select(c => c.Id).ToList(), cancellationToken);
+        }
+    }
+
+    private async Task ResolveThreadAsync(
+        TrackedPullRequest pullRequest, string threadId, IReadOnlyList<long> commentIds, CancellationToken cancellationToken)
+    {
+        var ids = string.Join(", ", commentIds);
         try
         {
-            await resolver.ResolveThreadAsync(pullRequest, comment.ThreadId, cancellationToken);
+            await resolver.ResolveThreadAsync(pullRequest, threadId, cancellationToken);
             DFLogger.LogOutput(DFLogLevel.INFO, Category,
-                $"PR #{pullRequest.Number}: resolved review thread for comment {comment.Id}.");
+                $"PR #{pullRequest.Number}: resolved review thread for comment(s) {ids}.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -265,7 +310,7 @@ internal sealed class ReviewFixFlow(
         catch (Exception exception)
         {
             DFLogger.LogOutput(DFLogLevel.WARNING, Category,
-                $"PR #{pullRequest.Number}: could not resolve review thread for comment {comment.Id}: {exception.Message}");
+                $"PR #{pullRequest.Number}: could not resolve review thread for comment(s) {ids}: {exception.Message}");
         }
     }
 
