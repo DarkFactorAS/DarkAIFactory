@@ -96,10 +96,11 @@ internal static class ReviewCycleRunner
 
             using var runner = new SandboxRunnerClient(configuration.AgentModel, configuration.RunnerTimeout);
             var flow = new ReviewFixFlow(runner, git, runner, attempts, fixOptions);
-            Log($"Cycle {cycle}: PR #{pullRequest.Number}: running fix attempt for {comments.Count} comment(s).");
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fixing {comments.Count} comment(s) one at a time.");
             var result = await flow.RunAsync(pullRequest, branch, comments, workspacePath, cancellationToken);
-            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix attempt finished with {result.Outcome}" +
-                (result.Error is null ? "." : $": {result.Error}"));
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix run finished with {result.Outcome}; " +
+                $"{result.PushedCount} pushed, {result.FailedCount} failed" +
+                (result.Error is null ? "." : $". Last error: {result.Error}"));
         }
         finally
         {

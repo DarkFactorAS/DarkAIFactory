@@ -5,11 +5,16 @@ Agent that solves pull-request review comments (DFAI-137). Every polling cycle i
 1. Lists pull requests in the `pull_requests` table whose `repository_url` matches
    `GitHub.TargetRepositoryUrl`, and keeps the ones still open on GitHub.
 2. Collects unresolved, current inline comments by `ReviewerLogin` that are not yet handled.
-3. For each pull request with comments: clones the head branch into the shared workspace,
-   runs Claude Code (`claude -p`) in `review-runner`, checks that only the cited files changed, runs the optional
-   build and test commands, then commits and pushes (never forced) to the head branch.
+3. For each pull request with comments: clones the head branch into the shared workspace and
+   fixes the comments **one at a time**. For each comment it runs Claude Code (`claude -p`) in
+   `review-runner` with only that comment, checks that only the comment's file changed, runs the
+   optional build and test commands, then commits (`<JIRA-KEY>: Address review comment <id>`) and
+   pushes (never forced) to the head branch, so every fix is a separate commit and push.
+   A comment that fails is reset and the worker moves on to the next one; a failed push stops the
+   remaining comments until the next cycle.
    Attempts are recorded in `review_comment_attempts`, so each comment is retried at most
-   `MaxAttemptsPerPullRequest` times.
+   `MaxAttemptsPerPullRequest` times. A sandbox timeout (`RunnerTimeoutMinutes`) counts as a failed
+   attempt; a worker shutdown during a run records `Cancelled by worker shutdown.` and does not count.
 
 Each step is logged with the cycle number.
 
