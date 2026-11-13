@@ -45,10 +45,22 @@ public sealed class AiDatabasePatcherTests
                 "patch:WorkflowLabels:2", "successful",
                 "patch:WorkflowLabels:3", "successful",
                 "patch:WorkflowLabels:4", "successful",
+                "patch:WorkflowLabels:5", "successful",
                 "init:AgentTasks",
                 "patch:AgentTasks:1", "successful",
                 "init:ReviewCommentAttempts",
-                "patch:ReviewCommentAttempts:1", "successful"]);
+                "patch:ReviewCommentAttempts:1", "successful",
+                "init:AgentTables",
+                "patch:AgentTables:1", "successful",
+                "patch:AgentTables:2", "successful",
+                "patch:AgentTables:3", "successful",
+                "patch:AgentTables:4", "successful",
+                "patch:AgentTables:5", "successful",
+                "patch:AgentTables:6", "successful",
+                "patch:AgentTables:7", "successful",
+                "patch:AgentTables:8", "successful",
+                "patch:AgentTables:9", "successful",
+                "patch:AgentTables:10", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
@@ -90,7 +102,8 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("DELETE FROM `settings`", dbPatcher.Sql[18]);
             Assert.Contains("SELECT 'aiclaudeworker' AS `agent_name`, `code_key`, `label_name`, `description`", dbPatcher.Sql[19]);
             Assert.Contains("WHERE `agent_name` = 'aiworker'", dbPatcher.Sql[19]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[20]);
+            Assert.Contains("'aiagent-picked'", dbPatcher.Sql[20]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[21]);
         }
     }
 

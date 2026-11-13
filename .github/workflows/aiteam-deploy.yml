@@ -65,9 +65,20 @@ jobs:
       project_name: ReviewWorker
     secrets: inherit
 
+  aiagent:
+    name: Deploy AiAgent
+    needs: [aireviewworker]
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/aiagent
+      project_name: AiAgent
+    secrets: inherit
+
   aijiramanager:
     name: Deploy AIJiraManager
-    needs: [aireviewworker]
+    needs: [aiagent]
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
     with:
       environment: production

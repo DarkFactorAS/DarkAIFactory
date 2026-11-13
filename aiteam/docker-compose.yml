@@ -166,6 +166,71 @@ services:
     cap_drop:
       - ALL
 
+  aiagent:
+    build:
+      context: ..
+      dockerfile: aiteam/aiagent/Dockerfile
+      target: orchestrator
+      secrets:
+        - nuget_username
+        - nuget_token
+    depends_on:
+      dbmigration:
+        condition: service_completed_successfully
+      aiagent-runner:
+        condition: service_healthy
+    volumes:
+      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
+      - aiagent_workspaces:/workspaces
+    restart: "no"
+    init: true
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      HOME: /tmp
+      AIAGENT_WORKSPACE_ROOT: /workspaces
+      AIAGENT_RUNNER_URL: http://aiagent-runner:8080/
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - default
+      - aiagent-runner
+
+  aiagent-runner:
+    build:
+      context: ..
+      dockerfile: aiteam/aiagent/Dockerfile
+      target: runner
+      secrets:
+        - nuget_username
+        - nuget_token
+    command: ["--runner-server"]
+    volumes:
+      # The runner receives only the CLI login and workspaces, never /app/Config.
+      - aiteam_aiagent_claude_config:/claude-config
+      - aiagent_workspaces:/workspaces
+    restart: "no"
+    init: true
+    environment:
+      HOME: /tmp
+      CLAUDE_CONFIG_DIR: /claude-config
+      AIAGENT_WORKSPACE_ROOT: /workspaces
+      NUGET_USERNAME: ${NUGET_USERNAME}
+      NUGET_TOKEN: ${NUGET_TOKEN}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - aiagent-runner
+
   manager-agent:
     build:
       context: ..
@@ -282,6 +347,14 @@ volumes:
   claude_workspaces:
     name: ${CLAUDE_WORKSPACES_VOLUME_NAME:-aiteam_claude_workspaces}
 
+  # docker volume create aiagent_workspaces
+  aiagent_workspaces:
+    name: ${AIAGENT_WORKSPACES_VOLUME_NAME:-aiteam_aiagent_workspaces}
+
+  # Claude Code CLI login for the new agent runner (see login_claude.sh --aiagent)
+  aiteam_aiagent_claude_config:
+    name: ${AIAGENT_CLAUDE_CONFIG_VOLUME_NAME:-aiteam_aiagent_claude_config}
+
   # docker volume create aiteam_mariadb_data
   aiteam_mariadb_data:
     external: true
@@ -295,3 +368,4 @@ secrets:
 
 networks:
   claude-runner:
+  aiagent-runner:

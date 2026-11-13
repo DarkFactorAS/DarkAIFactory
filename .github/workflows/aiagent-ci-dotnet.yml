@@ -1,0 +1,33 @@
+name: AiAgent-CI-DotNet
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    name: Build AiAgent (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: dotnet restore aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj
+
+      - name: Build
+        run: dotnet build aiteam/aiagent/src/AiAgent/AiAgent.csproj --no-restore -c Release
+
+      - name: Unit tests
+        run: dotnet test aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj --no-restore -c Release
