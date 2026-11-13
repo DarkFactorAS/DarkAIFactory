@@ -190,7 +190,8 @@ internal sealed class ReviewFixFlow(
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category,
                     $"PR #{pullRequest.Number}: comment {comment.Id}: Claude Code made no changes; nothing to push.");
-                RecordUnsuccessfulAttempt(pullRequest, ids, attemptsUsed, "Claude Code made no changes.");
+                // Not an error: nothing to fix is a successful outcome. The thread stays open on GitHub.
+                attempts.Record(pullRequest.Id, ids, "Resolved", 0, null);
                 return new CommentResult(FixOutcome.NoChanges);
             }
 
@@ -257,7 +258,8 @@ internal sealed class ReviewFixFlow(
     /// <summary>
     /// Resolves each review thread whose outstanding comments were all pushed in this run. A thread with any
     /// sibling comment that failed, made no changes, was skipped for exhausted attempts, or was not reached
-    /// stays open so that comment keeps its remaining retries.
+    /// stays open. A comment that made no changes is marked Resolved in the database (it is not retried), but
+    /// its thread is deliberately left open on GitHub for a human.
     /// </summary>
     private async Task ResolveCompletedThreadsAsync(
         TrackedPullRequest pullRequest,
