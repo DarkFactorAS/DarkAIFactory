@@ -12,7 +12,8 @@ internal sealed record ReviewComment(
     int? Line,
     string Body,
     string Author,
-    string HeadSha);
+    string HeadSha,
+    string ThreadId = "");
 
 /// <summary>
 /// Result of reading a pull request's unresolved, current review comments: the actionable ones,

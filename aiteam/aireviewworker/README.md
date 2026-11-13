@@ -14,6 +14,9 @@ Agent that solves pull-request review comments (DFAI-137). Every polling cycle i
    (`DFAI-166: The HttpClient is never disposed (src/Worker/Client.cs:42)`); the body quotes the comment.
    A comment that fails is reset and the worker moves on to the next one; a failed push stops the
    remaining comments until the next cycle.
+   After a fix is pushed, the worker resolves the comment's review thread on GitHub
+   (GraphQL `resolveReviewThread`). If resolving fails (for example missing permission) it only logs a
+   warning; the fix still counts as pushed and the comment stays `Resolved` in the attempts table.
    Attempts are recorded in `review_comment_attempts`, so each comment is retried at most
    `MaxAttemptsPerPullRequest` times. A sandbox timeout (`RunnerTimeoutMinutes`) counts as a failed
    attempt; a worker shutdown during a run records `Cancelled by worker shutdown.` and does not count.
@@ -58,7 +61,8 @@ token is passed to the runner.
 ## GitHub token permissions
 
 The GitHub token needs, on the target repository: Contents: write (push fixes) and
-Pull requests: read (read review comments).
+Pull requests: write (read review comments and resolve their threads; without write access the
+thread stays open and a warning is logged).
 
 ## Deployment
 
