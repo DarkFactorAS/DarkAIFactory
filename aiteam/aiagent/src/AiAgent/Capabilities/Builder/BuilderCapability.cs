@@ -97,6 +97,7 @@ internal sealed class BuilderCapability(
 
         if (issue.Labels.Contains(settings.PickupLabel) || issue.Labels.Contains(settings.FailureLabel) ||
             issue.Labels.Contains(settings.IgnoredLabel) ||
+            (!settings.AllowLocalPlan && !issue.Labels.Contains(settings.AnalyzedLabel)) ||
             !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
         {
             return;
