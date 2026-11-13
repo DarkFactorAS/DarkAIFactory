@@ -32,7 +32,7 @@ public sealed class JiraCapability(
             {
                 await RunStepAsync("intake", () => new AgentTaskIntake(
                         tasks, jira, config.SelectedStatus, JiraCapabilityConfig.MaxIntakeAttempts,
-                        _attempts.GetOrAdd(context.AgentId, _ => []))
+                        _attempts.GetOrAdd(context.AgentId, _ => []), context.ClaimLock, context.AgentId)
                     .ProcessNewTasksAsync(context.ProjectKeys, cancellationToken), cancellationToken);
             }
 
