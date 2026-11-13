@@ -127,7 +127,7 @@ public sealed partial class GitHubCore(
     {
         var (owner, repo) = ParseOwnerAndRepository(repositoryUrl);
         var path = $"/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(repo)}";
-        using var client = httpHandler is null ? new HttpClient() : new HttpClient(httpHandler);
+        using var client = httpHandler is null ? new HttpClient() : new HttpClient(httpHandler, disposeHandler: false);
         client.BaseAddress = new Uri("https://api.github.com");
         client.DefaultRequestHeaders.Authorization = new("Bearer", token);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
