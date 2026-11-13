@@ -96,9 +96,15 @@ public sealed class GitHubReviewClientTests
             if (command.CommandText.Contains("review_comment_attempts"))
             {
                 table.Columns.Add("id", typeof(long));
+                table.Columns.Add("status", typeof(string));
                 foreach (var id in HandledIds)
                 {
-                    table.Rows.Add(id);
+                    table.Rows.Add(id, "Resolved");
+                }
+
+                foreach (var id in FailedIds ?? [])
+                {
+                    table.Rows.Add(id, "Failed");
                 }
             }
             else
@@ -120,6 +126,7 @@ public sealed class GitHubReviewClientTests
     }
 
     [ThreadStatic] private static long[] HandledIds = [];
+    [ThreadStatic] private static long[] FailedIds = [];
 
     [Fact]
     public async Task GetHeadReturnsBranchAndSha()
@@ -139,6 +146,7 @@ public sealed class GitHubReviewClientTests
     public async Task FiltersByReviewerResolvedOutdatedAndHandled()
     {
         HandledIds = [14];
+        FailedIds = [];
         var handler = new Handler(_ => Page("OPEN",
             string.Join(",",
                 Thread(10, "Copilot"), Thread(11, "someone"), Thread(12, "Copilot", resolved: true),
@@ -169,7 +177,23 @@ public sealed class GitHubReviewClientTests
         Assert.Equal([10L], scan.Actionable.Select(c => c.Id));
         Assert.Equal(5, scan.OpenComments);
         Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(0, scan.FailedComments);
         Assert.Equal(new Dictionary<string, int> { ["bob"] = 1, ["someone"] = 2 }, scan.OtherAuthors);
+    }
+
+    [Fact]
+    public async Task ScanCountsFailedCommentsSeparatelyFromHandled()
+    {
+        HandledIds = [14];
+        FailedIds = [10];
+        var handler = new Handler(_ => Page("OPEN", string.Join(",", Thread(10, "Copilot"), Thread(14, "Copilot"))));
+        var (client, _) = Create(handler);
+
+        var scan = await client.ScanCommentsAsync(Pr, default);
+
+        Assert.Empty(scan.Actionable);
+        Assert.Equal(1, scan.HandledComments);
+        Assert.Equal(1, scan.FailedComments);
     }
 
     [Fact]

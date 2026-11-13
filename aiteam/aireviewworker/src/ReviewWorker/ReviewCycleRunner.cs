@@ -139,9 +139,13 @@ internal static class ReviewCycleRunner
             return;
         }
 
-        Log($"{prefix} has {scan.OpenComments} unresolved review comment(s); {scan.Actionable.Count} actionable " +
+        var message = $"{prefix} has {scan.OpenComments} unresolved review comment(s); {scan.Actionable.Count} actionable " +
             $"from '{reviewerLogin}'" +
-            (scan.HandledComments > 0 ? $", {scan.HandledComments} from '{reviewerLogin}' already handled." : "."));
+            (scan.HandledComments > 0 ? $", {scan.HandledComments} from '{reviewerLogin}' already handled" : string.Empty) +
+            (scan.FailedComments > 0
+                ? $", {scan.FailedComments} from '{reviewerLogin}' failed after the maximum attempts (see review_comment_attempts)"
+                : string.Empty) + ".";
+        DFLogger.LogOutput(scan.FailedComments > 0 ? DFLogLevel.WARNING : DFLogLevel.INFO, Category, message);
         if (scan.OtherAuthors.Count > 0)
         {
             var authors = string.Join(", ", scan.OtherAuthors.Select(author => $"{author.Key} ({author.Value})"));

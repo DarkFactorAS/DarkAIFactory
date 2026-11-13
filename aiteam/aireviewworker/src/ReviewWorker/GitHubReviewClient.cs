@@ -119,11 +119,12 @@ internal sealed class GitHubReviewClient : IDisposable
     public async Task<ReviewCommentScan> ScanCommentsAsync(
         TrackedPullRequest pullRequest, CancellationToken cancellationToken)
     {
-        var handled = _attempts.GetHandledCommentIds(pullRequest.Id, _maxAttempts);
+        var handled = _attempts.GetHandledComments(pullRequest.Id, _maxAttempts);
         var result = new List<ReviewComment>();
         var otherAuthors = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var openComments = 0;
         var handledComments = 0;
+        var failedComments = 0;
         string? cursor = null;
         while (true)
         {
@@ -160,7 +161,7 @@ internal sealed class GitHubReviewClient : IDisposable
 
             if (!page.HasNextPage || page.EndCursor is null)
             {
-                return new ReviewCommentScan(result, openComments, handledComments, otherAuthors);
+                return new ReviewCommentScan(result, openComments, handledComments, failedComments, otherAuthors);
             }
 
             cursor = page.EndCursor;
@@ -176,9 +177,16 @@ internal sealed class GitHubReviewClient : IDisposable
                     var author = string.IsNullOrEmpty(comment.Author) ? "(unknown)" : comment.Author;
                     otherAuthors[author] = otherAuthors.GetValueOrDefault(author) + 1;
                 }
-                else if (handled.Contains(comment.Id))
+                else if (handled.TryGetValue(comment.Id, out var status))
                 {
-                    handledComments++;
+                    if (string.Equals(status, "Resolved", StringComparison.OrdinalIgnoreCase))
+                    {
+                        handledComments++;
+                    }
+                    else
+                    {
+                        failedComments++;
+                    }
                 }
                 else
                 {
