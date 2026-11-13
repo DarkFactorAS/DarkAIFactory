@@ -41,14 +41,11 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
         cancellation.Cancel();
     });
 
-// Stage 1 scaffold: no workflow yet, only a heartbeat until later sub-tasks add the agent loop.
-try
-{
-    while (!cancellation.IsCancellationRequested)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(Math.Max(5, appSettings.PollIntervalSeconds)), cancellation.Token);
-    }
-}
-catch (OperationCanceledException)
-{
-}
+// Capabilities (Jira, Planning, Builder, Review) are registered by later sub-tasks.
+var connectionFactory = host.Services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
+var agentHost = new AgentHost(
+    new AgentRepository(connectionFactory),
+    host.Services.GetServices<IAgentCapability>(),
+    new AgentClaimLock(connectionFactory),
+    TimeSpan.FromSeconds(Math.Max(5, appSettings.PollIntervalSeconds)));
+await agentHost.RunAsync(cancellation.Token);
