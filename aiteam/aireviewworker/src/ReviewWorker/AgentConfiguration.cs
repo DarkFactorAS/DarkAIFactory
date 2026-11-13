@@ -12,6 +12,9 @@ internal sealed record AgentConfiguration(
 {
     public const int MinimumPollIntervalSeconds = 5;
 
+    /// <summary>Maximum duration of one sandbox call (Claude Code run, build or test).</summary>
+    public TimeSpan RunnerTimeout { get; init; } = TimeSpan.FromMinutes(30);
+
     public static AgentConfiguration Load(IntegrationSettings settings, AgentSettings appSettings)
     {
         var repositoryUrl = Required(settings.GitHub.TargetRepositoryUrl, "GitHub.TargetRepositoryUrl");
@@ -35,13 +38,21 @@ internal sealed record AgentConfiguration(
             throw new InvalidOperationException("MaxAttemptsPerPullRequest must be at least 1.");
         }
 
+        if (appSettings.RunnerTimeoutMinutes < 1)
+        {
+            throw new InvalidOperationException("RunnerTimeoutMinutes must be at least 1.");
+        }
+
         return new AgentConfiguration(
             repositoryUri,
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             Required(appSettings.ReviewerLogin, "ReviewerLogin"),
             TimeSpan.FromSeconds(appSettings.PollIntervalSeconds),
             appSettings.MaxAttemptsPerPullRequest,
-            appSettings.ClaudeModel.Trim());
+            appSettings.ClaudeModel.Trim())
+        {
+            RunnerTimeout = TimeSpan.FromMinutes(appSettings.RunnerTimeoutMinutes)
+        };
     }
 
     private static string Required(string? value, string name) =>

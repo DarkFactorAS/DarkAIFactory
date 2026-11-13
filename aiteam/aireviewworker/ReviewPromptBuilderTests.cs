@@ -34,16 +34,12 @@ public sealed class ReviewPromptBuilderTests
     }
 
     [Fact]
-    public void PromptBatchFitsWithinTheArgumentSizeLimit()
+    public void SingleCommentPromptFitsWithinTheArgumentSizeLimit()
     {
-        var comments = Enumerable.Range(1, 40)
-            .Select(id => Comment(id, "a.cs", new string('x', ReviewPromptBuilder.MaxCommentLength)))
-            .ToList();
+        var prompt = ReviewPromptBuilder.Build(
+            [Comment(1, "a.cs", new string('x', ReviewPromptBuilder.MaxCommentLength * 4))]);
 
-        var batch = ReviewPromptBuilder.BuildBatch(comments);
-
-        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(batch.Prompt), 1, ReviewPromptBuilder.MaxPromptLengthBytes);
-        Assert.InRange(batch.Comments.Count, 1, comments.Count - 1);
+        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(prompt), 1, ReviewPromptBuilder.MaxPromptLengthBytes);
     }
 
     [Fact]

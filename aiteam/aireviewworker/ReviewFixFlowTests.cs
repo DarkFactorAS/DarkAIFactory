@@ -14,36 +14,71 @@ public sealed class ReviewFixFlowTests
     {
         public List<string> Calls { get; } = [];
         public List<string> Changed { get; set; } = ["src/A.cs"];
+        /// <summary>Changed files per comment id, picked from the last prompt; falls back to <see cref="Changed"/>.</summary>
+        public Dictionary<long, List<string>> ChangedByComment { get; } = [];
         public Dictionary<long, int> Used { get; } = [];
-        public List<(long[] Ids, string Status, bool Count, string? Error)> Records { get; } = [];
+        public List<(long[] Ids, string Status, int Change, string? Error)> Records { get; } = [];
         public Exception? RunnerError { get; set; }
+        public Dictionary<long, Exception> RunnerErrorByComment { get; } = [];
+        public Exception? PushError { get; set; }
         public string? CommandFailure { get; set; }
         public string? Pushed { get; private set; }
         public Queue<IReadOnlyList<string>>? ChangedSequence { get; set; }
         public List<string> Baselines { get; } = [];
+        public List<string> CommitMessages { get; } = [];
+        public List<string> Prompts { get; } = [];
+        public int RefreshCount { get; private set; }
+        public Action? OnDiscard { get; set; }
 
+        private long? CurrentComment => ChangedByComment.Keys.Concat(RunnerErrorByComment.Keys)
+            .Cast<long?>().FirstOrDefault(id => Prompts.Count > 0 && Prompts[^1].Contains($"[comment {id}]"));
+
+        public Task RefreshWorkspaceMetadataAsync(string w, CancellationToken c)
+        {
+            RefreshCount++;
+            return Task.CompletedTask;
+        }
         public Task<string> GetRevisionAsync(string w, CancellationToken c) => Task.FromResult("baseline");
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
             Calls.Add("agent");
-            return RunnerError is null ? Task.CompletedTask : Task.FromException(RunnerError);
+            Prompts.Add(prompt);
+            var error = CurrentComment is { } id && RunnerErrorByComment.TryGetValue(id, out var e) ? e : RunnerError;
+            return error is null ? Task.CompletedTask : Task.FromException(error);
         }
         public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, string baseline, CancellationToken c)
         {
             Baselines.Add(baseline);
-            return Task.FromResult(ChangedSequence is { Count: > 0 } ? ChangedSequence.Dequeue() : (IReadOnlyList<string>)Changed);
+            if (ChangedSequence is { Count: > 0 })
+            {
+                return Task.FromResult(ChangedSequence.Dequeue());
+            }
+
+            return Task.FromResult<IReadOnlyList<string>>(
+                CurrentComment is { } id && ChangedByComment.TryGetValue(id, out var changed) ? changed : Changed);
         }
         public Task DiscardChangesAsync(string w, string baseline, CancellationToken c)
         {
             Baselines.Add(baseline);
             Calls.Add("discard");
+            OnDiscard?.Invoke();
+            return c.IsCancellationRequested ? Task.FromCanceled(c) : Task.CompletedTask;
+        }
+        public Task CommitAsync(string w, string m, CancellationToken c)
+        {
+            Calls.Add("commit");
+            CommitMessages.Add(m);
             return Task.CompletedTask;
         }
-        public Task CommitAsync(string w, string m, CancellationToken c) { Calls.Add("commit"); return Task.CompletedTask; }
         public Task PushAsync(string w, Uri u, string b, string baseline, CancellationToken c)
         {
             Baselines.Add(baseline);
             Calls.Add("push");
+            if (PushError is not null)
+            {
+                return Task.FromException(PushError);
+            }
+
             Pushed = b;
             return Task.CompletedTask;
         }
@@ -53,13 +88,15 @@ public sealed class ReviewFixFlowTests
             return Task.FromResult(CommandFailure);
         }
         public IReadOnlyDictionary<long, int> GetAttempts(long id, IReadOnlyCollection<long> ids) => Used;
-        public void Record(long id, IReadOnlyCollection<long> ids, string status, bool count, string? error) =>
-            Records.Add((ids.ToArray(), status, count, error));
+        public void Record(long id, IReadOnlyCollection<long> ids, string status, int change, string? error) =>
+            Records.Add((ids.ToArray(), status, change, error));
     }
 
-    private static Task<FixResult> Run(Fakes f, FixOptions? options = null, string branch = "feature/x", params ReviewComment[] comments) =>
+    private static Task<FixResult> Run(
+        Fakes f, FixOptions? options = null, string branch = "feature/x", CancellationToken cancellationToken = default,
+        params ReviewComment[] comments) =>
         new ReviewFixFlow(f, f, f, f, options ?? new FixOptions(3)).RunAsync(
-            Pr, branch, comments.Length == 0 ? [Comment(10)] : comments, "/tmp/ws", CancellationToken.None);
+            Pr, branch, comments.Length == 0 ? [Comment(10)] : comments, "/tmp/ws", cancellationToken);
 
     [Fact]
     public async Task PushesToHeadBranchAfterBuildAndTest()
@@ -67,11 +104,61 @@ public sealed class ReviewFixFlowTests
         var f = new Fakes();
         var result = await Run(f, new FixOptions(3, "build", "test"));
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
+        Assert.Equal(1, result.PushedCount);
         Assert.Equal(["agent", "build", "test", "commit", "push"], f.Calls);
         Assert.All(f.Baselines, baseline => Assert.Equal("baseline", baseline));
         Assert.Equal("feature/x", f.Pushed);
-        Assert.Equal(("InProgress", true, null), (f.Records[0].Status, f.Records[0].Count, f.Records[0].Error));
-        Assert.Equal("Resolved", f.Records[^1].Status);
+        Assert.Equal(("InProgress", 1, null), (f.Records[0].Status, f.Records[0].Change, f.Records[0].Error));
+        Assert.Equal(("Resolved", 0), (f.Records[^1].Status, f.Records[^1].Change));
+    }
+
+    [Fact]
+    public async Task FixesEachCommentInItsOwnRunCommitAndPush()
+    {
+        var f = new Fakes();
+        f.ChangedByComment[10] = ["src/A.cs"];
+        f.ChangedByComment[11] = ["src/B.cs"];
+
+        var result = await Run(f, comments:
+            [Comment(10, "src/A.cs", "Null check is missing."), Comment(11, "src/B.cs", "Dispose the client.")]);
+
+        Assert.Equal(FixOutcome.Pushed, result.Outcome);
+        Assert.Equal(2, result.PushedCount);
+        Assert.Equal(["agent", "commit", "push", "agent", "commit", "push"], f.Calls);
+        Assert.Equal(2, f.RefreshCount);
+        Assert.Equal(
+            ["DFAI-1: Null check is missing (src/A.cs:3)", "DFAI-1: Dispose the client (src/B.cs:3)"],
+            f.CommitMessages.Select(message => message.Split('\n')[0]));
+        Assert.Contains("[comment 10]", f.Prompts[0]);
+        Assert.DoesNotContain("[comment 11]", f.Prompts[0]);
+        Assert.Contains("[comment 11]", f.Prompts[1]);
+        Assert.DoesNotContain("src/A.cs", f.Prompts[1]);
+        Assert.Contains(f.Records, record => record.Status == "Resolved" && record.Ids.SequenceEqual([10L]));
+        Assert.Contains(f.Records, record => record.Status == "Resolved" && record.Ids.SequenceEqual([11L]));
+    }
+
+    [Fact]
+    public async Task CommentsOnTheSameFileAreFixedAndPushedSeparately()
+    {
+        var f = new Fakes { Changed = ["src/A.cs"] };
+
+        await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/A.cs")]);
+
+        Assert.Equal(2, f.Calls.Count(call => call == "push"));
+        Assert.Equal(2, f.Records.Count(record => record.Status == "Resolved"));
+    }
+
+    [Fact]
+    public async Task ChangeToAnotherCommentsFileIsOutOfBounds()
+    {
+        var f = new Fakes();
+        f.ChangedByComment[11] = ["src/A.cs"];
+
+        var result = await Run(f, comments: [Comment(11, "src/B.cs")]);
+
+        Assert.Equal(FixOutcome.Failed, result.Outcome);
+        Assert.Equal(["agent", "discard"], f.Calls);
+        Assert.Contains("src/A.cs", result.Error);
     }
 
     [Fact]
@@ -82,7 +169,7 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.NoChanges, result.Outcome);
         Assert.DoesNotContain("push", f.Calls);
         Assert.DoesNotContain("commit", f.Calls);
-        Assert.Contains(f.Records, r => r.Status == "InProgress" && r.Count);
+        Assert.Contains(f.Records, r => r.Status == "InProgress" && r.Change == 1);
         Assert.Equal("Pending", f.Records[^1].Status);
     }
 
@@ -98,7 +185,7 @@ public sealed class ReviewFixFlowTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task UnsuccessfulBatchUsesEachCommentsOwnAttemptCount(bool noChanges)
+    public async Task UnsuccessfulAttemptsUseEachCommentsOwnAttemptCount(bool noChanges)
     {
         var f = noChanges
             ? new Fakes { Changed = [] }
@@ -147,6 +234,122 @@ public sealed class ReviewFixFlowTests
         Assert.Equal("boom", f.Records[^1].Error);
         Assert.Equal("Pending", f.Records[^1].Status);
         Assert.DoesNotContain("push", f.Calls);
+        Assert.Contains("discard", f.Calls);
+    }
+
+    [Fact]
+    public async Task TimeoutIsACountedFailedAttemptAndTheNextCommentStillRuns()
+    {
+        var f = new Fakes();
+        f.RunnerErrorByComment[10] = new TimeoutException("Claude Code did not finish within 30 minute(s).");
+        f.ChangedByComment[11] = ["src/A.cs"];
+
+        var result = await Run(f, comments: [Comment(10), Comment(11)]);
+
+        Assert.Equal(FixOutcome.Pushed, result.Outcome);
+        Assert.Equal((1, 1), (result.PushedCount, result.FailedCount));
+        var timeout = Assert.Single(f.Records, record => record.Ids.SequenceEqual([10L]) && record.Status != "InProgress");
+        Assert.Equal(("Pending", 0), (timeout.Status, timeout.Change));
+        Assert.Contains("did not finish", timeout.Error);
+        Assert.DoesNotContain(f.Records, record => record.Change < 0);
+    }
+
+    [Fact]
+    public async Task AlreadyCancelledWorkerRunsAndRecordsNothing()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var f = new Fakes();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Run(f, cancellationToken: cancellation.Token, comments: [Comment(10)]));
+
+        Assert.Empty(f.Calls);
+        Assert.Empty(f.Records);
+    }
+
+    [Fact]
+    public async Task ShutdownDuringRunRecordsCancelledWithoutCountingTheAttempt()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var f = new CancellingFakes(cancellation);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new ReviewFixFlow(f, f, f, f, new FixOptions(3)).RunAsync(
+                Pr, "feature/x", [Comment(10), Comment(11)], "/tmp/ws", cancellation.Token));
+
+        Assert.Equal(("InProgress", 1), (f.Records[0].Status, f.Records[0].Change));
+        Assert.Equal(("Pending", -1), (f.Records[1].Status, f.Records[1].Change));
+        Assert.Equal(2, f.Records.Count);
+    }
+
+    [Fact]
+    public async Task ShutdownDuringResetRefundsTheAttemptOnce()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var f = new Fakes
+        {
+            RunnerError = new InvalidOperationException("boom"),
+            OnDiscard = () => cancellation.Cancel()
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Run(f, cancellationToken: cancellation.Token));
+
+        Assert.Equal([("InProgress", 1), ("Pending", -1)],
+            f.Records.Select(record => (record.Status, record.Change)));
+        Assert.Equal(2, f.Records.Count);
+    }
+
+    [Fact]
+    public async Task UnconfirmedRunnerTerminationDoesNotResetOrReuseWorkspace()
+    {
+        var f = new Fakes
+        {
+            RunnerError = new SandboxWorkspaceAbandonedException("termination unknown")
+        };
+
+        await Assert.ThrowsAsync<SandboxWorkspaceAbandonedException>(() => Run(f));
+
+        Assert.Equal(["InProgress", "Pending"], f.Records.Select(record => record.Status));
+        Assert.Equal(("Pending", 0), (f.Records[^1].Status, f.Records[^1].Change));
+        Assert.DoesNotContain("discard", f.Calls);
+    }
+
+    private sealed class CancellingFakes(CancellationTokenSource cancellation)
+        : IFixRunner, IReviewGit, IProjectCommandRunner, IAttemptStore
+    {
+        public List<(long[] Ids, string Status, int Change, string? Error)> Records { get; } = [];
+        public Task RefreshWorkspaceMetadataAsync(string w, CancellationToken c) => Task.CompletedTask;
+        public Task RunAsync(string w, string prompt, CancellationToken c)
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled(c);
+        }
+        public Task<string> GetRevisionAsync(string w, CancellationToken c) => Task.FromResult("baseline");
+        public Task<IReadOnlyList<string>> ChangedFilesAsync(string w, string b, CancellationToken c) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
+        public Task DiscardChangesAsync(string w, string b, CancellationToken c) => Task.CompletedTask;
+        public Task CommitAsync(string w, string m, CancellationToken c) => Task.CompletedTask;
+        public Task PushAsync(string w, Uri u, string b, string baseline, CancellationToken c) => Task.CompletedTask;
+        Task<string?> IProjectCommandRunner.RunAsync(string command, string w, CancellationToken c) =>
+            Task.FromResult<string?>(null);
+        public IReadOnlyDictionary<long, int> GetAttempts(long id, IReadOnlyCollection<long> ids) =>
+            new Dictionary<long, int>();
+        public void Record(long id, IReadOnlyCollection<long> ids, string status, int change, string? error) =>
+            Records.Add((ids.ToArray(), status, change, error));
+    }
+
+    [Fact]
+    public async Task PushFailureDiscardsTheCommitAndStopsRemainingComments()
+    {
+        var f = new Fakes { PushError = new InvalidOperationException("rejected: non-fast-forward") };
+
+        var result = await Run(f, comments: [Comment(10), Comment(11)]);
+
+        Assert.Equal(FixOutcome.Failed, result.Outcome);
+        Assert.Equal(["agent", "commit", "push", "discard"], f.Calls);
+        Assert.DoesNotContain(f.Records, record => record.Ids.Contains(11L));
     }
 
     [Fact]
@@ -173,42 +376,6 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.Failed, result.Outcome);
         Assert.Equal(["agent", "test", "discard"], f.Calls);
         Assert.Contains("src/Generated.cs", result.Error);
-    }
-
-    [Fact]
-    public async Task ResolvesOnlyCommentsWhoseFilesChanged()
-    {
-        var f = new Fakes { Changed = ["src/A.cs"] };
-
-        var result = await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/B.cs")]);
-
-        Assert.Equal(FixOutcome.Pushed, result.Outcome);
-        Assert.Contains(f.Records, record => record.Status == "Resolved" && record.Ids.SequenceEqual([10L]));
-        Assert.Contains(f.Records, record => record.Status == "Pending" && record.Ids.SequenceEqual([11L]));
-    }
-
-    [Fact]
-    public async Task LeavesSameFileCommentsPendingWhenIndividualCompletionIsAmbiguous()
-    {
-        var f = new Fakes { Changed = ["src/A.cs"] };
-
-        await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/A.cs")]);
-
-        Assert.DoesNotContain(f.Records, record => record.Status == "Resolved");
-        Assert.Contains(f.Records, record => record.Status == "Pending" && record.Ids.SequenceEqual([10L, 11L]));
-    }
-
-    [Fact]
-    public async Task RecordsOnlyCommentsThatFitInThePromptBatch()
-    {
-        var f = new Fakes();
-        var comments = Enumerable.Range(1, 40)
-            .Select(id => Comment(id, body: new string('x', ReviewPromptBuilder.MaxCommentLength)))
-            .ToArray();
-
-        await Run(f, comments: comments);
-
-        Assert.InRange(f.Records[0].Ids.Length, 1, comments.Length - 1);
     }
 
     [Fact]

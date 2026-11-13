@@ -82,6 +82,7 @@ internal static class ReviewCycleRunner
 
         var git = new ProcessGit(configuration.GitHubRepositoryToken);
         var workspacePath = ProcessGit.CreateWorkspacePath();
+        var workspaceAbandoned = false;
         try
         {
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: cloning branch '{branch}' at {Short(headSha)}.");
@@ -94,23 +95,37 @@ internal static class ReviewCycleRunner
                 return;
             }
 
-            using var runner = new SandboxRunnerClient(configuration.AgentModel);
+            using var runner = new SandboxRunnerClient(configuration.AgentModel, configuration.RunnerTimeout);
             var flow = new ReviewFixFlow(runner, git, runner, attempts, fixOptions);
-            Log($"Cycle {cycle}: PR #{pullRequest.Number}: running fix attempt for {comments.Count} comment(s).");
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fixing {comments.Count} comment(s) one at a time.");
             var result = await flow.RunAsync(pullRequest, branch, comments, workspacePath, cancellationToken);
-            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix attempt finished with {result.Outcome}" +
-                (result.Error is null ? "." : $": {result.Error}"));
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: fix run finished with {result.Outcome}; " +
+                $"{result.PushedCount} pushed, {result.FailedCount} failed" +
+                (result.Error is null ? "." : $". Last error: {result.Error}"));
+        }
+        catch (SandboxWorkspaceAbandonedException exception)
+        {
+            workspaceAbandoned = true;
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: leaving workspace '{workspacePath}' untouched because " +
+                $"sandbox process termination was not confirmed. {exception.Message}");
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
         }
         finally
         {
-            try
+            if (!workspaceAbandoned)
             {
-                ProcessGit.DeleteWorkspace(workspacePath);
-            }
-            catch (Exception exception)
-            {
-                DFLogger.LogOutput(DFLogLevel.WARNING, Category,
-                    $"Cycle {cycle}: could not delete workspace '{workspacePath}': {exception.Message}");
+                try
+                {
+                    ProcessGit.DeleteWorkspace(workspacePath);
+                }
+                catch (Exception exception)
+                {
+                    DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                        $"Cycle {cycle}: could not delete workspace '{workspacePath}': {exception.Message}");
+                }
             }
         }
     }

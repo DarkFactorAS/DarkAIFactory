@@ -7,6 +7,7 @@
   "ClaudeModel": "",
   "BuildCommand": "",
   "TestCommand": "",
+  "RunnerTimeoutMinutes": 30,
   "DatabaseConnection": {
     "Server": "localhost",
     "Port": 3306,

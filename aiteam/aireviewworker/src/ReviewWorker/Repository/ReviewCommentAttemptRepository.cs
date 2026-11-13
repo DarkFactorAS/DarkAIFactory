@@ -42,19 +42,20 @@ internal sealed class ReviewCommentAttemptRepository(IDbConnectionFactory connec
         return result;
     }
 
-    /// <summary>Upserts one row per comment, optionally incrementing the persisted attempt count.</summary>
+    /// <summary>Upserts one row per comment, adding <paramref name="attemptChange"/> to the attempt count (never below 0).</summary>
     public void Record(
-        long pullRequestId, IReadOnlyCollection<long> commentIds, string status, bool countAttempt, string? error)
+        long pullRequestId, IReadOnlyCollection<long> commentIds, string status, int attemptChange, string? error)
     {
         foreach (var commentId in commentIds)
         {
             using var command = connectionFactory.CreateCommand(
                 "INSERT INTO review_comment_attempts (pull_request_id, github_comment_id, attempts, status, last_error) " +
-                "VALUES (@pull_request_id, @github_comment_id, @increment, @status, @last_error) " +
-                "ON DUPLICATE KEY UPDATE attempts = attempts + @increment, status = @status, last_error = @last_error");
+                "VALUES (@pull_request_id, @github_comment_id, GREATEST(@increment, 0), @status, @last_error) " +
+                "ON DUPLICATE KEY UPDATE attempts = GREATEST(attempts + @increment, 0), status = @status, " +
+                "last_error = @last_error");
             command.AddParameter("@pull_request_id", pullRequestId);
             command.AddParameter("@github_comment_id", commentId);
-            command.AddParameter("@increment", countAttempt ? 1 : 0);
+            command.AddParameter("@increment", attemptChange);
             command.AddParameter("@status", status);
             command.AddParameter("@last_error", error is null ? DBNull.Value : error.Length > 2_000 ? error[..2_000] : error);
             command.ExecuteNonQuery();

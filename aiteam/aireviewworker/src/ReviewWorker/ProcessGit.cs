@@ -48,6 +48,25 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit
     public async Task<string> GetRevisionAsync(string workspacePath, CancellationToken cancellationToken) =>
         (await GitAsync(workspacePath, ["rev-parse", "--verify", "HEAD^{commit}"], cancellationToken)).Trim();
 
+    public Task RefreshWorkspaceMetadataAsync(string workspacePath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var destination = Path.Combine(workspacePath, ".git");
+        var staging = Path.Combine(workspacePath, $".git-refresh-{Guid.NewGuid():N}");
+        try
+        {
+            CopyDirectory(GitDirectory(workspacePath), staging);
+            cancellationToken.ThrowIfCancellationRequested();
+            DeletePath(destination);
+            Directory.Move(staging, destination);
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            DeletePath(staging);
+        }
+    }
+
     public async Task<IReadOnlyList<string>> ChangedFilesAsync(
         string workspacePath, string baselineRevision, CancellationToken cancellationToken)
     {
@@ -223,6 +242,28 @@ internal sealed class ProcessGit(string repositoryToken) : IReviewGit
         foreach (var directory in Directory.EnumerateDirectories(source))
         {
             CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
+        }
+    }
+
+    private static void DeletePath(string path)
+    {
+        try
+        {
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.Directory) != 0)
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
         }
     }
 
