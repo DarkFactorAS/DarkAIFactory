@@ -156,6 +156,7 @@ internal sealed class BuilderCapability(
         var inProgressAttempted = false;
         var inProgressCompleted = false;
         var resultCommentPosted = false;
+        var pushStarted = false;
         var delivered = false;
         try
         {
@@ -197,6 +198,7 @@ internal sealed class BuilderCapability(
 
             var result = await RunRunnerAsync(context, settings, RunnerModes.Implement, workspacePath,
                 PromptBuilder.BuildImplementationPrompt(issue, plan, baseBranch), cancellationToken);
+            pushStarted = true;
             var push = await gitHub.CommitAndPushAsync(
                 workspacePath, branchName, issue.Key, issue.Summary, cancellationToken);
             var message = push.Message;
@@ -229,6 +231,13 @@ internal sealed class BuilderCapability(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            if (await RecoverFromShutdownAsync(settings, jira, issue, pushStarted, pushedBranch, branchName,
+                    workspacePath, pullRequestUrl, inProgressAttempted, resultCommentPosted))
+            {
+                DeleteWorkspace(workspacePath);
+                workspacePath = null;
+            }
+
             throw;
         }
         catch (RunnerBusyException)
@@ -257,6 +266,47 @@ internal sealed class BuilderCapability(
                     (pushedBranch is not null ? $" Pushed branch: {pushedBranch}." : branchName is not null ? $" Local branch: {branchName}." : ""));
             }
         }
+    }
+
+    internal static readonly TimeSpan ShutdownRecoveryTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Bounded recovery when shutdown interrupts work after pickup. Uses its own token so the pickup is not left
+    /// orphaned: unpushed work is released for a clean retry; possibly pushed work keeps the pickup label (duplicate-work
+    /// protection) and gets a failure report with recovery instructions. Returns true when the issue was released.
+    /// </summary>
+    private static async Task<bool> RecoverFromShutdownAsync(
+        BuilderSettings settings, IBuilderJira jira, BuilderIssue issue, bool pushStarted, string? pushedBranch,
+        string? branchName, string? workspacePath, string? pullRequestUrl, bool inProgressAttempted,
+        bool resultCommentPosted)
+    {
+        using var recovery = new CancellationTokenSource(ShutdownRecoveryTimeout);
+        try
+        {
+            if (!pushStarted && pushedBranch is null)
+            {
+                DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Shutdown interrupted {issue.Key} before pushing; releasing the issue.");
+                await ReleaseAsync(settings, jira, issue, inProgressAttempted, recovery.Token);
+                return true;
+            }
+
+            var interruptedBranch = pushedBranch ?? branchName;
+            DFLogger.LogOutput(DFLogLevel.WARNING, Log,
+                $"Shutdown interrupted {issue.Key} after a push may have completed (branch: {interruptedBranch ?? "none"}); reporting for manual recovery.");
+            await ReportFailureAsync(settings, jira, issue,
+                new OperationCanceledException(
+                    "The agent shut down while delivering the implementation; the branch may already have been pushed."),
+                interruptedBranch, branchName, workspacePath, pullRequestUrl, inProgressAttempted,
+                resultCommentPosted, recovery.Token);
+        }
+        catch (Exception exception)
+        {
+            DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+                $"Shutdown recovery for {issue.Key} failed: {exception.Message}. The `{settings.PickupLabel}` label may remain; " +
+                $"pushed branch: {pushedBranch ?? "unknown"}; local branch: {branchName ?? "none"}; workspace: {workspacePath ?? "none"}.");
+        }
+
+        return false;
     }
 
     internal const string RequirementsChangedMessage =
