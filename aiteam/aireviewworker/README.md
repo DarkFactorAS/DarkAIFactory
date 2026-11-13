@@ -17,6 +17,8 @@ Agent that solves pull-request review comments (DFAI-137). Every polling cycle i
    After a fix is pushed, the worker resolves the comment's review thread on GitHub
    (GraphQL `resolveReviewThread`). If resolving fails (for example missing permission) it only logs a
    warning; the fix still counts as pushed and the comment stays `Resolved` in the attempts table.
+   If Claude Code makes no changes for a comment, that is not an error: the comment is recorded as
+   `Resolved` (no error, not retried) and its GitHub thread is deliberately left open for a human.
    Attempts are recorded in `review_comment_attempts`, so each comment is retried at most
    `MaxAttemptsPerPullRequest` times. A sandbox timeout (`RunnerTimeoutMinutes`) counts as a failed
    attempt; a worker shutdown during a run records `Cancelled by worker shutdown.` and does not count.

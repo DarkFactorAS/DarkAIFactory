@@ -203,26 +203,40 @@ public sealed class ReviewFixFlowTests
         Assert.DoesNotContain("push", f.Calls);
         Assert.DoesNotContain("commit", f.Calls);
         Assert.Contains(f.Records, r => r.Status == "InProgress" && r.Change == 1);
-        Assert.Equal("Pending", f.Records[^1].Status);
+        Assert.Equal(("Resolved", null), (f.Records[^1].Status, f.Records[^1].Error));
     }
 
     [Fact]
-    public async Task LastAttemptWithoutChangesIsFailed()
+    public async Task LastAttemptWithoutChangesIsResolved()
     {
         var f = new Fakes { Changed = [] };
         f.Used[10] = 2;
         await Run(f);
-        Assert.Equal("Failed", f.Records[^1].Status);
+        Assert.Equal(("Resolved", null), (f.Records[^1].Status, f.Records[^1].Error));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task UnsuccessfulAttemptsUseEachCommentsOwnAttemptCount(bool noChanges)
+    [Fact]
+    public async Task NoChangeCommentIsResolvedInDbButItsThreadStaysOpen()
     {
-        var f = noChanges
-            ? new Fakes { Changed = [] }
-            : new Fakes { RunnerError = new InvalidOperationException("boom") };
+        var f = new Fakes();
+        f.ChangedByComment[10] = ["src/A.cs"];
+        f.ChangedByComment[11] = [];
+
+        var result = await Run(f, comments:
+            [Comment(10, "src/A.cs"), Comment(11, "src/A.cs") with { ThreadId = "thread-10" }]);
+
+        Assert.Equal(1, result.PushedCount);
+        Assert.Equal(0, result.FailedCount);
+        Assert.Contains(f.Records, r => r.Status == "Resolved" && r.Ids.SequenceEqual([10L]));
+        Assert.Contains(f.Records, r => r.Status == "Resolved" && r.Ids.SequenceEqual([11L]) && r.Error is null);
+        Assert.DoesNotContain(f.Records, r => r.Status is "Failed" or "Pending");
+        Assert.Empty(f.ResolvedThreads);
+    }
+
+    [Fact]
+    public async Task UnsuccessfulAttemptsUseEachCommentsOwnAttemptCount()
+    {
+        var f = new Fakes { RunnerError = new InvalidOperationException("boom") };
         f.Used[10] = 2;
 
         await Run(f, comments: [Comment(10), Comment(11)]);
