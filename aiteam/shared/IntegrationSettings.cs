@@ -22,6 +22,7 @@ public sealed class JiraSettings
     public string JiraAnalysisOnlyStatus { get; set; } = "Code Review";
     public string JiraDoneStatus { get; set; } = "Done";
     public string JiraSubtaskIssueType { get; set; } = "Sub-task";
+    public string JiraTaskIssueType { get; set; } = "Task";
     public string JiraAutoApproveSmallChanges { get; set; } = "true";
 }
 

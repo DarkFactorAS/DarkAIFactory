@@ -8,7 +8,8 @@ internal enum TriageDecision
     AnalysisOnly,
     Small,
     NeedsApproval,
-    Split
+    Split,
+    CreateTasks
 }
 
 internal sealed record TriageSubtask(string Title, string Description, IReadOnlyList<string> DependsOn);
@@ -22,6 +23,10 @@ internal sealed record TriageResult(
     IReadOnlyList<string> RiskAreas)
 {
     public const int MaximumSubtasks = 10;
+    public const int MaximumTasks = 20;
+
+    /// <summary>Top-level Jira tasks to create (create_tasks only). Uses the same shape as sub-tasks.</summary>
+    public IReadOnlyList<TriageSubtask> Tasks { get; init; } = [];
 
     private static readonly (TriageDecision Decision, string Name)[] DecisionNames =
     [
@@ -29,7 +34,8 @@ internal sealed record TriageResult(
         (TriageDecision.AnalysisOnly, "analysis_only"),
         (TriageDecision.Small, "small"),
         (TriageDecision.NeedsApproval, "needs_approval"),
-        (TriageDecision.Split, "split")
+        (TriageDecision.Split, "split"),
+        (TriageDecision.CreateTasks, "create_tasks")
     ];
 
     public static string MarkerFor(TriageDecision decision) =>
@@ -100,35 +106,43 @@ internal sealed record TriageResult(
                 throw new InvalidDataException($"Unknown triage decision \"{decisionName}\".");
             }
 
-            var subtasks = ReadSubtasks(root);
+            var subtasks = ReadSubtasks(root, "subtasks");
             var result = new TriageResult(
                 entry.Decision,
                 ReadStrings(root, "questions"),
                 ReadString(root, "analysis").Trim(),
                 ReadString(root, "plan").Trim(),
                 subtasks,
-                ReadStrings(root, "riskAreas"));
+                ReadStrings(root, "riskAreas"))
+            {
+                Tasks = ReadSubtasks(root, "tasks")
+            };
             result.Validate();
             return result;
         }
     }
 
     /// <summary>Returns subtask indexes ordered so every subtask comes after its dependencies.</summary>
-    public IReadOnlyList<int> ExecutionOrder()
+    public IReadOnlyList<int> ExecutionOrder() => ExecutionOrder(Subtasks, "subtask");
+
+    /// <summary>Returns task indexes ordered so every task comes after its dependencies.</summary>
+    public IReadOnlyList<int> TaskExecutionOrder() => ExecutionOrder(Tasks, "task");
+
+    private static IReadOnlyList<int> ExecutionOrder(IReadOnlyList<TriageSubtask> items, string kind)
     {
-        var indexByTitle = IndexByTitle(Subtasks);
-        var remaining = Enumerable.Range(0, Subtasks.Count).ToHashSet();
+        var indexByTitle = IndexByTitle(items, kind);
+        var remaining = Enumerable.Range(0, items.Count).ToHashSet();
         var order = new List<int>();
         while (remaining.Count > 0)
         {
             var next = remaining
                 .Order()
-                .Where(index => Subtasks[index].DependsOn.All(title => !remaining.Contains(indexByTitle[Normalize(title)])))
+                .Where(index => items[index].DependsOn.All(title => !remaining.Contains(indexByTitle[Normalize(title)])))
                 .Cast<int?>()
                 .FirstOrDefault();
             if (next is null)
             {
-                throw new InvalidDataException("The subtask dependencies contain a cycle.");
+                throw new InvalidDataException($"The {kind} dependencies contain a cycle.");
             }
 
             order.Add(next.Value);
@@ -152,45 +166,54 @@ internal sealed record TriageResult(
                 throw new InvalidDataException("A split decision needs an overall plan.");
             case TriageDecision.Split when Subtasks.Count == 0:
                 throw new InvalidDataException("A split decision needs at least one subtask.");
+            case TriageDecision.CreateTasks when Tasks.Count == 0:
+                throw new InvalidDataException("A create_tasks decision needs at least one task.");
         }
 
-        if (Subtasks.Count > MaximumSubtasks)
+        ValidateItems(Subtasks, MaximumSubtasks, "subtask");
+        ValidateItems(Tasks, MaximumTasks, "task");
+    }
+
+    private static void ValidateItems(IReadOnlyList<TriageSubtask> items, int maximum, string kind)
+    {
+        if (items.Count > maximum)
         {
-            throw new InvalidDataException($"A triage result may contain at most {MaximumSubtasks} subtasks.");
+            throw new InvalidDataException($"A triage result may contain at most {maximum} {kind}s.");
         }
 
-        var indexByTitle = IndexByTitle(Subtasks);
-        for (var index = 0; index < Subtasks.Count; index++)
+        var label = char.ToUpperInvariant(kind[0]) + kind[1..];
+        var indexByTitle = IndexByTitle(items, kind);
+        for (var index = 0; index < items.Count; index++)
         {
-            foreach (var dependency in Subtasks[index].DependsOn)
+            foreach (var dependency in items[index].DependsOn)
             {
                 if (!indexByTitle.TryGetValue(Normalize(dependency), out var target))
                 {
                     throw new InvalidDataException(
-                        $"Subtask \"{Subtasks[index].Title}\" depends on unknown subtask \"{dependency}\".");
+                        $"{label} \"{items[index].Title}\" depends on unknown {kind} \"{dependency}\".");
                 }
 
                 if (target == index)
                 {
-                    throw new InvalidDataException($"Subtask \"{Subtasks[index].Title}\" depends on itself.");
+                    throw new InvalidDataException($"{label} \"{items[index].Title}\" depends on itself.");
                 }
             }
         }
 
-        if (Subtasks.Count > 0)
+        if (items.Count > 0)
         {
-            ExecutionOrder();
+            ExecutionOrder(items, kind);
         }
     }
 
-    private static Dictionary<string, int> IndexByTitle(IReadOnlyList<TriageSubtask> subtasks)
+    private static Dictionary<string, int> IndexByTitle(IReadOnlyList<TriageSubtask> items, string kind)
     {
         var indexes = new Dictionary<string, int>();
-        for (var index = 0; index < subtasks.Count; index++)
+        for (var index = 0; index < items.Count; index++)
         {
-            if (!indexes.TryAdd(Normalize(subtasks[index].Title), index))
+            if (!indexes.TryAdd(Normalize(items[index].Title), index))
             {
-                throw new InvalidDataException($"Duplicate subtask title \"{subtasks[index].Title}\".");
+                throw new InvalidDataException($"Duplicate {kind} title \"{items[index].Title}\".");
             }
         }
 
@@ -199,31 +222,32 @@ internal sealed record TriageResult(
 
     private static string Normalize(string title) => title.Trim().ToLowerInvariant();
 
-    private static IReadOnlyList<TriageSubtask> ReadSubtasks(JsonElement root)
+    private static IReadOnlyList<TriageSubtask> ReadSubtasks(JsonElement root, string field)
     {
-        if (!root.TryGetProperty("subtasks", out var array) || array.ValueKind is JsonValueKind.Null)
+        if (!root.TryGetProperty(field, out var array) || array.ValueKind is JsonValueKind.Null)
         {
             return [];
         }
 
         if (array.ValueKind != JsonValueKind.Array)
         {
-            throw new InvalidDataException("The triage field \"subtasks\" must be an array.");
+            throw new InvalidDataException($"The triage field \"{field}\" must be an array.");
         }
 
+        var kind = field == "tasks" ? "task" : "subtask";
         var subtasks = new List<TriageSubtask>();
         foreach (var element in array.EnumerateArray())
         {
             if (element.ValueKind != JsonValueKind.Object)
             {
-                throw new InvalidDataException("Every subtask must be a JSON object.");
+                throw new InvalidDataException($"Every {kind} must be a JSON object.");
             }
 
             var title = ReadString(element, "title").Trim();
             var description = ReadString(element, "description").Trim();
             if (title.Length == 0 || description.Length == 0)
             {
-                throw new InvalidDataException("Every subtask needs a title and a description.");
+                throw new InvalidDataException($"Every {kind} needs a title and a description.");
             }
 
             subtasks.Add(new TriageSubtask(title, description, ReadStrings(element, "dependsOn")));

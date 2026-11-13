@@ -1,11 +1,12 @@
 # AITechLead (Jira Manager Agent)
 
 AITechLead (folder and DB client key still `aimanager`) polls Jira, clones each mapped repository for read-only context, asks
-Copilot CLI to triage each ticket (clarify, analysis only, small, needs approval or split into
-sub-tasks), saves the full plan in MariaDB and posts it to Jira. It does not implement code,
+Copilot CLI to triage each ticket (clarify, analysis only, small, needs approval, split into
+sub-tasks, or create the Jira tasks the ticket asks for), saves the full plan in MariaDB and posts it to Jira. It does not implement code,
 run builds/tests in the cloned repository, create branches, commit, push or open pull
 requests. It changes ticket statuses for analysis-only tickets (to `Code Review`), for
-released sub-tasks (to `In Progress`), and for `In Review` tickets whose pull requests
+released sub-tasks (to `In Progress`), for tickets whose requested tasks were created (to `Done`),
+and for `In Review` tickets whose pull requests
 are all merged (to `Done`); see [Triage behaviour](#triage-behaviour) and
 [Closing merged pull requests](#closing-merged-pull-requests).
 Copilot shell and write tools are always disabled.
@@ -107,7 +108,8 @@ claimed or already pushed work; follow the worker's recovery instructions instea
 ## Triage behaviour
 
 Copilot returns one JSON triage document (`decision`, `questions`, `analysis`,
-`plan`, `subtasks[{title, description, dependsOn}]`, `riskAreas`). Malformed or
+`plan`, `subtasks[{title, description, dependsOn}]`, `tasks[{title, description, dependsOn}]`,
+`riskAreas`). Malformed or
 inconsistent JSON (unknown decision, missing fields, dependency cycles) fails the
 ticket like any planning failure. Plain-text output is still accepted as a
 legacy plan and handed off. Decisions:
@@ -119,6 +121,7 @@ legacy plan and handed off. Decisions:
 | `small` | Handed off directly with the normal plan flow (no human approval). |
 | `needs_approval` | Authentication, database or architecture changes: the plan is posted and `Jira.JiraApprovalLabel` is added. The worker is not triggered until a human adds `Jira.JiraApprovedLabel`; the manager then hands off and removes both labels. |
 | `split` | Large ticket: the detailed plan and the full, cleartext description of every proposed sub-task are posted on the parent and `Jira.JiraApprovalLabel` is added. Nothing is created until a human adds `Jira.JiraApprovedLabel` (a split is always held for approval). After approval the sub-tasks (`Jira.JiraSubtaskIssueType`) are created with descriptions, "Blocks" links for dependencies, and their own `manager_plans` rows; both the description and the stored plan of each sub-task contain the branch and pull-request instructions below. The parent receives a comment with the execution order. Sub-tasks without open dependencies are moved to `Jira.JiraStatusName` and handed off; the others are released when all their dependencies reach `Jira.JiraDoneStatus`. |
+| `create_tasks` | The title or description explicitly asks for Jira tasks to be created (for example "Create Jira tasks for ..."). Up to 20 top-level issues of `Jira.JiraTaskIssueType` (`Task`) are created in the same project, in dependency order, with "Blocks" links for dependencies. No approval is needed because the ticket asked for it. The new tasks stay in the project's initial status and are not handed to the worker; move one to `Jira.JiraStatusName` to have it planned and implemented. The source ticket gets a comment listing the created keys and is moved to `Jira.JiraDoneStatus`. Each created key is stored in `manager_plans` as soon as the issue exists, so a failed run resumes after removing the failure label without creating duplicates. |
 
 ### Rules for multi-step plans, blockers and feedback
 
@@ -236,6 +239,7 @@ All Jira/GitHub entries below are database setting names; only
 | `Jira.JiraInReviewStatus` | `In Review` | Optional shared setting: worker handoff status; tickets here are moved to Done when all their pull requests are merged |
 | `Jira.JiraDoneStatus` | `Done` | Optional shared setting: sub-task status that releases dependants, and the status set when all pull requests are merged |
 | `Jira.JiraSubtaskIssueType` | `Sub-task` | Optional shared setting: issue type used for created sub-tasks |
+| `Jira.JiraTaskIssueType` | `Task` | Optional shared setting: issue type used for top-level tasks created by a `create_tasks` decision (also used by AIJiraManager) |
 | `Jira.JiraAutoApproveSmallChanges` | `true` | Optional shared setting: `false` holds small changes for approval too |
 | `PollIntervalSeconds` | `30` | Poll interval, minimum 5 seconds |
 

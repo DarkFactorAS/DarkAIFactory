@@ -135,7 +135,8 @@ its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),
-`Jira.JiraSubtaskIssueType` (`Sub-task`) and `Jira.JiraAutoApproveSmallChanges`
+`Jira.JiraSubtaskIssueType` (`Sub-task`), `Jira.JiraTaskIssueType` (`Task`, for
+tasks created by a `create_tasks` triage) and `Jira.JiraAutoApproveSmallChanges`
 (`true`). See the [aimanager README](../aimanager/README.md#triage-behaviour).
 
 Both agents use `manager_projects` for project/repository selection, reloading

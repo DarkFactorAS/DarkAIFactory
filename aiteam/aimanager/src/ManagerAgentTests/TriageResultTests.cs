@@ -40,6 +40,38 @@ public sealed class TriageResultTests
         Assert.Throws<InvalidDataException>(() => TriageResult.Parse(json));
     }
 
+    [Theory]
+    [InlineData("""{"decision":"create_tasks"}""")]
+    [InlineData("""{"decision":"create_tasks","tasks":[]}""")]
+    [InlineData("""{"decision":"create_tasks","tasks":[{"title":"A","description":""}]}""")]
+    [InlineData("""{"decision":"create_tasks","tasks":[{"title":"A","description":"a","dependsOn":["B"]}]}""")]
+    [InlineData("""{"decision":"create_tasks","tasks":[{"title":"A","description":"a"},{"title":"a","description":"b"}]}""")]
+    [InlineData("""{"decision":"create_tasks","tasks":[{"title":"A","description":"a","dependsOn":["B"]},{"title":"B","description":"b","dependsOn":["A"]}]}""")]
+    public void Parse_RejectsInvalidCreateTasks(string json)
+    {
+        Assert.Throws<InvalidDataException>(() => TriageResult.Parse(json));
+    }
+
+    [Fact]
+    public void Parse_ReadsCreateTasksInDependencyOrderAndLimitsCount()
+    {
+        var result = TriageResult.Parse("""
+            {"decision":"create_tasks","tasks":[
+              {"title":"B","description":"b","dependsOn":["A"]},
+              {"title":"A","description":"a"}]}
+            """);
+
+        Assert.Equal(TriageDecision.CreateTasks, result.Decision);
+        Assert.Empty(result.Subtasks);
+        Assert.Equal([1, 0], result.TaskExecutionOrder());
+        Assert.Equal("[triage:create_tasks]", TriageResult.MarkerFor(TriageDecision.CreateTasks));
+
+        var tooMany = string.Join(",", Enumerable.Range(1, TriageResult.MaximumTasks + 1)
+            .Select(index => $$"""{"title":"T{{index}}","description":"d"}"""));
+        Assert.Throws<InvalidDataException>(() =>
+            TriageResult.Parse($$"""{"decision":"create_tasks","tasks":[{{tooMany}}]}"""));
+    }
+
     [Fact]
     public void ExecutionOrder_PutsDependenciesFirst()
     {
