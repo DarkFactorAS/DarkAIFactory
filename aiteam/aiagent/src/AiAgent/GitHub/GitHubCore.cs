@@ -48,6 +48,7 @@ public sealed partial class GitHubCore(
             true, cancellationToken);
         if (baseBranch is not null)
         {
+            await EnsureRemoteBranchExistsAsync(checkoutPath, baseBranch, cancellationToken);
             await git.RunAsync(checkoutPath, ["fetch", "--quiet", "origin", baseBranch], true, cancellationToken);
         }
 
@@ -70,6 +71,44 @@ public sealed partial class GitHubCore(
         }
 
         return branch;
+    }
+
+    /// <summary>
+    /// Creates <paramref name="branch"/> on origin from the default branch (the fresh clone's HEAD) when it is
+    /// missing, e.g. the parent integration branch for the first subtask of a split. The push carries an
+    /// empty lease so it only succeeds when the ref does not exist; an existing branch is never overwritten.
+    /// </summary>
+    private async Task EnsureRemoteBranchExistsAsync(
+        string checkoutPath, string branch, CancellationToken cancellationToken)
+    {
+        if (await RemoteBranchExistsAsync(checkoutPath, branch, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            await git.RunAsync(
+                checkoutPath,
+                ["push", "--quiet", $"--force-with-lease=refs/heads/{branch}:", "origin", $"HEAD:refs/heads/{branch}"],
+                true, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            // Another worker may have created the branch concurrently; use theirs, otherwise surface the error.
+            if (!await RemoteBranchExistsAsync(checkoutPath, branch, cancellationToken))
+            {
+                throw;
+            }
+        }
+    }
+
+    private async Task<bool> RemoteBranchExistsAsync(
+        string checkoutPath, string branch, CancellationToken cancellationToken)
+    {
+        var result = await git.RunAsync(
+            checkoutPath, ["ls-remote", "--heads", "origin", $"refs/heads/{branch}"], true, cancellationToken);
+        return result.StandardOutput.Trim().Length > 0;
     }
 
     public async Task<PushResult> CommitAndPushAsync(
