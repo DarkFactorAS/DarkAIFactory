@@ -1,6 +1,7 @@
 using AiAgent.Capabilities.Jira;
 using AiAgent.Capabilities.Builder;
 using AiAgent.Capabilities.Planning;
+using AiAgent.Capabilities.Review;
 using AiAgent.Core;
 using AiAgent.GitHub;
 using AiAgent.Repositories;
@@ -88,6 +89,32 @@ var capabilities = host.Services.GetServices<IAgentCapability>().Append(new Plan
     settings => new PlanningJiraClient(settings.Jira),
     new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory))))
     .Append(jiraCapability);
+var reviewSettings = new IntegrationSettingsRepository(connectionFactory).Load("aiagent", pollSeconds);
+if (string.IsNullOrWhiteSpace(reviewSettings.GitHub.GitHubRepositoryToken))
+{
+    DFLogger.LogOutput(
+        DFLogLevel.WARNING,
+        "Startup",
+        "GitHub.GitHubRepositoryToken is not set; the Review capability is not registered.");
+}
+else
+{
+    string? Env(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
+    var repositoryToken = reviewSettings.GitHub.GitHubRepositoryToken.Trim();
+    capabilities = capabilities.Append(new ReviewCapability(
+        new ReviewOptions(
+            repositoryToken,
+            Env("AIAGENT_REVIEWER_LOGIN") ?? "copilot-pull-request-reviewer",
+            MaxAttempts: 3,
+            BuildCommand: Env("AIAGENT_BUILD_COMMAND") ?? "dotnet build",
+            TestCommand: Env("AIAGENT_TEST_COMMAND") ?? "dotnet test",
+            CopilotToken: reviewSettings.GitHub.AgentGitHubToken,
+            WorkspaceRoot: RunnerPolicy.WorkspaceRoot),
+        new AgentPullRequestRepository(connectionFactory),
+        new AgentReviewAttemptRepository(connectionFactory),
+        new GitRunner(repositoryToken),
+        runnerClient));
+}
 var agentHost = new AgentHost(
     agentRepository,
     capabilities,
