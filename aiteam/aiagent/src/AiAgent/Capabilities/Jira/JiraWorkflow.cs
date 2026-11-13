@@ -36,40 +36,42 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
     }
 
     /// <summary>
-    /// Re-reads the candidate, claims it, labels it, assigns it and moves it to In Progress.
+    /// Claims the candidate, re-reads it while holding the claim, labels it, assigns it and moves it to In Progress.
     /// Returns null when the issue must not be picked up now (changed, labelled, blocked or claimed elsewhere).
     /// </summary>
     public async Task<JiraPickup?> TryPickupAsync(
         AgentContext context, JiraIssue candidate, CancellationToken cancellationToken)
     {
-        var issue = await jira.GetIssueAsync(candidate.Key, cancellationToken);
-        if (issue.Labels.Contains(configuration.PickupLabel) ||
-            issue.Labels.Contains(configuration.FailureLabel) ||
-            issue.Labels.Contains(configuration.IgnoredLabel) ||
-            !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        var openBlockers = JiraWorkflowRules.OpenBlockers(issue.Blockers, configuration.DoneStatus);
-        if (openBlockers.Count > 0)
-        {
-            DFLogger.LogOutput(
-                DFLogLevel.WARNING, Source,
-                $"Skipping {issue.Key}: blocked by {JiraWorkflowRules.DescribeBlockers(openBlockers)}.");
-            return null;
-        }
-
-        var claim = context.ClaimLock.TryAcquire(context.AgentId, issue.Key);
+        var claim = context.ClaimLock.TryAcquire(context.AgentId, candidate.Key);
         if (claim is null)
         {
-            DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing {issue.Key}.");
+            DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing {candidate.Key}.");
             return null;
         }
 
-        var pickup = new JiraPickup(issue, claim);
         try
         {
+            var issue = await jira.GetIssueAsync(candidate.Key, cancellationToken);
+            if (issue.Labels.Contains(configuration.PickupLabel) ||
+                issue.Labels.Contains(configuration.FailureLabel) ||
+                issue.Labels.Contains(configuration.IgnoredLabel) ||
+                !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
+            {
+                claim.Dispose();
+                return null;
+            }
+
+            var openBlockers = JiraWorkflowRules.OpenBlockers(issue.Blockers, configuration.DoneStatus);
+            if (openBlockers.Count > 0)
+            {
+                DFLogger.LogOutput(
+                    DFLogLevel.WARNING, Source,
+                    $"Skipping {issue.Key}: blocked by {JiraWorkflowRules.DescribeBlockers(openBlockers)}.");
+                claim.Dispose();
+                return null;
+            }
+
+            var pickup = new JiraPickup(issue, claim);
             await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellationToken);
             if (configuration.AssigneeAccountId.Length > 0)
             {
@@ -86,7 +88,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
         }
         catch
         {
-            pickup.Dispose();
+            claim.Dispose();
             throw;
         }
     }
