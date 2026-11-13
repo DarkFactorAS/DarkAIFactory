@@ -22,7 +22,10 @@ internal static class RunnerPolicy
         return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : DefaultMaxConcurrentJobs;
     }
 
-    /// <summary>Returns the normalized workspace path; throws unless it is strictly below the root.</summary>
+    /// <summary>
+    /// Returns the workspace path with every symlink resolved; throws unless it is strictly below the
+    /// (also symlink-resolved) root, so a link cannot redirect the CLI outside the workspace root.
+    /// </summary>
     public static string ResolveWorkspace(string workspace, string root)
     {
         if (string.IsNullOrWhiteSpace(workspace) || workspace.Contains('\0'))
@@ -30,14 +33,46 @@ internal static class RunnerPolicy
             throw new ArgumentException("The workspace is required.");
         }
 
-        var fullRoot = Path.GetFullPath(root).TrimEnd('/');
-        var full = Path.GetFullPath(workspace).TrimEnd('/');
+        var fullRoot = ResolveRealPath(root).TrimEnd('/');
+        var full = ResolveRealPath(workspace).TrimEnd('/');
         if (!full.StartsWith(fullRoot + "/", StringComparison.Ordinal))
         {
             throw new ArgumentException($"The workspace must be located under {fullRoot}.");
         }
 
         return full;
+    }
+
+    /// <summary>Resolves symlinks in every component of <paramref name="path"/>; missing components are kept as-is.</summary>
+    private static string ResolveRealPath(string path)
+    {
+        const int MaxLinkHops = 40;
+        var remaining = new Queue<string>(Path.GetFullPath(path).Split('/', StringSplitOptions.RemoveEmptyEntries));
+        var current = "/";
+        var hops = 0;
+        while (remaining.Count > 0)
+        {
+            var next = Path.Combine(current, remaining.Dequeue());
+            var target = new FileInfo(next).LinkTarget;
+            if (target is null)
+            {
+                current = next;
+                continue;
+            }
+
+            if (++hops > MaxLinkHops)
+            {
+                throw new ArgumentException("The workspace path contains too many symbolic links.");
+            }
+
+            // Restart from the link target followed by the components not yet visited.
+            var resolved = Path.GetFullPath(target, current);
+            remaining = new Queue<string>(
+                resolved.Split('/', StringSplitOptions.RemoveEmptyEntries).Concat(remaining));
+            current = "/";
+        }
+
+        return current;
     }
 
     public static IReadOnlyList<string> BuildClaudeArguments(string model, string mode)
