@@ -204,7 +204,7 @@ internal sealed class ReviewFixFlow(
             }
 
             await git.CommitAsync(workspacePath,
-                $"{pullRequest.JiraKey}: Address review comment {comment.Id}", cancellationToken);
+                ReviewCommitMessage.Build(pullRequest.JiraKey, comment), cancellationToken);
             committed = true;
             await git.PushAsync(workspacePath, pullRequest.RepositoryUrl, headBranch, baselineRevision, cancellationToken);
             attempts.Record(pullRequest.Id, ids, "Resolved", 0, null);

@@ -8,8 +8,10 @@ Agent that solves pull-request review comments (DFAI-137). Every polling cycle i
 3. For each pull request with comments: clones the head branch into the shared workspace and
    fixes the comments **one at a time**. For each comment it runs Claude Code (`claude -p`) in
    `review-runner` with only that comment, checks that only the comment's file changed, runs the
-   optional build and test commands, then commits (`<JIRA-KEY>: Address review comment <id>`) and
-   pushes (never forced) to the head branch, so every fix is a separate commit and push.
+   optional build and test commands, then commits and
+   pushes (never forced) to the head branch, so every fix is a separate commit and push. The commit
+   subject says what is fixed and where the reviewer found it, taken from the comment
+   (`DFAI-166: The HttpClient is never disposed (src/Worker/Client.cs:42)`); the body quotes the comment.
    A comment that fails is reset and the worker moves on to the next one; a failed push stops the
    remaining comments until the next cycle.
    Attempts are recorded in `review_comment_attempts`, so each comment is retried at most

@@ -111,12 +111,15 @@ public sealed class ReviewFixFlowTests
         f.ChangedByComment[10] = ["src/A.cs"];
         f.ChangedByComment[11] = ["src/B.cs"];
 
-        var result = await Run(f, comments: [Comment(10, "src/A.cs"), Comment(11, "src/B.cs")]);
+        var result = await Run(f, comments:
+            [Comment(10, "src/A.cs", "Null check is missing."), Comment(11, "src/B.cs", "Dispose the client.")]);
 
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(2, result.PushedCount);
         Assert.Equal(["agent", "commit", "push", "agent", "commit", "push"], f.Calls);
-        Assert.Equal(["DFAI-1: Address review comment 10", "DFAI-1: Address review comment 11"], f.CommitMessages);
+        Assert.Equal(
+            ["DFAI-1: Null check is missing (src/A.cs:3)", "DFAI-1: Dispose the client (src/B.cs:3)"],
+            f.CommitMessages.Select(message => message.Split('\n')[0]));
         Assert.Contains("[comment 10]", f.Prompts[0]);
         Assert.DoesNotContain("[comment 11]", f.Prompts[0]);
         Assert.Contains("[comment 11]", f.Prompts[1]);
