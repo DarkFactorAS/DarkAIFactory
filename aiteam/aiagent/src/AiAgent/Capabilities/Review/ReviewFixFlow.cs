@@ -101,6 +101,13 @@ public sealed class ReviewFixFlow(
             }
 
             changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
+            if (changed.Count == 0)
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: no changes remained after validation; nothing to push.");
+                RecordUnsuccessfulAttempts(pullRequest, ids, used, "no changes remained after build and test.");
+                return new FixResult(FixOutcome.NoChanges);
+            }
+
             outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
             if (outOfBounds.Count > 0)
             {
