@@ -11,6 +11,25 @@ public sealed class SandboxRunnerClientTests
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/cancel", StringComparison.Ordinal) == true)
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
+
+    private sealed class UnconfirmedHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/cancel", StringComparison.Ordinal) == true)
+            {
+                return new HttpResponseMessage(HttpStatusCode.Conflict);
+            }
+
             await Task.Delay(Timeout.InfiniteTimeSpan, ct);
             return new HttpResponseMessage(HttpStatusCode.OK);
         }
@@ -37,5 +56,15 @@ public sealed class SandboxRunnerClientTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => client.RunAsync(Workspace, "prompt", cancellation.Token));
+    }
+
+    [Fact]
+    public async Task UnconfirmedTerminationAbandonsTheWorkspace()
+    {
+        using var client = new SandboxRunnerClient(
+            "", TimeSpan.FromMilliseconds(50), new Uri("http://runner/"), new UnconfirmedHandler());
+
+        await Assert.ThrowsAsync<SandboxWorkspaceAbandonedException>(
+            () => client.RunAsync(Workspace, "prompt", CancellationToken.None));
     }
 }

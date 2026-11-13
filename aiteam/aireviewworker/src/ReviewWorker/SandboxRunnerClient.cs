@@ -15,21 +15,27 @@ internal sealed class SandboxRunnerClient(
     {
         BaseAddress = runnerUrl ?? new Uri(
             Environment.GetEnvironmentVariable("REVIEW_RUNNER_URL") ?? "http://localhost:8080/"),
-        Timeout = timeout
+        Timeout = Timeout.InfiniteTimeSpan
     };
+
+    private readonly TimeSpan _timeout = timeout;
 
     public async Task RunAsync(string workspacePath, string prompt, CancellationToken cancellationToken)
     {
+        var executionId = Guid.NewGuid().ToString("N");
         using var response = await SendAsync(
-            "run", new RunRequest(WorkspaceId(workspacePath), prompt, agentModel), "Claude Code", cancellationToken);
+            "run", new RunRequest(WorkspaceId(workspacePath), prompt, agentModel, executionId),
+            executionId, "Claude Code", cancellationToken);
         await EnsureSuccessAsync(response, "Claude Code", cancellationToken);
     }
 
     async Task<string?> IProjectCommandRunner.RunAsync(
         string command, string workspacePath, CancellationToken cancellationToken)
     {
+        var executionId = Guid.NewGuid().ToString("N");
         using var response = await SendAsync(
-            "command", new CommandRequest(WorkspaceId(workspacePath), command), $"'{command}'", cancellationToken);
+            "command", new CommandRequest(WorkspaceId(workspacePath), command, executionId),
+            executionId, $"'{command}'", cancellationToken);
         if (response.IsSuccessStatusCode)
         {
             return null;
@@ -41,16 +47,51 @@ internal sealed class SandboxRunnerClient(
     public void Dispose() => _httpClient.Dispose();
 
     private async Task<HttpResponseMessage> SendAsync<T>(
-        string path, T body, string processName, CancellationToken cancellationToken)
+        string path, T body, string executionId, string processName, CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(_timeout);
+        using var requestCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, timeout.Token);
+        try
+        {
+            return await _httpClient.PostAsJsonAsync(path, body, requestCancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ConfirmTerminationAsync(executionId);
+            throw;
+        }
+        catch (OperationCanceledException exception)
+        {
+            await ConfirmTerminationAsync(executionId);
+            throw new TimeoutException(
+                $"{processName} did not finish within {_timeout.TotalMinutes:0} minute(s) in the sandbox.", exception);
+        }
+        catch (HttpRequestException)
+        {
+            await ConfirmTerminationAsync(executionId);
+            throw;
+        }
+    }
+
+    private async Task ConfirmTerminationAsync(string executionId)
     {
         try
         {
-            return await _httpClient.PostAsJsonAsync(path, body, cancellationToken);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var response = await _httpClient.PostAsJsonAsync(
+                "cancel", new CancelRequest(executionId), timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"The sandbox did not confirm termination (HTTP {(int)response.StatusCode}).");
+            }
         }
-        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (exception is not SandboxWorkspaceAbandonedException)
         {
-            throw new TimeoutException(
-                $"{processName} did not finish within {_httpClient.Timeout.TotalMinutes:0} minute(s) in the sandbox.", exception);
+            throw new SandboxWorkspaceAbandonedException(
+                "The sandbox could not confirm process termination; the workspace must not be reused or deleted.",
+                exception);
         }
     }
 
@@ -73,6 +114,10 @@ internal sealed class SandboxRunnerClient(
             : throw new InvalidOperationException("The workspace is not in the shared sandbox volume.");
     }
 
-    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model);
-    private sealed record CommandRequest(string WorkspaceId, string Command);
+    private sealed record RunRequest(string WorkspaceId, string Prompt, string Model, string ExecutionId);
+    private sealed record CommandRequest(string WorkspaceId, string Command, string ExecutionId);
+    private sealed record CancelRequest(string ExecutionId);
 }
+
+internal sealed class SandboxWorkspaceAbandonedException(string message, Exception? innerException = null)
+    : OperationCanceledException(message, innerException);

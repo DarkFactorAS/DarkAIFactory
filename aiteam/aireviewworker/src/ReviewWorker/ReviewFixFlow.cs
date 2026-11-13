@@ -15,6 +15,7 @@ internal interface IFixRunner
 
 internal interface IReviewGit
 {
+    Task RefreshWorkspaceMetadataAsync(string workspacePath, CancellationToken cancellationToken);
     Task<string> GetRevisionAsync(string workspacePath, CancellationToken cancellationToken);
     /// <summary>Paths changed since the revision captured before running untrusted code.</summary>
     Task<IReadOnlyList<string>> ChangedFilesAsync(
@@ -155,6 +156,7 @@ internal sealed class ReviewFixFlow(
             return Fail(pullRequest, ids, attemptsUsed, "The review comment exceeds the maximum prompt size.", terminal: true);
         }
 
+        await git.RefreshWorkspaceMetadataAsync(workspacePath, cancellationToken);
         var baselineRevision = await git.GetRevisionAsync(workspacePath, cancellationToken);
         // Persist the attempt before running so a crash still counts against the limit.
         attempts.Record(pullRequest.Id, ids, "InProgress", 1, null);
@@ -218,6 +220,11 @@ internal sealed class ReviewFixFlow(
             attempts.Record(pullRequest.Id, ids, "Pending", -1, "Cancelled by worker shutdown.");
             throw;
         }
+        catch (SandboxWorkspaceAbandonedException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            RecordUnsuccessfulAttempt(pullRequest, ids, attemptsUsed, exception.Message);
+            throw;
+        }
         catch (Exception exception)
         {
             // Includes TimeoutException from the sandbox: a slow run is a real, counted attempt.
@@ -240,6 +247,11 @@ internal sealed class ReviewFixFlow(
         try
         {
             await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            attempts.Record(pullRequest.Id, ids, "Pending", -1, "Cancelled by worker shutdown.");
+            throw;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

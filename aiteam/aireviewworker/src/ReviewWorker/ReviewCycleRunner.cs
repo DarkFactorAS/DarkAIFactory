@@ -82,6 +82,7 @@ internal static class ReviewCycleRunner
 
         var git = new ProcessGit(configuration.GitHubRepositoryToken);
         var workspacePath = ProcessGit.CreateWorkspacePath();
+        var workspaceAbandoned = false;
         try
         {
             Log($"Cycle {cycle}: PR #{pullRequest.Number}: cloning branch '{branch}' at {Short(headSha)}.");
@@ -102,16 +103,29 @@ internal static class ReviewCycleRunner
                 $"{result.PushedCount} pushed, {result.FailedCount} failed" +
                 (result.Error is null ? "." : $". Last error: {result.Error}"));
         }
+        catch (SandboxWorkspaceAbandonedException exception)
+        {
+            workspaceAbandoned = true;
+            Log($"Cycle {cycle}: PR #{pullRequest.Number}: leaving workspace '{workspacePath}' untouched because " +
+                $"sandbox process termination was not confirmed. {exception.Message}");
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+        }
         finally
         {
-            try
+            if (!workspaceAbandoned)
             {
-                ProcessGit.DeleteWorkspace(workspacePath);
-            }
-            catch (Exception exception)
-            {
-                DFLogger.LogOutput(DFLogLevel.WARNING, Category,
-                    $"Cycle {cycle}: could not delete workspace '{workspacePath}': {exception.Message}");
+                try
+                {
+                    ProcessGit.DeleteWorkspace(workspacePath);
+                }
+                catch (Exception exception)
+                {
+                    DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                        $"Cycle {cycle}: could not delete workspace '{workspacePath}': {exception.Message}");
+                }
             }
         }
     }

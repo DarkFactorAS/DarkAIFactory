@@ -27,10 +27,17 @@ public sealed class ReviewFixFlowTests
         public List<string> Baselines { get; } = [];
         public List<string> CommitMessages { get; } = [];
         public List<string> Prompts { get; } = [];
+        public int RefreshCount { get; private set; }
+        public Action? OnDiscard { get; set; }
 
         private long? CurrentComment => ChangedByComment.Keys.Concat(RunnerErrorByComment.Keys)
             .Cast<long?>().FirstOrDefault(id => Prompts.Count > 0 && Prompts[^1].Contains($"[comment {id}]"));
 
+        public Task RefreshWorkspaceMetadataAsync(string w, CancellationToken c)
+        {
+            RefreshCount++;
+            return Task.CompletedTask;
+        }
         public Task<string> GetRevisionAsync(string w, CancellationToken c) => Task.FromResult("baseline");
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
@@ -54,7 +61,8 @@ public sealed class ReviewFixFlowTests
         {
             Baselines.Add(baseline);
             Calls.Add("discard");
-            return Task.CompletedTask;
+            OnDiscard?.Invoke();
+            return c.IsCancellationRequested ? Task.FromCanceled(c) : Task.CompletedTask;
         }
         public Task CommitAsync(string w, string m, CancellationToken c)
         {
@@ -117,6 +125,7 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(FixOutcome.Pushed, result.Outcome);
         Assert.Equal(2, result.PushedCount);
         Assert.Equal(["agent", "commit", "push", "agent", "commit", "push"], f.Calls);
+        Assert.Equal(2, f.RefreshCount);
         Assert.Equal(
             ["DFAI-1: Null check is missing (src/A.cs:3)", "DFAI-1: Dispose the client (src/B.cs:3)"],
             f.CommitMessages.Select(message => message.Split('\n')[0]));
@@ -274,10 +283,44 @@ public sealed class ReviewFixFlowTests
         Assert.Equal(2, f.Records.Count);
     }
 
+    [Fact]
+    public async Task ShutdownDuringResetRefundsTheAttemptOnce()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var f = new Fakes
+        {
+            RunnerError = new InvalidOperationException("boom"),
+            OnDiscard = () => cancellation.Cancel()
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Run(f, cancellationToken: cancellation.Token));
+
+        Assert.Equal([("InProgress", 1), ("Pending", -1)],
+            f.Records.Select(record => (record.Status, record.Change)));
+        Assert.Equal(2, f.Records.Count);
+    }
+
+    [Fact]
+    public async Task UnconfirmedRunnerTerminationDoesNotResetOrReuseWorkspace()
+    {
+        var f = new Fakes
+        {
+            RunnerError = new SandboxWorkspaceAbandonedException("termination unknown")
+        };
+
+        await Assert.ThrowsAsync<SandboxWorkspaceAbandonedException>(() => Run(f));
+
+        Assert.Equal(["InProgress", "Pending"], f.Records.Select(record => record.Status));
+        Assert.Equal(("Pending", 0), (f.Records[^1].Status, f.Records[^1].Change));
+        Assert.DoesNotContain("discard", f.Calls);
+    }
+
     private sealed class CancellingFakes(CancellationTokenSource cancellation)
         : IFixRunner, IReviewGit, IProjectCommandRunner, IAttemptStore
     {
         public List<(long[] Ids, string Status, int Change, string? Error)> Records { get; } = [];
+        public Task RefreshWorkspaceMetadataAsync(string w, CancellationToken c) => Task.CompletedTask;
         public Task RunAsync(string w, string prompt, CancellationToken c)
         {
             cancellation.Cancel();
