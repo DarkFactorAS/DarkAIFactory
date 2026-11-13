@@ -205,6 +205,15 @@ internal sealed class AgentPlanner(
                         break;
                 }
             }
+            else if (!configuration.AutoApproveSmallChanges)
+            {
+                // Plain-text plans carry no triage decision, so hold them for approval when auto-approval is off.
+                plan = ManagerPlanMarker(TriageDecision.NeedsApproval, plan);
+                await jira.AddLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
+                hasApprovalLabel = true;
+                newlyHeld = true;
+                approvalRequired = true;
+            }
 
             plans.Save(projectId, issue.Key, plan, requirementsHash, issue.UpdatedAt);
             storedPlan = new ManagerPlan(plan, false, requirementsHash, issue.UpdatedAt);
