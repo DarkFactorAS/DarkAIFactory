@@ -64,9 +64,11 @@ public sealed class AgentLoop(
             {
                 await capability.RunCycleAsync(context, cancellationToken);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
-                // One failing capability must not starve the others.
+                // One failing capability must not starve the others. Capability-local
+                // cancellations (e.g. HttpClient timeouts) are treated as failures; only
+                // host cancellation propagates.
                 DFLogger.LogOutput(
                     DFLogLevel.ERROR, "AgentLoop",
                     $"Agent {agentId} capability {capability.Kind} failed: {exception.Message}");
