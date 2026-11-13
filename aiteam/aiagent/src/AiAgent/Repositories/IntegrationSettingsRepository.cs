@@ -77,7 +77,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
 
     private static void ValidateClient(string client)
     {
-        if (client is not ("aimanager" or "aiworker" or "aiclaudeworker" or "aidashboard" or "aiagent"))
+        if (client is not ("aimanager" or "aiagent" or "aiworker" or "aiclaudeworker" or "aidashboard"))
         {
             throw new ArgumentException("Unknown settings client.", nameof(client));
         }
