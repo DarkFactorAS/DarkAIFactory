@@ -18,6 +18,7 @@ public sealed class JiraPickup(JiraIssue issue, IDisposable claim) : IDisposable
 public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configuration)
 {
     private const string Source = "JiraWorkflow";
+    private static readonly TimeSpan PickupCleanupTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Issues of the project that are ready to be picked up (not picked, failed or ignored).</summary>
     public Task<IReadOnlyList<JiraIssue>> FindWorkAsync(string projectKey, CancellationToken cancellationToken)
@@ -49,6 +50,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
             return null;
         }
 
+        JiraPickup? pickup = null;
         try
         {
             var issue = await jira.GetIssueAsync(candidate.Key, cancellationToken);
@@ -71,7 +73,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
                 return null;
             }
 
-            var pickup = new JiraPickup(issue, claim);
+            pickup = new JiraPickup(issue, claim);
             await jira.AddLabelAsync(issue.Key, configuration.PickupLabel, cancellationToken);
             if (configuration.AssigneeAccountId.Length > 0)
             {
@@ -86,10 +88,39 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
                 issue.Key, $"move this issue to \"{configuration.InProgressStatus}\"", cancellationToken);
             return pickup;
         }
-        catch
+        catch (Exception exception)
         {
-            claim.Dispose();
+            try
+            {
+                if (pickup is not null)
+                {
+                    // The pickup label may already be set, which hides the issue from future searches.
+                    // Report the failure with an independent, bounded token so it can be recovered manually.
+                    await ReportInterruptedPickupAsync(pickup, exception);
+                }
+            }
+            finally
+            {
+                claim.Dispose();
+            }
+
             throw;
+        }
+    }
+
+    private async Task ReportInterruptedPickupAsync(JiraPickup pickup, Exception exception)
+    {
+        using var cleanup = new CancellationTokenSource(PickupCleanupTimeout);
+        try
+        {
+            await ReportFailureAsync(pickup, exception, null, null, cleanup.Token);
+        }
+        catch (Exception cleanupException)
+        {
+            DFLogger.LogOutput(
+                DFLogLevel.ERROR, Source,
+                $"Could not clean up the interrupted pickup of {pickup.Issue.Key}: {cleanupException.Message}. " +
+                $"Remove the `{configuration.PickupLabel}` label and verify the status manually to allow a retry.");
         }
     }
 
