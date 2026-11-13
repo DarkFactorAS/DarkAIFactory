@@ -12,7 +12,15 @@ public sealed class CopilotLanguageModel(
     public string Provider => "copilot";
     public string Model { get; } = string.IsNullOrWhiteSpace(model) ? DefaultModel : model.Trim();
 
-    public async Task<string> RunAsync(LanguageModelRequest request, CancellationToken cancellationToken)
+    public Task<string> RunAsync(LanguageModelRequest request, CancellationToken cancellationToken) =>
+        RunAsync(request, gitHubToken: null, cancellationToken);
+
+    /// <summary>
+    /// Runs the prompt, authenticating the Copilot CLI with <paramref name="gitHubToken"/> (e.g. the configured
+    /// <c>GitHub.AgentGitHubToken</c>). The token is set only on this child process's environment, never on the
+    /// process-wide environment, so concurrent invocations can use different credentials.
+    /// </summary>
+    public async Task<string> RunAsync(LanguageModelRequest request, string? gitHubToken, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo { FileName = "copilot", WorkingDirectory = request.WorkspacePath };
         foreach (var argument in BuildArguments(request.Prompt, Model, request.AllowChanges))
@@ -20,7 +28,7 @@ public sealed class CopilotLanguageModel(
             startInfo.ArgumentList.Add(argument);
         }
 
-        ApplyEnvironment(startInfo.Environment);
+        ApplyEnvironment(startInfo.Environment, gitHubToken);
         var result = await (processRunner ?? CliProcess.RunAsync)(startInfo, cancellationToken);
         if (result.ExitCode != 0)
         {
@@ -59,13 +67,18 @@ public sealed class CopilotLanguageModel(
         return arguments;
     }
 
-    internal static void ApplyEnvironment(IDictionary<string, string?> environment)
+    internal static void ApplyEnvironment(IDictionary<string, string?> environment, string? gitHubToken = null)
     {
         environment["NO_COLOR"] = "1";
         environment["TERM"] = "dumb";
-        // The Copilot CLI authenticates through GH_TOKEN, which is inherited from the host.
+        // The Copilot CLI authenticates through GH_TOKEN. Prefer the explicitly configured token for this
+        // child process; otherwise fall back to whatever GH_TOKEN the host provides.
         environment.Remove("GITHUB_TOKEN");
         environment.Remove("COPILOT_GITHUB_TOKEN");
         CliProcess.RemoveSecrets(environment);
+        if (!string.IsNullOrWhiteSpace(gitHubToken))
+        {
+            environment["GH_TOKEN"] = gitHubToken.Trim();
+        }
     }
 }
