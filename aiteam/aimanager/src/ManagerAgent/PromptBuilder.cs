@@ -32,11 +32,13 @@ internal static class PromptBuilder
         prompt.AppendLine("  \"analysis_only\" = the task asks only for analysis, investigation or advice and no code change (fill \"analysis\");");
         prompt.AppendLine("  \"small\" = a small, low-risk change that needs no human approval (fill \"plan\");");
         prompt.AppendLine("  \"needs_approval\" = the change touches authentication, authorization, database schema or data, or architecture (fill \"plan\" and \"riskAreas\");");
-        prompt.AppendLine("  \"split\" = the task is too large for one change; break it into small sub-tasks (fill \"subtasks\" and optionally \"plan\").");
+        prompt.AppendLine("  \"split\" = the task is too large for one change; break it into small sub-tasks (fill \"subtasks\" and optionally \"plan\");");
+        prompt.AppendLine("  \"create_tasks\" = the description explicitly asks you to create Jira tasks (for example a backlog or follow-up tasks) instead of changing code (fill \"tasks\" and optionally \"plan\" with a short summary).");
         prompt.AppendLine("- \"questions\": array of concrete questions (clarify only).");
         prompt.AppendLine("- \"analysis\": the written analysis (analysis_only only).");
         prompt.AppendLine("- \"plan\": concise, actionable implementation plan with files to inspect/change and validation steps.");
         prompt.AppendLine("- \"subtasks\": array of {\"title\": unique short title, \"description\": what to do and acceptance criteria, \"dependsOn\": array of titles of other sub-tasks that must finish first}. Maximum 10, no cycles.");
+        prompt.AppendLine($"- \"tasks\": array of {{\"title\": unique short title, \"description\": what to do and acceptance criteria, \"dependsOn\": array of titles of other tasks that must finish first}} (create_tasks only). Maximum {TriageResult.MaximumTasks}, no cycles.");
         prompt.AppendLine("- \"riskAreas\": array of strings such as \"authentication\", \"database\", \"architecture\".");
         prompt.AppendLine();
         prompt.AppendLine("Rules:");
@@ -45,6 +47,7 @@ internal static class PromptBuilder
         prompt.AppendLine("- Write every sub-task \"description\" in cleartext so that it is self-contained: what to do, the files involved and the acceptance criteria. Do not refer to information that exists only in your reasoning.");
         prompt.AppendLine("- The main task gets a branch named after its task key like normal. Every sub-task branches off that main task branch and its pull request is merged into the main task branch, not the default branch. The manager adds these branch and pull request instructions to each sub-task automatically; do not contradict them.");
         prompt.AppendLine("- Tasks that are blocked by other open tasks may still be triaged and planned. They are only handed to the worker when every blocking task is Done.");
+        prompt.AppendLine("- Choose \"create_tasks\" only when the title or description explicitly asks for Jira tasks or issues to be created. Never choose it just because the work is large; use \"split\" for that. Each task becomes a separate top-level Jira task in the same project, so write every \"description\" in cleartext and self-contained, using the repository to make it concrete. Nothing is implemented for this task itself.");
         AppendSubtaskBranchContext(prompt, issue);
         prompt.AppendLine();
         AppendIssue(prompt, issue);

@@ -29,6 +29,9 @@ public sealed class PromptBuilderTests
         Assert.Contains("branches off that main task branch", prompt);
         Assert.Contains("not the default branch", prompt);
         Assert.Contains("blocked by other open tasks may still be triaged", prompt);
+        Assert.Contains("\"create_tasks\" = the description explicitly asks you to create Jira tasks", prompt);
+        Assert.Contains("\"tasks\": array of", prompt);
+        Assert.Contains("Never choose it just because the work is large", prompt);
     }
 
     [Fact]

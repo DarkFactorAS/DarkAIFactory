@@ -54,6 +54,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 JiraAnalysisOnlyStatus = ReadOptional("Jira.JiraAnalysisOnlyStatus", defaults.JiraAnalysisOnlyStatus),
                 JiraDoneStatus = ReadOptional("Jira.JiraDoneStatus", defaults.JiraDoneStatus),
                 JiraSubtaskIssueType = ReadOptional("Jira.JiraSubtaskIssueType", defaults.JiraSubtaskIssueType),
+                JiraTaskIssueType = ReadOptional("Jira.JiraTaskIssueType", defaults.JiraTaskIssueType),
                 JiraAutoApproveSmallChanges = ReadOptional(
                     "Jira.JiraAutoApproveSmallChanges", defaults.JiraAutoApproveSmallChanges)
             },

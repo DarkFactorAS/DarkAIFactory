@@ -90,6 +90,13 @@ internal sealed class ManagerPlanner(
         }
         if (reusable && TriageResult.ReadMarker(storedPlan!.Plan) is { } storedDecision)
         {
+            if (storedDecision == TriageDecision.CreateTasks)
+            {
+                // Resumes an interrupted run: only tasks without a stored key are created.
+                await ClearIgnoredLabelAsync(issue, cancellationToken);
+                await CompleteCreateTasksAsync(issue.Key, cancellationToken);
+                return;
+            }
             if (storedDecision is TriageDecision.AnalysisOnly or TriageDecision.Split)
             {
                 await ClearIgnoredLabelAsync(issue, cancellationToken);
@@ -184,6 +191,9 @@ internal sealed class ManagerPlanner(
                         return;
                     case TriageDecision.Split:
                         await ProposeSplitAsync(projectId, issue, triage, requirementsHash, cancellationToken);
+                        return;
+                    case TriageDecision.CreateTasks:
+                        await ApplyCreateTasksAsync(projectId, issue, triage, requirementsHash, cancellationToken);
                         return;
                     case TriageDecision.NeedsApproval:
                         plan = triage.RiskAreas.Count == 0
@@ -319,6 +329,95 @@ internal sealed class ManagerPlanner(
         await jira.TransitionToAsync(issue.Key, configuration.AnalysisOnlyStatus, cancellationToken);
         DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Analysis for {issue.Key} posted; moved to {configuration.AnalysisOnlyStatus}.");
     }
+
+    private async Task ApplyCreateTasksAsync(
+        long projectId, JiraIssue issue, TriageResult triage, string requirementsHash, CancellationToken cancellationToken)
+    {
+        var tasks = triage.TaskExecutionOrder()
+            .Select(index => triage.Tasks[index])
+            .Select(task => new RequestedTask(task.Title, task.Description, task.DependsOn.ToArray(), null))
+            .ToArray();
+        SaveTriaged(
+            projectId, issue, TriageDecision.CreateTasks,
+            JsonSerializer.Serialize(new CreateTasksState(triage.Plan, tasks)), requirementsHash);
+        await CompleteCreateTasksAsync(issue.Key, cancellationToken);
+    }
+
+    // Creates the requested top-level tasks in dependency order. The stored state is updated after every
+    // created issue, so a rerun after a failure continues with the remaining tasks instead of duplicating them.
+    private async Task CompleteCreateTasksAsync(string issueKey, CancellationToken cancellationToken)
+    {
+        var storedPlan = plans.Find(issueKey)
+            ?? throw new InvalidOperationException($"The create_tasks plan for {issueKey} is missing.");
+        var requirementsHash = storedPlan.RequirementsHash!;
+        var state = JsonSerializer.Deserialize<CreateTasksState>(TriageResult.StripMarker(storedPlan.Plan))
+            ?? throw new InvalidDataException("The stored create_tasks state is invalid.");
+        var projectKey = JiraClient.ProjectKeyOf(issueKey);
+        var tasks = state.Tasks.ToArray();
+        var keyByTitle = tasks
+            .Where(task => task.Key is not null)
+            .ToDictionary(task => NormalizeTitle(task.Title), task => task.Key!);
+        for (var index = 0; index < tasks.Length; index++)
+        {
+            var task = tasks[index];
+            if (task.Key is not null)
+            {
+                continue;
+            }
+
+            var dependencies = task.DependsOn.Select(title => keyByTitle[NormalizeTitle(title)]).ToArray();
+            var description = task.Description +
+                $"\n\nCreated by the manager from {issueKey}." +
+                (dependencies.Length == 0 ? string.Empty : $"\nDepends on: {string.Join(", ", dependencies)}") +
+                $"\n\nMove this task to {configuration.JiraStatusName} to have the AI team plan and implement it.";
+            var key = await jira.CreateTaskAsync(projectKey, task.Title, description, cancellationToken);
+            tasks[index] = task with { Key = key };
+            keyByTitle[NormalizeTitle(task.Title)] = key;
+            plans.ReplacePlan(
+                issueKey,
+                requirementsHash,
+                ManagerPlanMarker(TriageDecision.CreateTasks, JsonSerializer.Serialize(state with { Tasks = tasks })));
+            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Created task {key} \"{task.Title}\" from {issueKey}.");
+            foreach (var dependency in dependencies)
+            {
+                try
+                {
+                    await jira.LinkIssuesAsync(dependency, key, cancellationToken);
+                }
+                catch (HttpRequestException exception)
+                {
+                    DFLogger.LogOutput(DFLogLevel.ERROR, "Planner", $"Could not link {dependency} as blocking {key}: {exception.Message}");
+                }
+            }
+        }
+
+        if (!storedPlan.PostedToJira)
+        {
+            var listing = string.Join("\n", tasks.Select((task, index) =>
+                $"{index + 1}. {task.Key} {task.Title}" +
+                (task.DependsOn.Length == 0
+                    ? string.Empty
+                    : $" (after {string.Join(", ", task.DependsOn.Select(title => keyByTitle[NormalizeTitle(title)]))})")));
+            var intro = state.Plan.Length == 0 ? string.Empty : state.Plan + "\n\n";
+            await jira.AddCommentAsync(
+                issueKey,
+                $"{intro}The manager created these Jira tasks as requested:\n\n{listing}\n\n" +
+                $"They stay in their initial status; move a task to {configuration.JiraStatusName} to have the AI team implement it. " +
+                $"This task is moved to {configuration.DoneStatus}.",
+                cancellationToken);
+            plans.MarkPostedToJira(issueKey, requirementsHash);
+        }
+
+        var current = await jira.GetIssueAsync(issueKey, cancellationToken);
+        if (!string.Equals(current.StatusName, configuration.DoneStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            await jira.TransitionToAsync(issueKey, configuration.DoneStatus, cancellationToken);
+        }
+
+        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Created {tasks.Length} task(s) from {issueKey}; moved it to {configuration.DoneStatus}.");
+    }
+
+    private static string NormalizeTitle(string title) => title.Trim().ToLowerInvariant();
 
     private async Task ApplySplitAsync(
         long projectId, JiraIssue issue, TriageResult triage, string requirementsHash, CancellationToken cancellationToken)
@@ -645,6 +744,10 @@ internal sealed class ManagerPlanner(
     }
 
     private sealed record SplitProposal(string Plan, TriageSubtask[] Subtasks);
+
+    private sealed record RequestedTask(string Title, string Description, string[] DependsOn, string? Key);
+
+    private sealed record CreateTasksState(string Plan, RequestedTask[] Tasks);
 
     private sealed record DependencyHoldState(string Plan, string[] Dependencies);
 

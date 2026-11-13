@@ -25,6 +25,7 @@ internal sealed record AgentConfiguration(
     public string AnalysisOnlyStatus { get; init; } = "Code Review";
     public string DoneStatus { get; init; } = "Done";
     public string SubtaskIssueType { get; init; } = "Sub-task";
+    public string TaskIssueType { get; init; } = "Task";
     public string JiraStatusName { get; init; } = "Selected for Development";
     public bool AutoApproveSmallChanges { get; init; } = true;
 
@@ -122,6 +123,7 @@ internal sealed record AgentConfiguration(
             AnalysisOnlyStatus = Get(settings.Jira.JiraAnalysisOnlyStatus, "Code Review"),
             DoneStatus = Get(settings.Jira.JiraDoneStatus, "Done"),
             SubtaskIssueType = Get(settings.Jira.JiraSubtaskIssueType, "Sub-task"),
+            TaskIssueType = Get(settings.Jira.JiraTaskIssueType, "Task"),
             AutoApproveSmallChanges = autoApproveSmallChanges
         };
     }

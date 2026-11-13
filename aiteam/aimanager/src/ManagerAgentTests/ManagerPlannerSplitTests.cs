@@ -272,6 +272,89 @@ public sealed class ManagerPlannerSplitTests
         Assert.Single(handler.Comments["TASK-1"].Where(comment => comment.Contains(pullRequestUrl)));
     }
 
+    private const string CreateTasksJson = """
+        {"decision":"create_tasks","plan":"Backlog for the reporting feature.","tasks":[
+          {"title":"Report API","description":"Add the report endpoint","dependsOn":[]},
+          {"title":"Report page","description":"Show the report","dependsOn":["Report API"]},
+          {"title":"Report docs","description":"Document the report","dependsOn":[]}]}
+        """;
+
+    [Fact]
+    public async Task PlanAsync_CreatesRequestedTopLevelTasksAndMovesSourceToDone()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler();
+        using var jira = new JiraClient(Configuration, handler);
+        var generated = 0;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            generated++;
+            return Task.FromResult(CreateTasksJson);
+        });
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal(["Report API", "Report page", "Report docs"],
+            handler.CreatedKeys.Select(key => handler.GetIssue(key).Summary));
+        Assert.All(handler.CreatedKeys, key =>
+        {
+            var fields = handler.CreatedFields[key];
+            Assert.Equal("Task", fields.GetProperty("issuetype").GetProperty("name").GetString());
+            Assert.Equal("TASK", fields.GetProperty("project").GetProperty("key").GetString());
+            Assert.False(fields.TryGetProperty("parent", out _));
+            Assert.Contains("Created by the manager from TASK-1.", handler.GetIssue(key).Description);
+            Assert.DoesNotContain("ai-analyzed", handler.GetIssue(key).Labels);
+            Assert.Null(new ManagerPlanRepository(database).Find(key));
+        });
+        var (apiKey, pageKey, docsKey) = (handler.CreatedKeys[0], handler.CreatedKeys[1], handler.CreatedKeys[2]);
+        Assert.Contains($"Depends on: {apiKey}", handler.GetIssue(pageKey).Description);
+        Assert.Equal([(apiKey, pageKey)], handler.Links);
+        Assert.Equal("Done", handler.GetIssue("TASK-1").StatusName);
+        Assert.Contains(handler.Comments["TASK-1"], comment =>
+            comment.Contains("Backlog for the reporting feature.") &&
+            comment.Contains($"{apiKey} Report API") &&
+            comment.Contains($"{pageKey} Report page (after {apiKey})") &&
+            comment.Contains($"{docsKey} Report docs"));
+        var stored = new ManagerPlanRepository(database).Find("TASK-1")!;
+        Assert.StartsWith("[triage:create_tasks]", stored.Plan);
+        Assert.True(stored.PostedToJira);
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal(1, generated);
+        Assert.Equal(3, handler.CreatedKeys.Count);
+        Assert.Single(handler.Comments["TASK-1"], comment => comment.Contains("created these Jira tasks"));
+    }
+
+    [Fact]
+    public async Task PlanAsync_ResumesTaskCreationWithoutDuplicatesAfterFailure()
+    {
+        var database = CreateDatabase();
+        var handler = new SplitHandler { FailCreateAttempt = 2 };
+        using var jira = new JiraClient(Configuration, handler);
+        var generated = 0;
+        var planner = new ManagerPlanner(Configuration, new ManagerPlanRepository(database), jira, (_, _) =>
+        {
+            generated++;
+            return Task.FromResult(CreateTasksJson);
+        });
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None));
+
+        Assert.Single(handler.CreatedKeys);
+        Assert.Equal("Selected for Development", handler.GetIssue("TASK-1").StatusName);
+        Assert.False(handler.Comments.ContainsKey("TASK-1"));
+
+        await planner.PlanAsync(1, handler.GetIssue("TASK-1"), CancellationToken.None);
+
+        Assert.Equal(1, generated);
+        Assert.Equal(["Report API", "Report page", "Report docs"],
+            handler.CreatedKeys.Select(key => handler.GetIssue(key).Summary));
+        Assert.Contains($"Depends on: {handler.CreatedKeys[0]}", handler.GetIssue(handler.CreatedKeys[1]).Description);
+        Assert.Equal("Done", handler.GetIssue("TASK-1").StatusName);
+    }
+
     private static DatabaseStub CreateDatabase()
     {
         var database = new DatabaseStub();
@@ -343,7 +426,12 @@ public sealed class ManagerPlannerSplitTests
             }
         };
 
+        private int _createAttempts;
+
         public List<string> CreatedKeys { get; } = [];
+        public Dictionary<string, JsonElement> CreatedFields { get; } = [];
+        public int? FailCreateAttempt { get; set; }
+        public List<(string Blocker, string Blocked)> Links { get; } = [];
         public bool FailNextParentComment { get; set; }
         public Dictionary<string, List<string>> Comments { get; } = [];
 
@@ -389,7 +477,7 @@ public sealed class ManagerPlannerSplitTests
 
             if (request.Method == HttpMethod.Get && path.EndsWith("/transitions", StringComparison.Ordinal))
             {
-                return Json(HttpStatusCode.OK, """{"transitions":[{"id":"selected","name":"Start","to":{"name":"Selected for Development"}}]}""");
+                return Json(HttpStatusCode.OK, """{"transitions":[{"id":"selected","name":"Start","to":{"name":"Selected for Development"}},{"id":"done","name":"Finish","to":{"name":"Done"}}]}""");
             }
 
             if (request.Method == HttpMethod.Get)
@@ -399,9 +487,15 @@ public sealed class ManagerPlannerSplitTests
 
             if (request.Method == HttpMethod.Post && path == "/rest/api/3/issue")
             {
+                if (FailCreateAttempt == ++_createAttempts)
+                {
+                    return Json(HttpStatusCode.InternalServerError, "{}");
+                }
+
                 using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
                 var fields = document.RootElement.GetProperty("fields");
                 var key = $"TASK-{CreatedKeys.Count + 2}";
+                CreatedFields[key] = fields.Clone();
                 var title = fields.GetProperty("summary").GetString()!;
                 var status = title == "Already complete" ? "Done" : "In Progress";
                 var description = ReadAdfText(fields.GetProperty("description"));
@@ -415,6 +509,10 @@ public sealed class ManagerPlannerSplitTests
 
             if (request.Method == HttpMethod.Post && path.EndsWith("/issueLink", StringComparison.Ordinal))
             {
+                using var link = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+                Links.Add((
+                    link.RootElement.GetProperty("inwardIssue").GetProperty("key").GetString()!,
+                    link.RootElement.GetProperty("outwardIssue").GetProperty("key").GetString()!));
                 return Json(HttpStatusCode.NoContent, "{}");
             }
 
@@ -440,7 +538,9 @@ public sealed class ManagerPlannerSplitTests
 
             if (request.Method == HttpMethod.Post && path.EndsWith("/transitions", StringComparison.Ordinal))
             {
-                SetStatus(issueKey, "Selected for Development");
+                using var transition = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+                var transitionId = transition.RootElement.GetProperty("transition").GetProperty("id").GetString();
+                SetStatus(issueKey, transitionId == "done" ? "Done" : "Selected for Development");
                 return Json(HttpStatusCode.NoContent, "{}");
             }
 
