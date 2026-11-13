@@ -152,7 +152,7 @@ internal sealed class ReviewFixFlow(
         {
             if (!cancellationToken.IsCancellationRequested)
             {
-                await ResolveCompletedThreadsAsync(pullRequest, comments, pushedIds, cancellationToken);
+                await ResolveCompletedThreadsAsync(pullRequest, comments, pushedIds, used, cancellationToken);
             }
         }
 
@@ -260,11 +260,14 @@ internal sealed class ReviewFixFlow(
     /// sibling comment that failed, made no changes, was skipped for exhausted attempts, or was not reached
     /// stays open. A comment that made no changes is marked Resolved in the database (it is not retried), but
     /// its thread is deliberately left open on GitHub for a human.
+    /// A thread containing a retried comment also stays open: an earlier cycle may have handled a sibling (for
+    /// example one that made no changes) that later polls no longer return, so this run cannot see it.
     /// </summary>
     private async Task ResolveCompletedThreadsAsync(
         TrackedPullRequest pullRequest,
         IReadOnlyList<ReviewComment> comments,
         IReadOnlySet<long> pushedIds,
+        IReadOnlyDictionary<long, int> priorAttempts,
         CancellationToken cancellationToken)
     {
         if (pushedIds.Count == 0)
@@ -287,6 +290,15 @@ internal sealed class ReviewFixFlow(
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category,
                     $"PR #{pullRequest.Number}: leaving review thread open; comment(s) {string.Join(", ", unfinished)} not fixed yet.");
+                continue;
+            }
+
+            var retried = thread.Where(c => priorAttempts.GetValueOrDefault(c.Id) > 0).Select(c => c.Id).ToList();
+            if (retried.Count > 0)
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{pullRequest.Number}: leaving review thread open for a human; comment(s) " +
+                    $"{string.Join(", ", retried)} were retried and earlier siblings may not have been fixed.");
                 continue;
             }
 
