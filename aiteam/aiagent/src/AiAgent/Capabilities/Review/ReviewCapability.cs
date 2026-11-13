@@ -98,9 +98,15 @@ public sealed class ReviewCapability(
             }
 
             var runner = new RunnerFixRunner(runnerClient, context.Agent, options);
+            // Project code (build/test) must never execute in the orchestrator container, which holds the mounted
+            // configuration and private Git metadata. Validation runs inside aiagent-runner: the build/test commands
+            // are sent with the runner request and a non-zero runner exit status fails the attempt. Local command
+            // execution is only used when a command runner is explicitly injected (e.g. by tests).
             var flow = new ReviewFixFlow(
-                context.AgentId, runner, git, commands ?? new ProcessCommandRunner(), attempts,
-                options.MaxAttempts, options.BuildCommand, options.TestCommand);
+                context.AgentId, runner, git, commands ?? NoLocalCommands.Instance, attempts,
+                options.MaxAttempts,
+                commands is null ? null : options.BuildCommand,
+                commands is null ? null : options.TestCommand);
             var result = await flow.RunAsync(pullRequest, branch, comments, workspace, cancellationToken);
             Log($"PR #{number}: fix attempt finished with {result.Outcome}" +
                 (result.Error is null ? "." : $": {result.Error}"));
@@ -130,6 +136,15 @@ public sealed class ReviewCapability(
     }
 
     private static void Log(string message) => DFLogger.LogOutput(DFLogLevel.INFO, Category, message);
+
+    /// <summary>Refuses local execution; validation belongs to aiagent-runner.</summary>
+    private sealed class NoLocalCommands : IProjectCommandRunner
+    {
+        public static readonly NoLocalCommands Instance = new();
+
+        public Task<string?> RunAsync(string command, string workspacePath, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>("project commands are not executed in the orchestrator; validation runs in aiagent-runner.");
+    }
 
     private sealed class RunnerFixRunner(RunnerClient client, AgentDefinition agent, ReviewOptions options) : IFixRunner
     {
