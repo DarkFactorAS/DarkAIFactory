@@ -19,6 +19,7 @@ internal static class ReviewCycleRunner
         query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
           repository(owner: $owner, name: $name) {
             pullRequest(number: $number) {
+              state
               reviewThreads(first: 100, after: $cursor) {
                 pageInfo { hasNextPage endCursor }
                 nodes { isResolved }
@@ -67,7 +68,7 @@ internal static class ReviewCycleRunner
             {
                 var unresolved = await CountUnresolvedThreadsAsync(
                     configuration.GitHubRepositoryToken, pullRequest, cancellationToken);
-                if (IsReadyToMerge(unresolved, 0))
+                if (unresolved is { } count && IsReadyToMerge(count, 0))
                 {
                     LogReadyToMerge(cycle, pullRequest);
                 }
@@ -85,7 +86,7 @@ internal static class ReviewCycleRunner
             {
                 var unresolved = await CountUnresolvedThreadsAsync(
                     configuration.GitHubRepositoryToken, pullRequest, cancellationToken);
-                if (IsReadyToMerge(unresolved, 0))
+                if (unresolved is { } count && IsReadyToMerge(count, 0))
                 {
                     LogReadyToMerge(cycle, pullRequest);
                 }
@@ -102,8 +103,10 @@ internal static class ReviewCycleRunner
     /// <summary>
     /// Counts every unresolved review thread, including outdated ones. Readiness must not ignore
     /// outdated threads, even though they are not actionable for automatic fixes.
+    /// Returns null when the pull request is no longer open, since a closed or merged pull request
+    /// must never be reported as ready to merge.
     /// </summary>
-    private static async Task<int> CountUnresolvedThreadsAsync(
+    private static async Task<int?> CountUnresolvedThreadsAsync(
         string token, TrackedPullRequest pullRequest, CancellationToken cancellationToken)
     {
         var segments = pullRequest.RepositoryUrl.AbsolutePath.Trim('/').Split('/');
@@ -151,7 +154,15 @@ internal static class ReviewCycleRunner
                     $"GitHub GraphQL returned errors for {pullRequest.Url}: {errors[0]?["message"]}");
             }
 
-            var threads = root["data"]?["repository"]?["pullRequest"]?["reviewThreads"]
+            var pullRequestNode = root["data"]?["repository"]?["pullRequest"]
+                ?? throw new InvalidDataException($"Pull request {pullRequest.Url} not found.");
+            var state = pullRequestNode["state"]?.GetValue<string>();
+            if (!string.Equals(state, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var threads = pullRequestNode["reviewThreads"]
                 ?? throw new InvalidDataException($"Pull request {pullRequest.Url} not found.");
             unresolved += (threads["nodes"]?.AsArray() ?? [])
                 .Count(thread => !(thread?["isResolved"]?.GetValue<bool>() ?? false));
