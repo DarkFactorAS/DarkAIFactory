@@ -56,7 +56,11 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 JiraDoneStatus = ReadOptional("Jira.JiraDoneStatus", defaults.JiraDoneStatus),
                 JiraSubtaskIssueType = ReadOptional("Jira.JiraSubtaskIssueType", defaults.JiraSubtaskIssueType),
                 JiraAutoApproveSmallChanges = ReadOptional(
-                    "Jira.JiraAutoApproveSmallChanges", defaults.JiraAutoApproveSmallChanges)
+                    "Jira.JiraAutoApproveSmallChanges", defaults.JiraAutoApproveSmallChanges),
+                JiraTaskIssueType = ReadOptional("Jira.JiraTaskIssueType", defaults.JiraTaskIssueType),
+                JiraUnblockSourceStatuses = ReadOptional(
+                    "Jira.JiraUnblockSourceStatuses", defaults.JiraUnblockSourceStatuses),
+                JiraIntakeEnabled = ReadOptional("Jira.JiraIntakeEnabled", defaults.JiraIntakeEnabled)
             },
             GitHub = new GitHubSettings
             {
@@ -77,7 +81,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
 
     private static void ValidateClient(string client)
     {
-        if (client is not ("aimanager" or "aiworker" or "aiclaudeworker" or "aidashboard"))
+        if (client is not ("aimanager" or "aiworker" or "aiclaudeworker" or "aidashboard" or "aiagent"))
         {
             throw new ArgumentException("Unknown settings client.", nameof(client));
         }

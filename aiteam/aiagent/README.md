@@ -25,3 +25,18 @@ Claude Code login for the runner: `./login_claude.sh --aiagent`.
 
 Configuration is read from `aiteam/config/appsettings.<Environment>.json` (`PollIntervalSeconds`).
 CI: `.github/workflows/aiagent-ci-*.yml`; deploy: job `aiagent` in `aiteam-deploy.yml`.
+
+## Jira capability (`Capabilities/Jira`)
+
+Copied from `aijiramanager`, the Jira parts of `aiworker`/`aiclaudeworker` and `PullRequestCloser` in
+`aimanager` (nothing is shared). Runs only for agents whose `Jira` capability is enabled. Per cycle, scoped
+to the agent's projects:
+
+1. Intake: `agent_tasks` rows in `New` become Jira issues (setting `Jira.JiraIntakeEnabled`, default `true`).
+   A startup warning is logged when intake is on, because `jira-manager-agent` does the same.
+2. Pickup/status/recovery (`JiraWorkflow`, used by the Builder): `aiagent-picked`/`aiagent-failed`/
+   `aiagent-ignored` labels from `workflow_labels[aiagent]`; unrecorded pull requests are recovered
+   from the `aiagent-pr-tracking-pending` label.
+3. In Review → Done when all `agent_pull_requests` rows of the issue are merged.
+4. To Do/Backlog → Selected for Development when all "is blocked by" issues are Done; source statuses
+   via `Jira.JiraUnblockSourceStatuses` (default `To Do,Backlog`).
