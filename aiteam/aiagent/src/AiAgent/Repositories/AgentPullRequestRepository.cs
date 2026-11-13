@@ -8,7 +8,17 @@ public interface IAgentPullRequestRepository
     void Record(AgentPullRequestRecord pullRequest);
 
     IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId);
+
+    /// <summary>
+    /// Returns the agent's pull requests together with their persisted <c>agent_pull_requests.id</c>,
+    /// which is required as the <c>pull_request_id</c> foreign key when registering review attempts.
+    /// </summary>
+    IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId) =>
+        throw new NotSupportedException($"{GetType().Name} does not expose persisted pull request IDs.");
 }
+
+/// <summary>A pull request row from agent_pull_requests including its database ID.</summary>
+public sealed record StoredAgentPullRequest(long Id, AgentPullRequestRecord PullRequest);
 
 /// <summary>agent_pull_requests.</summary>
 public sealed class AgentPullRequestRepository(IDbConnectionFactory connectionFactory) : IAgentPullRequestRepository
@@ -27,18 +37,23 @@ public sealed class AgentPullRequestRepository(IDbConnectionFactory connectionFa
         command.ExecuteNonQuery();
     }
 
-    public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId)
+    public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) =>
+        GetStoredForAgent(agentId).Select(stored => stored.PullRequest).ToList();
+
+    public IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId)
     {
         using var command = connectionFactory.CreateCommand(
-            "SELECT `agent_id`, `jira_key`, `repository_url`, `pr_number`, `pr_url` " +
+            "SELECT `id`, `agent_id`, `jira_key`, `repository_url`, `pr_number`, `pr_url` " +
             "FROM `agent_pull_requests` WHERE `agent_id` = @agent_id ORDER BY `id`");
         command.AddParameter("@agent_id", agentId);
         using var reader = command.ExecuteReader();
-        var result = new List<AgentPullRequestRecord>();
+        var result = new List<StoredAgentPullRequest>();
         while (reader.Read())
         {
-            result.Add(new AgentPullRequestRecord(
-                reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetInt64(3), reader.GetString(4)));
+            result.Add(new StoredAgentPullRequest(
+                reader.GetInt64(0),
+                new AgentPullRequestRecord(
+                    reader.GetInt64(1), reader.GetString(2), reader.GetString(3), reader.GetInt64(4), reader.GetString(5))));
         }
 
         return result;
