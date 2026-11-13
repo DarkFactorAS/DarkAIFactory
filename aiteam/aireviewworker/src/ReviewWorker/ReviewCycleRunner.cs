@@ -143,7 +143,7 @@ internal static class ReviewCycleRunner
             $"from '{reviewerLogin}'" +
             (scan.HandledComments > 0 ? $", {scan.HandledComments} from '{reviewerLogin}' already handled" : string.Empty) +
             (scan.FailedComments > 0
-                ? $", {scan.FailedComments} from '{reviewerLogin}' failed after the maximum attempts (see review_comment_attempts)"
+                ? $", {scan.FailedComments} from '{reviewerLogin}' marked failed (terminal failure or attempts exhausted; see review_comment_attempts)"
                 : string.Empty) + ".";
         DFLogger.LogOutput(scan.FailedComments > 0 ? DFLogLevel.WARNING : DFLogLevel.INFO, Category, message);
         if (scan.OtherAuthors.Count > 0)
