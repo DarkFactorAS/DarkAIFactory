@@ -40,6 +40,9 @@ public sealed class BuilderCapabilityTests : IDisposable
     {
         public AgentPlan? Get(long agentId, string jiraKey) => plan;
         public void Save(AgentPlan p) { }
+        public void MarkPostedToJira(long agentId, string jiraKey, string requirementsHash) { }
+        public void ReplacePlan(long agentId, string jiraKey, string requirementsHash, string updatedPlan) { }
+        public void RebindProject(long agentId, string jiraKey, long managerProjectId) { }
     }
 
     private sealed class FakeRunner(int exitCode = 0) : IRunnerClient
