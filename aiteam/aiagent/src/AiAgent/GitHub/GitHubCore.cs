@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,6 +17,9 @@ public sealed partial class GitHubCore(
     IAgentPullRequestRepository pullRequests,
     HttpMessageHandler? httpHandler = null)
 {
+    // Base revision recorded right after branching, before the runner touches the checkout.
+    private readonly ConcurrentDictionary<string, string> baseRevisions = new(StringComparer.Ordinal);
+
     public static string BranchName(string issueKey, string summary, string? suffix = null)
     {
         var key = NonBranchCharacters().Replace(issueKey.Trim(), "-").Trim('-');
@@ -54,6 +58,13 @@ public sealed partial class GitHubCore(
                 : ["switch", "--no-track", "--create", branch, $"origin/{baseBranch}"],
             false, cancellationToken);
         await git.RunAsync(checkoutPath, ["submodule", "update", "--init", "--recursive"], true, cancellationToken);
+        var head = await git.RunAsync(checkoutPath, ["rev-parse", "--verify", "HEAD^{commit}"], false, cancellationToken);
+        var baseRevision = head.StandardOutput.Trim();
+        if (baseRevision.Length > 0)
+        {
+            baseRevisions[Path.GetFullPath(checkoutPath)] = baseRevision;
+        }
+
         return branch;
     }
 
@@ -80,9 +91,29 @@ public sealed partial class GitHubCore(
         await git.RunAsync(
             checkoutPath, ["commit", "--message", $"{issueKey}: {WhiteSpace().Replace(summary, " ").Trim()}"],
             false, cancellationToken);
+        await EnsureOutgoingCommitsAreAllowedAsync(checkoutPath, cancellationToken);
         // Never force: a rejected push must surface as an error.
         await git.RunAsync(checkoutPath, ["push", "--quiet", "origin", $"HEAD:refs/heads/{branch}"], true, cancellationToken);
         return new PushResult(true, $"Pushed branch `{branch}`.");
+    }
+
+    /// <summary>
+    /// Rejects the push when any commit between the trusted pre-run revision and HEAD touches UserSettings/.
+    /// The runner may have committed on its own, so the index alone is not sufficient.
+    /// </summary>
+    private async Task EnsureOutgoingCommitsAreAllowedAsync(string checkoutPath, CancellationToken cancellationToken)
+    {
+        string[] range = baseRevisions.TryGetValue(Path.GetFullPath(checkoutPath), out var baseRevision)
+            ? [$"{baseRevision}..HEAD"]
+            : ["HEAD", "--not", "--remotes"];
+        var changed = await git.RunAsync(
+            checkoutPath,
+            ["log", "--no-renames", "--diff-merges=first-parent", "--name-only", "--format=", "-z", .. range, "--"],
+            false, cancellationToken);
+        if (changed.StandardOutput.Split('\0', '\n').Any(path => path.StartsWith("UserSettings/", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Refusing to push commits that change files under UserSettings/.");
+        }
     }
 
     /// <summary>Opens the PR (title 'aiagent: KEY summary') and records it in agent_pull_requests.</summary>
