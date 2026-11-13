@@ -75,6 +75,14 @@ internal sealed class BuilderCapability(
         AgentContext context, BuilderSettings settings, ManagerProject project, IBuilderJira jira,
         BuilderIssue candidate, CancellationToken cancellationToken)
     {
+        // Claim before refreshing so eligibility is validated against state no other worker can change under us.
+        using var claim = context.ClaimLock.TryAcquire(context.AgentId, candidate.Key);
+        if (claim is null)
+        {
+            DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Another worker is already processing {candidate.Key}.");
+            return;
+        }
+
         BuilderIssue issue;
         try
         {
@@ -123,13 +131,6 @@ internal sealed class BuilderCapability(
         await IgnoredTaskNotifier.ClearAsync(
             issue.Key, issue.Labels, jira.RemoveLabelAsync,
             message => DFLogger.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
-        using var claim = context.ClaimLock.TryAcquire(context.AgentId, issue.Key);
-        if (claim is null)
-        {
-            DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Another worker is already processing {issue.Key}.");
-            return;
-        }
-
         DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Claiming {issue.Key}: {issue.Summary}");
         await ImplementAsync(context, settings, repositoryUrl, jira, issue, plan, cancellationToken);
     }
