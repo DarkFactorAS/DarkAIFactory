@@ -1,4 +1,5 @@
 using AiAgent.Repositories;
+using AiAgent.Runner;
 using DFCommonLib.Logger;
 
 namespace AiAgent.Capabilities.Review;
@@ -62,12 +63,29 @@ public sealed class ReviewFixFlow(
         eligible = promptBatch.Comments.ToList();
         var ids = eligible.Select(c => c.Id).ToList();
         var baselineRevision = await git.GetRevisionAsync(workspacePath, cancellationToken);
-        // Persist the attempt before running so a crash still counts against the limit.
-        attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
+        // Mark the comments in progress; the attempt is counted only once the runner has accepted the job,
+        // so capacity rejections (RunnerBusyException) never use up a comment's attempt limit.
+        attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: false, error: null);
 
         try
         {
-            await runner.RunAsync(workspacePath, promptBatch.Prompt, cancellationToken);
+            try
+            {
+                await runner.RunAsync(workspacePath, promptBatch.Prompt, cancellationToken);
+            }
+            catch (RunnerBusyException)
+            {
+                attempts.Record(agentId, pullRequest.Id, ids, "Pending", countAttempt: false,
+                    error: "The runner is busy; retrying in the next cycle.");
+                throw;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
+                throw;
+            }
+
+            attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
 
             var changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
@@ -141,6 +159,10 @@ public sealed class ReviewFixFlow(
 
             DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: pushed fixes to '{headBranch}'.");
             return new FixResult(FixOutcome.Pushed);
+        }
+        catch (RunnerBusyException)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
