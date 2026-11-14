@@ -49,7 +49,7 @@ function TaskForm({ initial, submitLabel, onSubmit, onCancel }) {
     <form onSubmit={handleSubmit} className="space-y-2">
       <input
         aria-label="Title"
-        className="w-full rounded border border-slate-300 p-2"
+        className="w-full rounded border border-slate-300 dark:border-slate-600 p-2"
         value={title}
         maxLength={255}
         onChange={(e) => setTitle(e.target.value)}
@@ -57,14 +57,14 @@ function TaskForm({ initial, submitLabel, onSubmit, onCancel }) {
       />
       <textarea
         aria-label="Description"
-        className="w-full rounded border border-slate-300 p-2"
+        className="w-full rounded border border-slate-300 dark:border-slate-600 p-2"
         rows={4}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         required
       />
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
@@ -153,20 +153,20 @@ export default function TaskEditor() {
   }
 
   return (
-    <section data-testid="center-panel" className="space-y-4 rounded-lg bg-white p-4 shadow">
+    <section data-testid="center-panel" className="space-y-4 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <h2 className="text-lg font-semibold">New task</h2>
       <TaskForm submitLabel="Create task" onSubmit={create} />
       <h2 className="text-lg font-semibold">Tasks not yet sent to Jira</h2>
-      <p className="text-xs text-slate-500">Updates every 30 s</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">Updates every 30 s</p>
       {error && (
-        <p role="alert" className="text-red-600">
+        <p role="alert" className="text-red-600 dark:text-red-400">
           Unable to load tasks: {error}
         </p>
       )}
-      {!error && tasks.length === 0 && <p className="text-slate-500">No pending tasks.</p>}
+      {!error && tasks.length === 0 && <p className="text-slate-500 dark:text-slate-400">No pending tasks.</p>}
       <ul className="space-y-3">
         {tasks.map((task) => (
-          <li key={task.id} className="rounded border border-slate-200 p-3">
+          <li key={task.id} className="rounded border border-slate-200 dark:border-slate-700 p-3">
             {editingId === task.id ? (
               <TaskForm
                 initial={task}
@@ -186,7 +186,7 @@ export default function TaskEditor() {
                     Edit
                   </button>
                 </div>
-                <p className="mt-1 whitespace-pre-line text-sm text-slate-600">{task.description}</p>
+                <p className="mt-1 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{task.description}</p>
               </>
             )}
           </li>
