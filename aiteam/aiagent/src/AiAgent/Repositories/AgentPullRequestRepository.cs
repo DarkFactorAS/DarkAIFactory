@@ -10,6 +10,13 @@ public interface IAgentPullRequestRepository
     IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId);
 
     /// <summary>
+    /// Every tracked pull request, whichever agent opened it. The Jira capability lives on a single agent but must
+    /// close issues for pull requests opened by any agent.
+    /// </summary>
+    IReadOnlyList<AgentPullRequestRecord> GetAll() =>
+        throw new NotSupportedException($"{GetType().Name} does not expose all pull requests.");
+
+    /// <summary>
     /// Returns the agent's pull requests together with their persisted <c>agent_pull_requests.id</c>,
     /// which is required as the <c>pull_request_id</c> foreign key when registering review attempts.
     /// </summary>
@@ -46,6 +53,9 @@ public sealed class AgentPullRequestRepository(IDbConnectionFactory connectionFa
 
     public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) =>
         GetStoredForAgent(agentId).Select(stored => stored.PullRequest).ToList();
+
+    public IReadOnlyList<AgentPullRequestRecord> GetAll() =>
+        GetAllStored().Select(stored => stored.PullRequest).ToList();
 
     private const string SelectColumns =
         "SELECT `id`, `agent_id`, `jira_key`, `repository_url`, `pr_number`, `pr_url` FROM `agent_pull_requests` ";

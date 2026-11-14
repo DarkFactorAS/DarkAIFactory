@@ -13,7 +13,7 @@ internal sealed class PullRequestCloser(
 {
     /// <summary>Issues without a stored pull request are left untouched. Returns the keys moved to Done.</summary>
     public async Task<IReadOnlyList<string>> CloseMergedAsync(
-        long agentId, string jiraProjectKey, CancellationToken cancellationToken)
+        string jiraProjectKey, CancellationToken cancellationToken)
     {
         var issues = await jira.SearchAsync(
             $"project = \"{JiraQuery.EscapeJql(jiraProjectKey)}\" " +
@@ -24,7 +24,7 @@ internal sealed class PullRequestCloser(
             return [];
         }
 
-        var byKey = pullRequests.GetForAgent(agentId)
+        var byKey = pullRequests.GetAll()
             .ToLookup(record => record.JiraKey, StringComparer.OrdinalIgnoreCase);
         var closed = new List<string>();
         foreach (var issue in issues)
