@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import { POLL_INTERVAL_MS, activeCapability, deleteAgent, isWorking, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, deleteAgent, isWorking, listAgents, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
@@ -71,15 +71,6 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1 text-xs">
-          <input
-            type="checkbox"
-            checked={agent.enabled}
-            disabled={busy || !token}
-            onChange={(e) => run((t) => setAgentEnabled(t, agent.id, e.target.checked))}
-          />
-          Enabled
-        </label>
         <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
           Edit
         </button>

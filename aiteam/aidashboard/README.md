@@ -106,7 +106,7 @@ and returns 409 if the task has progressed.
 Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js/WriteToken.jsx`) sits above the
 task editor in the centre column and uses `/api/agents` (writes need the Bearer write token) plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
-interval). A card shows Disabled when not enabled, otherwise Offline when there is no status or the heartbeat is
+interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / `Running on KEY` / Error. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header. The write token is asked for in the page and
 remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
