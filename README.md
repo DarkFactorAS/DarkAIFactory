@@ -120,6 +120,14 @@ workflows in [.github/workflows](.github/workflows). The aiagent .NET workflow
 also builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
+### Security scanning (Snyk)
+
+`.github/workflows/snyk.yml` runs `snyk test --all-projects` (open-source
+dependencies, fails on high severity and above). It runs once per day and is
+skipped when `main` has no commits in the last 24 hours. To run it manually, open
+Actions → Snyk → Run workflow; manual runs always scan. It requires the
+repository secret `SNYK_TOKEN`; the run fails with a clear error if it is missing.
+
 A CodeQL workflow (`codeql.yml`) scans C# and the workflow files on pull
 requests, pushes to `main` and weekly. Results appear under Security > Code
 scanning. Pull requests from forks have no NuGet secrets, so the C# restore may
