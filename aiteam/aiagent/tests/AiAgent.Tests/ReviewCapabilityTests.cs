@@ -466,6 +466,11 @@ public sealed class ReviewCapabilityTests
         private sealed class Nop : IDisposable { public void Dispose() { } }
     }
 
+    private sealed class HeldLock : IAgentClaimLock
+    {
+        public IDisposable? TryAcquire(long agentId, string issueKey) => null;
+    }
+
     [Fact]
     public async Task CapabilityDoesNothingWhenAllCommentsReachedAttemptLimit()
     {
@@ -478,6 +483,23 @@ public sealed class ReviewCapabilityTests
 
         Assert.Equal(AgentCapabilityKind.Review, capability.Kind);
         await capability.RunCycleAsync(context, CancellationToken.None);
+        Assert.Empty(git.Calls);
+    }
+
+    [Fact]
+    public async Task CapabilitySkipsCommentScanWhenPullRequestIsClaimedElsewhere()
+    {
+        var gitHub = new GraphQlStub();
+        var git = new FakeGit([]);
+        var capability = new ReviewCapability(
+            new ReviewOptions("t", "reviewer", 3), new PrRepo(), new FakeStore(), git,
+            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), gitHub);
+        var context = new AgentContext(
+            new AgentDefinition(2, "Roger Review", "r", "b", "Claude", null, true, false), ["DFAI"], new HeldLock());
+
+        await capability.RunCycleAsync(context, CancellationToken.None);
+
+        Assert.Single(gitHub.Requests);
         Assert.Empty(git.Calls);
     }
 

@@ -52,18 +52,18 @@ public sealed class ReviewCapability(
         foreach (var pullRequest in open)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            using var claim = context.ClaimLock.TryAcquire(context.AgentId, pullRequest.PullRequest.JiraKey);
+            if (claim is null)
+            {
+                Log($"PR #{pullRequest.PullRequest.PullRequestNumber}: {pullRequest.PullRequest.JiraKey} is claimed elsewhere; skipping.");
+                continue;
+            }
+
             var scan = await client.ScanCommentsAsync(pullRequest, cancellationToken);
             LogScan(pullRequest, scan);
             if (scan.Actionable.Count == 0)
             {
                 await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
-                continue;
-            }
-
-            using var claim = context.ClaimLock.TryAcquire(context.AgentId, pullRequest.PullRequest.JiraKey);
-            if (claim is null)
-            {
-                Log($"PR #{pullRequest.PullRequest.PullRequestNumber}: {pullRequest.PullRequest.JiraKey} is claimed elsewhere; skipping.");
                 continue;
             }
 
