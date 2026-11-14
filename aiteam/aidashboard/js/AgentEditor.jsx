@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { CAPABILITIES, CONTAINERS, PROVIDERS, createAgent, listProjects, updateAgent } from "./agentApi.js";
+import { CAPABILITIES, CONTAINERS, PROVIDERS, createAgent, deleteAgent, listProjects, updateAgent } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 // Create/edit form for an agent definition. `agent` is null in create mode.
-export default function AgentEditor({ agent, onSaved, onCancel }) {
+export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
   const { token, setToken } = useWriteToken();
   const [name, setName] = useState(agent?.name ?? "");
   const [role, setRole] = useState(agent?.role ?? "");
@@ -18,6 +18,7 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
   const [projectOptions, setProjectOptions] = useState([]);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -56,6 +57,23 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
         await createAgent(token, body);
       }
       onSaved();
+    } catch (e) {
+      if (e.status === 401) setToken("");
+      setError(e.message);
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (inFlight.current || !token || !agent) return;
+    inFlight.current = true;
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteAgent(token, agent.id);
+      onDeleted();
     } catch (e) {
       if (e.status === 401) setToken("");
       setError(e.message);
@@ -164,7 +182,35 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
         <button type="button" onClick={onCancel} className="rounded border px-3 py-1 text-sm">
           Cancel
         </button>
+        {agent && (
+          <button
+            type="button"
+            disabled={saving || !token}
+            onClick={() => setConfirmingDelete(true)}
+            className="rounded border px-3 py-1 text-sm text-red-700 dark:text-red-400 disabled:opacity-50"
+          >
+            Delete
+          </button>
+        )}
       </div>
+      {agent && confirmingDelete && (
+        <div role="alertdialog" aria-label={`Delete ${agent.name}`} className="mt-2 rounded bg-red-50 dark:bg-red-950 p-2 text-xs">
+          <p>Delete {agent.name}?</p>
+          <div className="mt-1 flex gap-2">
+            <button
+              type="button"
+              disabled={saving || !token}
+              onClick={handleDelete}
+              className="rounded bg-red-700 px-2 py-0.5 text-white disabled:opacity-50"
+            >
+              Confirm
+            </button>
+            <button type="button" onClick={() => setConfirmingDelete(false)} className="rounded border px-2 py-0.5">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

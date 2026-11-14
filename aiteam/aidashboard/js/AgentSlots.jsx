@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import { POLL_INTERVAL_MS, activeCapability, deleteAgent, isWorking, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, isWorking, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   const { token, setToken } = useWriteToken();
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
@@ -19,7 +18,6 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
     onError(null);
     try {
       await action(token);
-      setConfirming(false);
       onChanged();
     } catch (e) {
       if (e.status === 401) setToken("");
@@ -83,32 +81,7 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
         <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
           Edit
         </button>
-        <button
-          type="button"
-          onClick={() => setConfirming(true)}
-          className="rounded border px-2 py-0.5 text-xs text-red-700 dark:text-red-400"
-        >
-          Delete
-        </button>
       </div>
-      {confirming && (
-        <div role="alertdialog" aria-label={`Delete ${agent.name}`} className="mt-2 rounded bg-red-50 dark:bg-red-950 p-2 text-xs">
-          <p>Delete {agent.name}?</p>
-          <div className="mt-1 flex gap-2">
-            <button
-              type="button"
-              disabled={busy || !token}
-              onClick={() => run((t) => deleteAgent(t, agent.id))}
-              className="rounded bg-red-700 px-2 py-0.5 text-white disabled:opacity-50"
-            >
-              Confirm
-            </button>
-            <button type="button" onClick={() => setConfirming(false)} className="rounded border px-2 py-0.5">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </li>
   );
 }
@@ -198,6 +171,10 @@ export default function AgentSlots() {
           agent={editor.agent}
           onCancel={() => setEditor(null)}
           onSaved={() => {
+            setEditor(null);
+            load();
+          }}
+          onDeleted={() => {
             setEditor(null);
             load();
           }}
