@@ -8,7 +8,7 @@ public sealed record AgentCapabilityRequest(string? Capability, bool Enabled);
 
 public sealed record AgentRequest(
     string? Name, string? Role, string? Behavior, string? LlmProvider, string? LlmModel, bool? Enabled,
-    List<AgentCapabilityRequest>? Capabilities, List<string>? Projects);
+    List<AgentCapabilityRequest>? Capabilities, List<string>? Projects, string? Container = null);
 
 public sealed record AgentEnabledRequest(bool? Enabled);
 
@@ -19,6 +19,7 @@ public static class AgentEndpoints
     public const int MaxModelLength = 255;
     private const int MySqlDuplicateKeyError = 1062;
     public static readonly string[] LlmProviders = ["Claude", "Copilot"];
+    public static readonly string[] Containers = ["aiagent-1", "aiagent-2", "aiagent-3"];
     public static readonly string[] Capabilities = ["Jira", "Planning", "Builder", "Review"];
 
     public static void Map(IEndpointRouteBuilder app)
@@ -131,6 +132,17 @@ public static class AgentEndpoints
             return (null, $"llmModel must be at most {MaxModelLength} characters.");
         }
 
+        string? container = null;
+        if (!string.IsNullOrWhiteSpace(request.Container))
+        {
+            container = Containers.FirstOrDefault(
+                c => string.Equals(c, request.Container.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (container is null)
+            {
+                return (null, $"container must be one of {string.Join(", ", Containers)}.");
+            }
+        }
+
         var enabledByCapability = new Dictionary<string, bool>();
         foreach (var item in request.Capabilities ?? [])
         {
@@ -178,7 +190,7 @@ public static class AgentEndpoints
             name, role, behavior, provider, string.IsNullOrEmpty(model) ? null : model,
             request.Enabled ?? false,
             Capabilities.Select(c => new AgentCapabilityView(c, enabledByCapability.GetValueOrDefault(c))).ToArray(),
-            requested.Select(k => known[k]).ToArray()), null);
+            requested.Select(k => known[k]).ToArray(), container), null);
     }
 
     private static IResult Guard(Func<IResult> action)

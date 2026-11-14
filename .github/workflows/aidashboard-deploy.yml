@@ -28,7 +28,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dbmigrator:
+    name: Deploy DBMigrator
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    with:
+      environment: production
+      external_port: 0
+      project_path: aiteam/dbmigration
+      project_name: DbMigrator
+    secrets: inherit
+
   production:
+    needs: [dbmigrator]
     if: github.event.pull_request.merged == true || inputs.environment == 'production' || github.event_name == 'release'
     name: Deploy to Production
     uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7

@@ -63,7 +63,8 @@ public sealed class AiDatabasePatcherTests
                 "patch:AgentTables:10", "successful",
                 "patch:AgentTables:11", "successful",
                 "patch:AgentTables:12", "successful",
-                "patch:AgentTables:13", "successful"]);
+                "patch:AgentTables:13", "successful",
+                "patch:AgentTables:14", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);
