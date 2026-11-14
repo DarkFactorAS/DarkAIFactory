@@ -92,11 +92,35 @@ public sealed class ReviewCapability(
     private async Task LogIfReadyToMergeAsync(
         ReviewGitHubClient client, StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
     {
-        var unresolved = await client.CountUnresolvedThreadsAsync(pullRequest, cancellationToken);
-        if (unresolved is { } count && IsReadyToMerge(count, 0))
+        var counts = await client.CountThreadsAsync(pullRequest, cancellationToken);
+        if (counts is not { } threads || !IsReadyToMerge(threads.Unresolved, 0))
         {
-            Log($"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey}) is ready to be merged: " +
-                "all review comments are resolved.");
+            return;
+        }
+
+        var prefix = $"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey})";
+        Log($"{prefix} is ready to be merged: all review comments are resolved.");
+        if (!options.AutoMergeEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = await client.GetMergeInfoAsync(pullRequest, cancellationToken);
+            var reason = AutoMergePolicy.BlockReason(info, threads.Total, threads.Unresolved, 0, options.AgentCodePaths);
+            if (reason is not null)
+            {
+                Log($"{prefix}: not merged automatically: {reason}.");
+                return;
+            }
+
+            await client.MergeAsync(pullRequest, info.HeadSha, options.MergeMethod, cancellationToken);
+            Log($"{prefix} was merged automatically ({options.MergeMethod}).");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            DFLogger.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
         }
     }
 

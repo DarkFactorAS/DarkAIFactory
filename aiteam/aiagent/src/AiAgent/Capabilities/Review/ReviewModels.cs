@@ -42,6 +42,66 @@ public sealed record ReviewOptions(
 {
     /// <summary>Maximum duration of one runner call (LLM run plus build and test) for one review comment.</summary>
     public TimeSpan RunnerTimeout { get; init; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>Merge a pull request automatically once every review thread is resolved. Off by default.</summary>
+    public bool AutoMergeEnabled { get; init; }
+
+    /// <summary>GitHub merge method: merge, squash or rebase.</summary>
+    public string MergeMethod { get; init; } = "squash";
+
+    /// <summary>Path prefixes of agent code; a pull request changing any of them is never merged automatically.</summary>
+    public IReadOnlyList<string> AgentCodePaths { get; init; } = AutoMergePolicy.DefaultAgentCodePaths;
+}
+
+/// <summary>Facts about a pull request that decide whether it may be merged automatically.</summary>
+public sealed record PullRequestMergeInfo(
+    bool IsDraft, string MergeableState, string HeadSha, string HeadBranch, IReadOnlyList<string> ChangedFiles);
+
+/// <summary>Rules deciding whether the Review capability may merge a pull request.</summary>
+public static class AutoMergePolicy
+{
+    /// <summary>Head-branch prefix of a parent task's integration branch (see JiraWorkflowRules.ParentBranchName).</summary>
+    public const string ParentBranchPrefix = "aiagent/parent/";
+
+    public static readonly IReadOnlyList<string> DefaultAgentCodePaths =
+    [
+        "aiteam/", ".agents/", "AGENTS.md", "CLAUDE.md", ".github/"
+    ];
+
+    /// <summary>Returns null when the pull request may be merged, otherwise the reason it may not.</summary>
+    public static string? BlockReason(
+        PullRequestMergeInfo info, int totalThreads, int unresolvedThreads, int failedCount,
+        IReadOnlyList<string> agentCodePaths)
+    {
+        if (info.IsDraft)
+        {
+            return "the pull request is a draft";
+        }
+
+        if (!string.Equals(info.MergeableState, "clean", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"mergeable state is '{info.MergeableState}', not 'clean'";
+        }
+
+        if (totalThreads == 0)
+        {
+            return "the pull request has no review comments";
+        }
+
+        if (!ReviewCapability.IsReadyToMerge(unresolvedThreads, failedCount))
+        {
+            return "review comments are not all resolved";
+        }
+
+        if (info.HeadBranch.StartsWith(ParentBranchPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return "it is the pull request of a parent task with sub-tasks";
+        }
+
+        var agentFile = info.ChangedFiles.FirstOrDefault(file => agentCodePaths.Any(prefix =>
+            file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+        return agentFile is null ? null : $"it changes agent code ('{agentFile}')";
+    }
 }
 
 public enum FixOutcome { Skipped, NoChanges, Failed, Pushed }

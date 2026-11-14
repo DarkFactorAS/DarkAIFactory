@@ -247,6 +247,108 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         }
     }
 
+    /// <summary>Total and unresolved review threads; null when the pull request is no longer open.</summary>
+    public async Task<(int Total, int Unresolved)?> CountThreadsAsync(
+        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        int total = 0, unresolved = 0;
+        string? cursor = null;
+        while (true)
+        {
+            var page = await FetchThreadsPageAsync(pullRequest, cursor, cancellationToken);
+            if (!string.Equals(page.State, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            total += page.Threads.Count;
+            unresolved += page.Threads.Count(thread => !thread.IsResolved);
+            if (!page.HasNextPage || page.EndCursor is null)
+            {
+                return (total, unresolved);
+            }
+
+            cursor = page.EndCursor;
+        }
+    }
+
+    /// <summary>Draft flag, mergeable state, head and every changed file of the pull request (REST).</summary>
+    public async Task<PullRequestMergeInfo> GetMergeInfoAsync(
+        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var path = RestPath(pullRequest);
+        var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
+            ?? throw new InvalidDataException($"Pull request {pullRequest.PullRequest.PullRequestUrl} not found.");
+        var files = new List<string>();
+        for (var page = 1; ; page++)
+        {
+            var list = (await SendRestAsync(HttpMethod.Get, $"{path}/files?per_page={PageSize}&page={page}", null, cancellationToken))
+                ?.AsArray() ?? [];
+            foreach (var file in list)
+            {
+                files.Add(file?["filename"]?.GetValue<string>() ?? string.Empty);
+                if (file?["previous_filename"]?.GetValue<string>() is { Length: > 0 } previous)
+                {
+                    files.Add(previous);
+                }
+            }
+
+            if (list.Count < PageSize)
+            {
+                break;
+            }
+        }
+
+        return new PullRequestMergeInfo(
+            node["draft"]?.GetValue<bool>() ?? false,
+            node["mergeable_state"]?.GetValue<string>() ?? "unknown",
+            node["head"]?["sha"]?.GetValue<string>() ?? string.Empty,
+            node["head"]?["ref"]?.GetValue<string>() ?? string.Empty,
+            files);
+    }
+
+    /// <summary>
+    /// Merges the pull request, pinned to the expected head commit so it fails if commits were pushed since the
+    /// check. GitHub enforces branch protection; it is never bypassed.
+    /// </summary>
+    public async Task MergeAsync(
+        StoredAgentPullRequest pullRequest, string headSha, string mergeMethod, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["sha"] = headSha, ["merge_method"] = mergeMethod };
+        await SendRestAsync(HttpMethod.Put, $"{RestPath(pullRequest)}/merge", body, cancellationToken);
+    }
+
+    private static string RestPath(StoredAgentPullRequest pullRequest)
+    {
+        var segments = new Uri(pullRequest.PullRequest.RepositoryUrl).AbsolutePath.Trim('/').Split('/');
+        if (segments.Length < 2)
+        {
+            throw new InvalidDataException($"Cannot read owner and repository from \"{pullRequest.PullRequest.RepositoryUrl}\".");
+        }
+
+        var name = segments[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? segments[1][..^4] : segments[1];
+        return $"repos/{segments[0]}/{name}/pulls/{pullRequest.PullRequest.PullRequestNumber}";
+    }
+
+    private async Task<JsonNode?> SendRestAsync(
+        HttpMethod method, string path, JsonObject? body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        if (body is not null)
+        {
+            request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        }
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"GitHub request {method} {path} failed with {(int)response.StatusCode}.");
+        }
+
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text);
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private async Task<ThreadsPage> FetchThreadsPageAsync(
