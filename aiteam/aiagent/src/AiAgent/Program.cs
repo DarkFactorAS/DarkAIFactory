@@ -121,6 +121,12 @@ else
         new GitRunner(repositoryToken),
         runnerClient));
 }
+var agentsPerInstance = AgentsPerInstancePolicy.Resolve(
+    appSettings.AgentsPerInstance, Environment.GetEnvironmentVariable("AIAGENT_AGENTS_PER_INSTANCE"), out var agentsPerInstanceWarning);
+if (agentsPerInstanceWarning is not null)
+{
+    DFLogger.LogOutput(DFLogLevel.WARNING, "Startup", agentsPerInstanceWarning);
+}
 var agentHost = new AgentHost(
     agentRepository,
     capabilities,
@@ -128,7 +134,9 @@ var agentHost = new AgentHost(
     TimeSpan.FromSeconds(pollSeconds),
     new AgentStatusRepository(connectionFactory),
     ownership: new AgentOwnershipLock(connectionFactory),
-    maxAgents: Math.Max(1, appSettings.AgentsPerInstance));
+    maxAgents: agentsPerInstance);
 DFLogger.LogOutput(DFLogLevel.INFO, "Startup",
-    $"This instance runs up to {Math.Max(1, appSettings.AgentsPerInstance)} agent(s) not owned by another instance.");
+    $"This instance runs up to {agentsPerInstance} agent(s) not owned by another instance.");
+DFLogger.LogOutput(DFLogLevel.WARNING, "Startup",
+    "AIAGENT_RUNNER_MAX_JOBS on the runner should be at least AIAGENT_INSTANCES x AIAGENT_AGENTS_PER_INSTANCE.");
 await agentHost.RunAsync(cancellation.Token);

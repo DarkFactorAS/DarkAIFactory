@@ -16,11 +16,13 @@ Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchange
 
 - `aiagent` – orchestrator; mounts `/app/Config` and `aiagent_workspaces`; starts after
   `dbmigration` completed and `aiagent-runner` is healthy. Runs as `AIAGENT_INSTANCES` containers (default 3).
-  Each container takes one enabled, non-deleted agent from `agent_definitions` (`AgentsPerInstance` in the
-  config, default 1) by holding a MariaDB named lock `aiagent-agent-<id>`, so two containers never run the same
+  Each container takes up to `AIAGENT_AGENTS_PER_INSTANCE` (1-3, default 1; also `AgentsPerInstance` in the
+  config, the env var wins) enabled, non-deleted agents from `agent_definitions`, separate from the container
+  count, by holding a MariaDB named lock `aiagent-agent-<id>`, so two containers never run the same
   agent. The lock is released when the agent is disabled or the container stops, and a waiting container takes the
-  agent over on its next cycle. Add one agent row per container; containers without a free agent idle.
-  `aiagent-runner` stays a single container with `AIAGENT_RUNNER_MAX_JOBS` slots (default 3, one per agent).
+  agent over on its next cycle. Containers without a free agent idle.
+  `aiagent-runner` stays a single container with `AIAGENT_RUNNER_MAX_JOBS` slots (default 3); set it to at least
+  `AIAGENT_INSTANCES` × `AIAGENT_AGENTS_PER_INSTANCE`.
 - `aiagent-runner` – runs `--runner-server` (`/health` on 8080); mounts `aiagent_workspaces` and
   `aiteam_aiagent_claude_config`, no `/app/Config`, only `NUGET_USERNAME`/`NUGET_TOKEN` (read-only
   package access); on the `aiagent-runner` network.
@@ -30,6 +32,11 @@ Claude Code login for the runner: `./login_claude.sh` (Windows: `login_claude.cm
 
 Configuration is read from `aiteam/config/appsettings.<Environment>.json` (`PollIntervalSeconds`).
 CI: `.github/workflows/aiagent-ci-*.yml`; deploy: job `aiagent` in `aiteam-deploy.yml`.
+
+## Logging
+
+Log lines written while an agent runs start with `[AgentName] ` (the agent's name in the database), so
+concurrent agents can be told apart. Startup lines, host-wide lines and the `--runner-server` process have no prefix.
 
 ## Jira capability (`Capabilities/Jira`)
 

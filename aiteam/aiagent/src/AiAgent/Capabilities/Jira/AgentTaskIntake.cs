@@ -1,3 +1,4 @@
+using AiAgent.Core;
 using DFCommonLib.Logger;
 
 namespace AiAgent.Capabilities.Jira;
@@ -26,7 +27,7 @@ internal sealed class AgentTaskIntake(
             using var claim = claimLock?.TryAcquire(agentId, ClaimKey(listed.Id));
             if (claimLock is not null && claim is null)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing task {listed.Id}.");
+                AgentLog.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing task {listed.Id}.");
                 continue;
             }
 
@@ -50,7 +51,7 @@ internal sealed class AgentTaskIntake(
             catch (TaskUpdateConflictException exception)
             {
                 _attempts.Remove(task.Id);
-                DFLogger.LogOutput(DFLogLevel.WARNING, Source, exception.Message);
+                AgentLog.LogOutput(DFLogLevel.WARNING, Source, exception.Message);
             }
             catch (Exception exception)
             {
@@ -71,7 +72,7 @@ internal sealed class AgentTaskIntake(
                     $"Task {task.Id} changed while its Jira issue was being created; leaving it unchanged.");
             }
 
-            DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Created Jira issue {jiraKey} for task {task.Id}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, Source, $"Created Jira issue {jiraKey} for task {task.Id}.");
         }
 
         await jira.TransitionToAsync(jiraKey, jiraStatusName, cancellationToken);
@@ -81,7 +82,7 @@ internal sealed class AgentTaskIntake(
                 $"Task {task.Id} changed while Jira issue {jiraKey} was being prepared; leaving it unchanged.");
         }
 
-        DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Task {task.Id} is ready as {jiraKey} ({jiraStatusName}).");
+        AgentLog.LogOutput(DFLogLevel.INFO, Source, $"Task {task.Id} is ready as {jiraKey} ({jiraStatusName}).");
     }
 
     // Distinct prefix so a task claim never collides with a Jira issue-key claim.
@@ -93,14 +94,14 @@ internal sealed class AgentTaskIntake(
         if (attemptCount < maxAttempts)
         {
             _attempts[task.Id] = attemptCount;
-            DFLogger.LogOutput(
+            AgentLog.LogOutput(
                 DFLogLevel.WARNING, Source,
                 $"Task {task.Id} failed (attempt {attemptCount} of {maxAttempts}): {exception.Message}. Retrying next cycle.");
             return;
         }
 
         _attempts.Remove(task.Id);
-        DFLogger.LogOutput(
+        AgentLog.LogOutput(
             DFLogLevel.ERROR, Source,
             $"Task {task.Id} failed after {maxAttempts} attempts: {exception.Message}. Marking it Failed.");
         try
@@ -109,14 +110,14 @@ internal sealed class AgentTaskIntake(
             if (current is null ||
                 !tasks.TrySetStatus(task.Id, AiAgent.Core.AgentTaskStatus.New, current.JiraKey, AiAgent.Core.AgentTaskStatus.Failed))
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.WARNING, Source,
                     $"Task {task.Id} changed while being processed; leaving its status unchanged.");
             }
         }
         catch (Exception updateException)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Source, $"Could not mark task {task.Id} Failed: {updateException.Message}.");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Source, $"Could not mark task {task.Id} Failed: {updateException.Message}.");
         }
     }
 

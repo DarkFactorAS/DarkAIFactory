@@ -22,6 +22,7 @@ public sealed class AgentLoop(
     // Only used to end the loop's waiting and scheduling; capability runs get the host token.
     private readonly CancellationTokenSource _stop = new();
     private readonly object _statusLock = new();
+    private volatile string? _lastName;
     private string? _currentIssue;
     private AgentCapabilityKind? _currentCapability;
     // The capability being polled; only reported as working once it claims an issue.
@@ -49,7 +50,9 @@ public sealed class AgentLoop(
             }
             catch (Exception exception)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, "AgentLoop", $"Agent {agentId} cycle failed: {exception.Message}");
+                // Runs outside the cycle's scope, so add the last known name here.
+                using var scope = AgentLog.BeginScope(_lastName);
+                AgentLog.LogOutput(DFLogLevel.ERROR, "AgentLoop", $"Agent {agentId} cycle failed: {exception.Message}");
             }
 
             try
@@ -78,6 +81,8 @@ public sealed class AgentLoop(
             return false;
         }
 
+        _lastName = agent.Name;
+        using var nameScope = AgentLog.BeginScope(agent.Name);
         var enabled = repository.GetEnabledCapabilities(agentId);
         var context = new AgentContext(agent, repository.GetProjectKeys(agentId), new StatusClaimLock(this, claimLock));
         WriteStatus(AgentState.Idle, null, null);
@@ -108,7 +113,7 @@ public sealed class AgentLoop(
                 // cancellations (e.g. HttpClient timeouts) are treated as failures; only
                 // host cancellation propagates.
                 failed = true;
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, "AgentLoop",
                     $"Agent {agentId} capability {capability.Kind} failed: {exception.Message}");
             }
@@ -201,8 +206,12 @@ public sealed class AgentLoop(
         }
     }
 
-    private void LogStatusFailure(Exception exception) =>
-        DFLogger.LogOutput(DFLogLevel.ERROR, "AgentLoop", $"Agent {agentId} status write failed: {exception.Message}");
+    private void LogStatusFailure(Exception exception)
+    {
+        // May run outside the cycle's scope (shutdown, disabled or deleted cycles), so fall back to the last known name.
+        using var scope = AgentLog.BeginScope(AgentLog.Current ?? _lastName);
+        AgentLog.LogOutput(DFLogLevel.ERROR, "AgentLoop", $"Agent {agentId} status write failed: {exception.Message}");
+    }
 
     /// <summary>Records the claimed issue as current_issue_key while the claim is held.</summary>
     private sealed class StatusClaimLock(AgentLoop loop, IAgentClaimLock inner) : IAgentClaimLock

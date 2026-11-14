@@ -61,7 +61,7 @@ internal sealed class PullRequestCloser(
 
                 await jira.TransitionToAsync(issue.Key, configuration.DoneStatus, cancellationToken);
                 closed.Add(issue.Key);
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.INFO, "JiraCloser",
                     $"Moved {issue.Key} to {configuration.DoneStatus}: all pull requests are merged.");
             }
@@ -71,7 +71,7 @@ internal sealed class PullRequestCloser(
             }
             catch (Exception exception)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, "JiraCloser", $"Could not check pull requests for {issue.Key}: {exception.Message}");
             }
         }

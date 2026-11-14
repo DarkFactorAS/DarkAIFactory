@@ -42,7 +42,7 @@ internal sealed class BuilderCapability(
             catch (Exception exception) when (
                 !cancellationToken.IsCancellationRequested && exception is HttpRequestException or OperationCanceledException)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Jira polling failed for {project.JiraProjectKey}: {exception.Message}. Retrying next cycle.");
+                AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Jira polling failed for {project.JiraProjectKey}: {exception.Message}. Retrying next cycle.");
                 continue;
             }
 
@@ -55,7 +55,7 @@ internal sealed class BuilderCapability(
                 }
                 catch (RunnerBusyException)
                 {
-                    DFLogger.LogOutput(DFLogLevel.INFO, Log, "The runner is busy; remaining issues wait for the next cycle.");
+                    AgentLog.LogOutput(DFLogLevel.INFO, Log, "The runner is busy; remaining issues wait for the next cycle.");
                     return;
                 }
             }
@@ -80,7 +80,7 @@ internal sealed class BuilderCapability(
         using var claim = context.ClaimLock.TryAcquire(context.AgentId, candidate.Key);
         if (claim is null)
         {
-            DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Another worker is already processing {candidate.Key}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, Log, $"Another worker is already processing {candidate.Key}.");
             return;
         }
 
@@ -92,7 +92,7 @@ internal sealed class BuilderCapability(
         catch (Exception exception) when (
             !cancellationToken.IsCancellationRequested && exception is HttpRequestException or OperationCanceledException)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Could not refresh {candidate.Key} before claiming: {exception.Message}.");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Could not refresh {candidate.Key} before claiming: {exception.Message}.");
             return;
         }
 
@@ -116,7 +116,7 @@ internal sealed class BuilderCapability(
             var shared = plans.FindPostedForIssue(issue.Key, fingerprint);
             if (shared is not null && !string.IsNullOrWhiteSpace(shared.Plan))
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Log,
+                AgentLog.LogOutput(DFLogLevel.INFO, Log,
                     $"Using the plan for {issue.Key} made by agent {shared.AgentId}.");
                 plan = shared;
                 ownPlanInvalid = false;
@@ -146,18 +146,18 @@ internal sealed class BuilderCapability(
 
         await IgnoredTaskNotifier.ClearAsync(
             issue.Key, issue.Labels, jira.RemoveLabelAsync,
-            message => DFLogger.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
-        DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Claiming {issue.Key}: {issue.Summary}");
+            message => AgentLog.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
+        AgentLog.LogOutput(DFLogLevel.INFO, Log, $"Claiming {issue.Key}: {issue.Summary}");
         await ImplementAsync(context, settings, repositoryUrl, jira, issue, plan, cancellationToken);
     }
 
     private static Task IgnoreAsync(
         AgentContext context, IBuilderJira jira, BuilderIssue issue, string reason, CancellationToken cancellationToken)
     {
-        DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Skipping {issue.Key}: {reason}");
+        AgentLog.LogOutput(DFLogLevel.WARNING, Log, $"Skipping {issue.Key}: {reason}");
         return IgnoredTaskNotifier.NotifyAsync(
             context.Agent.Name, issue.Key, reason, jira.GetCommentsAsync, jira.AddCommentAsync, jira.AddLabelAsync,
-            message => DFLogger.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
+            message => AgentLog.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
     }
 
     private async Task ImplementAsync(
@@ -199,7 +199,7 @@ internal sealed class BuilderCapability(
             }
             else
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Log, $"No stored plan for {issue.Key}; generating a plan locally.");
+                AgentLog.LogOutput(DFLogLevel.INFO, Log, $"No stored plan for {issue.Key}; generating a plan locally.");
                 plan = await RunRunnerAsync(context, settings, RunnerModes.Plan, workspacePath,
                     PromptBuilder.BuildPlanPrompt(issue), cancellationToken);
             }
@@ -242,7 +242,7 @@ internal sealed class BuilderCapability(
             }
 
             delivered = true;
-            DFLogger.LogOutput(DFLogLevel.INFO, Log, $"Completed {issue.Key}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, Log, $"Completed {issue.Key}.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -264,7 +264,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Processing {issue.Key} failed: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Processing {issue.Key} failed: {exception.Message}");
             await ReportFailureAsync(settings, jira, issue, exception, pushedBranch, branchName, workspacePath,
                 pullRequestUrl, inProgressAttempted, resultCommentPosted, cancellationToken);
         }
@@ -276,7 +276,7 @@ internal sealed class BuilderCapability(
             }
             else if (workspacePath is not null)
             {
-                DFLogger.LogOutput(DFLogLevel.WARNING, Log,
+                AgentLog.LogOutput(DFLogLevel.WARNING, Log,
                     $"Retained temporary workspace for {issue.Key} at {workspacePath}." +
                     (pushedBranch is not null ? $" Pushed branch: {pushedBranch}." : branchName is not null ? $" Local branch: {branchName}." : ""));
             }
@@ -300,13 +300,13 @@ internal sealed class BuilderCapability(
         {
             if (!pushStarted && pushedBranch is null)
             {
-                DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Shutdown interrupted {issue.Key} before pushing; releasing the issue.");
+                AgentLog.LogOutput(DFLogLevel.WARNING, Log, $"Shutdown interrupted {issue.Key} before pushing; releasing the issue.");
                 await ReleaseAsync(settings, jira, issue, inProgressAttempted, recovery.Token);
                 return true;
             }
 
             var interruptedBranch = pushedBranch ?? branchName;
-            DFLogger.LogOutput(DFLogLevel.WARNING, Log,
+            AgentLog.LogOutput(DFLogLevel.WARNING, Log,
                 $"Shutdown interrupted {issue.Key} after a push may have completed (branch: {interruptedBranch ?? "none"}); reporting for manual recovery.");
             await ReportFailureAsync(settings, jira, issue,
                 new OperationCanceledException(
@@ -316,7 +316,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log,
                 $"Shutdown recovery for {issue.Key} failed: {exception.Message}. The `{settings.PickupLabel}` label may remain; " +
                 $"pushed branch: {pushedBranch ?? "unknown"}; local branch: {branchName ?? "none"}; workspace: {workspacePath ?? "none"}.");
         }
@@ -361,7 +361,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Could not {action} {key}: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Could not {action} {key}: {exception.Message}");
             try
             {
                 await jira.AddCommentAsync(
@@ -371,7 +371,7 @@ internal sealed class BuilderCapability(
             }
             catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Could not post the warning for {key}: {notificationException.Message}");
+                AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Could not post the warning for {key}: {notificationException.Message}");
             }
 
             return false;
@@ -396,7 +396,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log, $"Could not release {issue.Key}: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Could not release {issue.Key}: {exception.Message}");
             if (!labelRemoved)
             {
                 return;
@@ -416,7 +416,7 @@ internal sealed class BuilderCapability(
             }
             catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+                AgentLog.LogOutput(DFLogLevel.ERROR, Log,
                     $"Could not report the incomplete release of {issue.Key} to Jira: {notificationException.Message}. " +
                     $"Move it back to {issue.StatusName} manually.");
             }
@@ -447,7 +447,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Log, $"Could not remove {description} at {path}: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.WARNING, Log, $"Could not remove {description} at {path}: {exception.Message}");
         }
     }
 
@@ -483,7 +483,7 @@ internal sealed class BuilderCapability(
             }
             catch (Exception restoreException) when (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+                AgentLog.LogOutput(DFLogLevel.ERROR, Log,
                     $"Could not restore the status of {issue.Key} to {issue.StatusName}: {restoreException.Message}");
             }
         }
@@ -527,7 +527,7 @@ internal sealed class BuilderCapability(
         }
         catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Log,
+            AgentLog.LogOutput(DFLogLevel.ERROR, Log,
                 $"Could not report the failure for {issue.Key} to Jira: {notificationException.Message}. " +
                 $"Pushed branch: {pushedBranch ?? "none"}; local branch: {branchName ?? "none"}.");
         }
