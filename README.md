@@ -120,6 +120,11 @@ workflows in [.github/workflows](.github/workflows). The aiagent .NET workflow
 also builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
+A CodeQL workflow (`codeql.yml`) scans C# and the workflow files on pull
+requests, pushes to `main` and weekly. Results appear under Security > Code
+scanning. Pull requests from forks have no NuGet secrets, so the C# restore may
+fail there.
+
 ### Docker Compose
 
 `aiteam/docker-compose.yml` runs `dbmigration`, `aiagent` with `aiagent-runner`,
