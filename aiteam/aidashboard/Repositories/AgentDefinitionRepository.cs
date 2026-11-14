@@ -24,6 +24,7 @@ public interface IAgentDefinitionRepository
     bool NameExists(string name, long? excludeId);
     IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys);
     IReadOnlyList<string> ListProjectKeys();
+    IReadOnlyList<string> ListBuilderProjectKeys();
     AgentView Create(AgentWrite agent);
     AgentView? Update(long id, AgentWrite agent);
     bool SetEnabled(long id, bool enabled);
@@ -138,6 +139,37 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
     {
         using var command = connectionFactory.CreateCommand(
             "SELECT jira_project_key FROM manager_projects ORDER BY jira_project_key");
+        using var reader = command.ExecuteReader();
+        var keys = new List<string>();
+        while (reader.Read())
+        {
+            keys.Add(reader.GetString(0));
+        }
+
+        return keys;
+    }
+
+    // Projects builders actually pick up: enabled, non-deleted agents with the Builder capability enabled,
+    // limited to keys present in manager_projects. Falls back to all manager_projects when no agent
+    // definitions exist (legacy workers read manager_projects directly).
+    public IReadOnlyList<string> ListBuilderProjectKeys()
+    {
+        using (var count = connectionFactory.CreateCommand(
+            "SELECT COUNT(*) FROM agent_definitions WHERE deleted_at IS NULL"))
+        using (var countReader = count.ExecuteReader())
+        {
+            if (countReader.Read() && Convert.ToInt64(countReader.GetValue(0)) == 0)
+            {
+                return ListProjectKeys();
+            }
+        }
+
+        using var command = connectionFactory.CreateCommand(
+            "SELECT DISTINCT p.project_key FROM agent_projects p " +
+            "JOIN agent_definitions a ON a.id = p.agent_id AND a.deleted_at IS NULL AND a.enabled = TRUE " +
+            "JOIN agent_capabilities c ON c.agent_id = a.id AND c.capability = 'Builder' AND c.enabled = TRUE " +
+            "JOIN manager_projects m ON m.jira_project_key = p.project_key " +
+            "ORDER BY p.project_key");
         using var reader = command.ExecuteReader();
         var keys = new List<string>();
         while (reader.Read())

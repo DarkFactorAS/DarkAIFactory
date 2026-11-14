@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using AiDashboard.Agents;
 using AiTeam.Configuration;
 using DFCommonLib.Logger;
 
@@ -13,7 +14,7 @@ public sealed record SolvedIssue(string ProjectKey, bool IsAi);
 public interface IJiraSolvedClient
 {
     // Project key and AI flag (configured pickup or analyzed label) of every issue whose status category is Done.
-    Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(IReadOnlyCollection<string> projectKeys, CancellationToken cancellationToken);
 }
 
 public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
@@ -46,8 +47,14 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-Dashboard/1.0");
     }
 
-    public async Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(
+        IReadOnlyCollection<string> projectKeys, CancellationToken cancellationToken)
     {
+        if (projectKeys.Count == 0)
+        {
+            return [];
+        }
+
         var issues = new List<SolvedIssue>();
         var configuredAiLabels = _dashboard.AiLabels;
         var aiLabels = configuredAiLabels.Count > 0
@@ -55,7 +62,7 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
             : AiWorkLabelKeys
                 .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
                 .ToHashSet(StringComparer.Ordinal);
-        var query = $"jql={Uri.EscapeDataString(SolvedJql)}&fields=project,labels&maxResults=100";
+        var query = $"jql={Uri.EscapeDataString(BuildJql(projectKeys))}&fields=project,labels&maxResults=100";
         string? nextPageToken = null;
         do
         {
@@ -85,6 +92,13 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
         return issues;
     }
 
+    public static string BuildJql(IEnumerable<string> projectKeys)
+    {
+        var quoted = projectKeys
+            .Select(key => "\"" + key.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"");
+        return $"{SolvedJql} AND project in ({string.Join(", ", quoted)})";
+    }
+
     private static bool HasAiLabel(JsonElement fields, IReadOnlySet<string> aiLabels) =>
         fields.TryGetProperty("labels", out var labels)
         && labels.ValueKind == JsonValueKind.Array
@@ -97,11 +111,13 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
 
 public static class SolvedByProjectEndpoint
 {
-    public static async Task<IResult> HandleAsync(IJiraSolvedClient client, CancellationToken cancellationToken)
+    public static async Task<IResult> HandleAsync(
+        IJiraSolvedClient client, IAgentDefinitionRepository repository, CancellationToken cancellationToken)
     {
         try
         {
-            var issues = await client.GetSolvedIssuesAsync(cancellationToken);
+            var projectKeys = repository.ListBuilderProjectKeys();
+            var issues = await client.GetSolvedIssuesAsync(projectKeys, cancellationToken);
             var result = issues
                 .GroupBy(issue => issue.ProjectKey, StringComparer.Ordinal)
                 .Select(group => new SolvedByProject(group.Key, group.Count(), group.Count(i => i.IsAi), group.Count(i => !i.IsAi)))
