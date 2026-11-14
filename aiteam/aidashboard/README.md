@@ -8,12 +8,12 @@ returns `[{"project": "DFAI", "solvedCount": 3, "aiCount": 1, "nonAiCount": 2}]`
 counting Jira issues in the Done status category per project, split into `aiCount` (issues carrying a configured AI workflow pickup or analyzed label) and `nonAiCount` (502 with a generic error if Jira fails;
 credentials are never logged).
 
-`GET /api/tasks/active-ai` returns at most 3 Jira issues (`key`, `summary`,
+`GET /api/tasks/active-ai` returns at most 5 Jira issues (`key`, `summary`,
 `status`, `description`) that carry an AI workflow label (the `PickupLabel` and
 `AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
 `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
-The dashboard's "Top 3 AI tasks" panel polls this endpoint every 30 seconds
+The dashboard's "Top 5 AI tasks" panel polls this endpoint every 30 seconds
 (background refreshes keep the current list; a failed poll keeps the last list
 and shows the error).
 Jira failures return 502. Tests: `dotnet test aiteam/aidashboard/tests/aidashboard.Tests.csproj`.
@@ -92,7 +92,7 @@ AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/setting
 token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
 list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
-panel uses it and redraws the graph; the labels also drive the "Top 3 AI tasks" panel.
+panel uses it and redraws the graph; the labels also drive the "Top 5 AI tasks" panel.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,

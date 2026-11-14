@@ -10,11 +10,11 @@ public interface IActiveAiTaskService
     Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken);
 }
 
-// Returns at most 3 issues carrying an AI workflow label that are not Done,
+// Returns at most 5 issues carrying an AI workflow label that are not Done,
 // ordered by most recently updated first (ties broken by issue key ascending).
 public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
 {
-    public const int MaxTasks = 3;
+    public const int MaxTasks = 5;
     private static readonly (string Agent, string CodeKey)[] AiLabelKeys =
     [
         ("aimanager", "PickupLabel"),
