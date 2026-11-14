@@ -13,6 +13,7 @@ internal sealed class RecordingCapability(AgentCapabilityKind kind) : IAgentCapa
         if (Action is not null) await Action(context);
     }
     public int Count { get { lock (Contexts) return Contexts.Count; } }
+    public List<AgentContext> Snapshot() { lock (Contexts) return [.. Contexts]; }
 }
 
 internal sealed class HandleLock : IAgentClaimLock
@@ -90,7 +91,7 @@ public sealed class AgentConfigTests
         Assert.Equal(0, cap.Count);
         repo.Others.Add(Def(2));
         await WaitFor(() => cap.Count > 0);
-        Assert.All(cap.Contexts, c => Assert.Equal(2, c.AgentId));
+        Assert.All(cap.Snapshot(), c => Assert.Equal(2, c.AgentId));
         cts.Cancel();
         await run.WaitAsync(TimeSpan.FromSeconds(5));
     }
