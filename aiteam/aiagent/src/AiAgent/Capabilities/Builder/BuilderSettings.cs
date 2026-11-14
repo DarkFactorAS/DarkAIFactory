@@ -61,7 +61,7 @@ internal sealed record BuilderSettings(
             Or(settings.Jira.JiraInReviewStatus, "In Review"),
             Or(settings.Jira.JiraDoneStatus, "Done"),
             Or(settings.Jira.JiraAssigneeAccountId, string.Empty),
-            Env("AIAGENT_BUILD_COMMAND") ?? "dotnet build",
-            Env("AIAGENT_TEST_COMMAND") ?? "dotnet test");
+            Env("AIAGENT_BUILD_COMMAND"),
+            Env("AIAGENT_TEST_COMMAND"));
     }
 }

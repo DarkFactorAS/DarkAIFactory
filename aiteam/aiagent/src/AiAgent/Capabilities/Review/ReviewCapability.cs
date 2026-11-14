@@ -220,7 +220,9 @@ public sealed class ReviewCapability(
                 response = await client.RunAsync(
                     new RunnerRequest(
                         provider, agent.LlmModel ?? string.Empty, RunnerModes.Review, workspacePath,
-                        PromptComposer.Compose(agent, prompt), options.BuildCommand, options.TestCommand,
+                        PromptComposer.Compose(agent, prompt),
+                        ProjectCommands.Resolve(options.BuildCommand, "build", workspacePath),
+                        ProjectCommands.Resolve(options.TestCommand, "test", workspacePath),
                         provider == "copilot" ? options.CopilotToken : null),
                     timeout.Token);
             }

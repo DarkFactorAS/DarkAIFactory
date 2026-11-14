@@ -82,6 +82,16 @@ from `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND`), pushes, opens the PR thr
 `aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is
 generated (fallback). Settings are read from the `aiagent` client and the `aiagent` workflow labels.
 
+### Build and test commands (Builder and Review)
+
+After the LLM run, aiagent-runner validates the checkout with a build and a test command; a non-zero exit fails
+the run. `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND` (environment of the `aiagent` service) are used when set.
+When they are not set, the repository root decides: one `.slnx`/`.sln` (`.slnx` preferred), or else one
+`.csproj`/`.fsproj`/`.vbproj`, gives `dotnet build "<file>"` / `dotnet test "<file>"`. If the root has none, or
+several, validation is skipped and a warning is logged (a bare `dotnet build` fails there with MSB1003). For a
+repository without a root solution, such as DarkAIFactory, set the commands, for example
+`AIAGENT_BUILD_COMMAND="dotnet build aiteam/aiagent/src/AiAgent/AiAgent.csproj"`.
+
 ## Review capability (`Capabilities/Review`)
 
 Copied from `aireviewworker`. Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
