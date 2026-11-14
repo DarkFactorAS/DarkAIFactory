@@ -13,6 +13,9 @@ credentials are never logged).
 `AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
 `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
+The dashboard's "Top 3 AI tasks" panel polls this endpoint every 30 seconds
+(background refreshes keep the current list; a failed poll keeps the last list
+and shows the error).
 Jira failures return 502. Tests: `dotnet test aiteam/aidashboard/tests/aidashboard.Tests.csproj`.
 
 The frontend sources live in `aiteam/aidashboard` (`package.json`,
@@ -116,3 +119,6 @@ heartbeat; the Network tab shows no write without a token, and a bad token gives
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
 for restore to succeed.
+
+The centre panel list of tasks not yet sent to Jira (`status=New`) refreshes every 30 seconds, so tasks
+created in Jira disappear without a page reload; an open edit form keeps its input across refreshes.
