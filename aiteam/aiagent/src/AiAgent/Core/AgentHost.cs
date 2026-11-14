@@ -2,15 +2,20 @@ using DFCommonLib.Logger;
 
 namespace AiAgent.Core;
 
-/// <summary>Runs one <see cref="AgentLoop"/> per enabled agent; agents enabled later are picked up on rescan.</summary>
+/// <summary>
+/// Runs one <see cref="AgentLoop"/> per enabled agent. Every cycle the agent rows are reloaded: loops start
+/// for new or re-enabled agents and stop for disabled or deleted ones. A run in progress finishes first.
+/// </summary>
 public sealed class AgentHost(
     IAgentRepository repository,
     IEnumerable<IAgentCapability> capabilities,
     IAgentClaimLock claimLock,
-    TimeSpan interval)
+    TimeSpan interval,
+    IAgentStatusWriter? statusWriter = null,
+    TimeSpan? heartbeatInterval = null)
 {
     private readonly IReadOnlyList<IAgentCapability> _capabilities = capabilities.ToList();
-    private readonly Dictionary<long, Task> _loops = [];
+    private readonly Dictionary<long, (AgentLoop Loop, Task Task)> _loops = [];
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -20,7 +25,7 @@ public sealed class AgentHost(
             {
                 try
                 {
-                    StartMissingLoops(cancellationToken);
+                    Reconcile(cancellationToken);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
@@ -34,27 +39,39 @@ public sealed class AgentHost(
         {
         }
 
-        await Task.WhenAll(_loops.Values);
+        await Task.WhenAll(_loops.Values.Select(entry => entry.Task));
     }
 
-    internal IReadOnlyCollection<long> StartMissingLoops(CancellationToken cancellationToken)
+    /// <summary>Starts loops for enabled agents and stops loops of disabled or deleted agents.</summary>
+    internal IReadOnlyCollection<long> Reconcile(CancellationToken cancellationToken)
     {
-        foreach (var finished in _loops.Where(pair => pair.Value.IsCompleted).Select(pair => pair.Key).ToList())
+        foreach (var finished in _loops.Where(pair => pair.Value.Task.IsCompleted).Select(pair => pair.Key).ToList())
         {
             _loops.Remove(finished);
         }
 
-        foreach (var agent in repository.GetEnabledAgents())
+        var agents = repository.GetAllAgents();
+        var runnable = agents.Where(agent => agent.Enabled && !agent.Deleted).Select(agent => agent.Id).ToHashSet();
+        foreach (var (id, entry) in _loops)
         {
+            if (!runnable.Contains(id) && !entry.Loop.StopRequested)
+            {
+                entry.Loop.Stop();
+            }
+        }
+
+        foreach (var agent in agents.Where(agent => runnable.Contains(agent.Id)))
+        {
+            // A loop that is stopping but still finishing a run is replaced once it has ended.
             if (_loops.ContainsKey(agent.Id))
             {
                 continue;
             }
 
-            var loop = new AgentLoop(agent.Id, repository, _capabilities, claimLock, interval);
-            _loops[agent.Id] = Task.Run(() => loop.RunAsync(cancellationToken), CancellationToken.None);
+            var loop = new AgentLoop(agent.Id, repository, _capabilities, claimLock, interval, statusWriter, heartbeatInterval);
+            _loops[agent.Id] = (loop, Task.Run(() => loop.RunAsync(cancellationToken), CancellationToken.None));
         }
 
-        return _loops.Keys.ToList();
+        return _loops.Where(pair => !pair.Value.Loop.StopRequested).Select(pair => pair.Key).ToList();
     }
 }
