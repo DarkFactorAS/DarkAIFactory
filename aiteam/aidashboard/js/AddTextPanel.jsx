@@ -46,18 +46,18 @@ export default function AddTextPanel({ task, onClose }) {
       />
       <textarea
         aria-label="Additional text"
-        className="w-full rounded border border-slate-300 p-2 text-sm"
+        className="w-full rounded border border-slate-300 dark:border-slate-600 p-2 text-sm"
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
       {status && (
-        <p role="status" className="text-sm text-green-700">
+        <p role="status" className="text-sm text-green-700 dark:text-green-400">
           {status}
         </p>
       )}

@@ -38,13 +38,13 @@ export function WriteTokenPrompt() {
             commit();
           }
         }}
-        className="rounded border border-slate-300 p-1 text-sm"
+        className="rounded border border-slate-300 dark:border-slate-600 p-1 text-sm"
       />
       <button
         type="button"
         onClick={commit}
         disabled={!draft.trim()}
-        className="rounded border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
+        className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm disabled:opacity-50"
       >
         Use token
       </button>

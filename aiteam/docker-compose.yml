@@ -27,6 +27,10 @@ services:
       secrets:
         - nuget_username
         - nuget_token
+    # One container per agent: each instance takes one enabled agent from agent_definitions (a database lock per
+    # agent keeps two instances off the same agent). Instances without a free agent wait until one is enabled.
+    deploy:
+      replicas: ${AIAGENT_INSTANCES:-3}
     depends_on:
       dbmigration:
         condition: service_completed_successfully
