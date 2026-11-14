@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import { POLL_INTERVAL_MS, deleteAgent, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, deleteAgent, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
@@ -8,7 +8,9 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const label = statusLabel(agent, nowMs);
-  const chips = agent.capabilities.filter((c) => c.enabled);
+  const active = activeCapability(agent, nowMs);
+  const chips = agent.capabilities.filter((c) => c.enabled).map((c) => c.capability);
+  if (active && !chips.some((c) => c.toLowerCase() === active.toLowerCase())) chips.push(active);
 
   async function run(action) {
     if (busy || !token) return;
@@ -39,11 +41,24 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
         {agent.llmProvider} / {agent.llmModel || "default"}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">
-        {chips.map((c) => (
-          <span key={c.capability} className="rounded bg-blue-100 px-2 py-0.5 text-xs">
-            {c.capability}
-          </span>
-        ))}
+        {chips.map((c) =>
+          active && c.toLowerCase() === active.toLowerCase() ? (
+            <span
+              key={c}
+              aria-current="step"
+              data-testid="agent-active-capability"
+              title="Currently running"
+              className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white ring-2 ring-blue-300"
+            >
+              {c}
+              <span className="sr-only"> (active)</span>
+            </span>
+          ) : (
+            <span key={c} className="rounded bg-blue-100 px-2 py-0.5 text-xs">
+              {c}
+            </span>
+          ),
+        )}
       </div>
       <p className="mt-1 text-xs text-slate-500">Projects: {agent.projects.join(", ") || "none"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">

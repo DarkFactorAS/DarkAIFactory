@@ -6,6 +6,7 @@ import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
+import { POLL_INTERVAL_MS } from "./agentApi.js";
 
 // Reloads the given query whenever refreshKey changes (skipping the initial render).
 function useReloadOn(refreshKey, reload) {
@@ -186,7 +187,12 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
 
 function ActiveAiTasksPanel({ labelsVersion }) {
   const [openKey, setOpenKey] = useState(null);
-  const state = useApiData("/api/tasks/active-ai");
+  const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
+  useEffect(() => {
+    if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
+      setOpenKey(null);
+    }
+  }, [state.data, openKey]);
   useReloadOn(labelsVersion, state.reload);
   return (
     <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
