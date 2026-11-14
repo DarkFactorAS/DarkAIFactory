@@ -93,6 +93,15 @@ token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitesp
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
 list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
 panel uses it and redraws the graph; the labels also drive the "Top 5 AI tasks" panel.
+
+Active statuses: `GET /api/settings/active-statuses` returns `{ statuses }`; `PUT /api/settings/active-statuses`
+(`statuses`, Bearer write token required, 401 otherwise) validates (max 20 statuses, 1-255 chars, no commas; spaces
+are allowed; 400 otherwise), writes only `settings[aidashboard, Dashboard.ActiveStatuses]` and updates the running app
+immediately. An empty list means: show every non-Done status. The cogwheel button in the "Top 5 AI tasks" header
+opens the editor and reloads the panel after saving.
+
+Manual check (cogwheel): open the cogwheel, save `In Progress` with a token and the list narrows without a reload;
+an empty value restores all non-Done statuses; a bad token gives 401 and the token prompt; the list survives a reload.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
@@ -107,7 +116,7 @@ Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js
 uses `/api/agents` (writes need the Bearer write token) plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
-older than 90 s (3 polls), else Idle / `Running on KEY` / Error. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
+older than 90 s (3 polls), else Idle / `Running on KEY` / Error. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header. The write token is asked for in the page and
 remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.

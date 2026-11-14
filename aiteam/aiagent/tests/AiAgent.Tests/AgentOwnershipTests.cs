@@ -111,6 +111,21 @@ public sealed class AgentOwnershipTests
     }
 
     [Fact]
+    public void ThreeAgentsPerInstanceLeavesTheFourthToAnotherHost()
+    {
+        var repo = ThreeAgents();
+        repo.Others.Add(Def(4));
+        var ownership = new SharedOwnership();
+        using var cts = new CancellationTokenSource();
+        AgentHost NewHost() =>
+            new(repo, [], new NoLock(), TimeSpan.FromMilliseconds(10), ownership: ownership, maxAgents: 3);
+
+        Assert.Equal([1L, 2L, 3L], NewHost().Reconcile(cts.Token).Order());
+        Assert.Equal([4L], NewHost().Reconcile(cts.Token));
+        cts.Cancel();
+    }
+
+    [Fact]
     public void LockNameIsPerAgent() =>
         Assert.Equal("aiagent-agent-42", AgentOwnershipLock.LockName(42));
 }

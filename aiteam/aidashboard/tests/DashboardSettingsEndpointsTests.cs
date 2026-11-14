@@ -16,6 +16,11 @@ public sealed class DashboardSettingsEndpointsTests
 {
     private const string Token = "test-write-token";
 
+    private sealed class NoopStatusesStore : IActiveStatusesStore
+    {
+        public void Save(IReadOnlyList<string> statuses) { }
+    }
+
     private sealed class FakeStore : IAiLabelsStore
     {
         public List<IReadOnlyList<string>> Saved { get; } = [];
@@ -42,6 +47,7 @@ public sealed class DashboardSettingsEndpointsTests
                 DashboardWriteAuthentication.SchemeName, _ => { });
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IAiLabelsStore>(store);
+        builder.Services.AddSingleton<IActiveStatusesStore>(new NoopStatusesStore());
         builder.Services.AddSingleton(settings);
         var app = builder.Build();
         app.UseAuthentication();

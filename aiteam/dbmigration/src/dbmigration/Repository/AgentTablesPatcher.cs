@@ -209,6 +209,29 @@ public static class AgentTablesPatcher
             """
             ALTER TABLE `agent_definitions`
                 ADD COLUMN IF NOT EXISTS `container` VARCHAR(64) NULL
+            """,
+            // DFAI-209: Dashboard.ActiveStatuses (comma-separated Jira status names) for the Top 5 AI tasks panel.
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'Claude.AnthropicApiKey', 'Claude.AgentModel', 'Dashboard.AiLabels',
+                         'Dashboard.ActiveStatuses'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                    OR
+                    (`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses'))
+                    OR
+                    (`client` = 'aiclaudeworker' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                    OR
+                    (`client` = 'aiagent' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
+                )
             """
         ];
 

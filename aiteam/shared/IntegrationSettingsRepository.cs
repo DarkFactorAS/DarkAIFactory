@@ -69,7 +69,8 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             },
             Dashboard = new DashboardSettings
             {
-                AiLabels = ParseAiLabels(ReadClientOptional("Dashboard.AiLabels"))
+                AiLabels = ParseAiLabels(ReadClientOptional("Dashboard.AiLabels")),
+                ActiveStatuses = ParseStatuses(ReadClientOptional("Dashboard.ActiveStatuses"))
             },
             Claude = new ClaudeSettings
             {
@@ -89,14 +90,31 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
+    // Status names may contain spaces ("In Progress"): split on commas only, compare case-insensitively.
+    public static IReadOnlyList<string> ParseStatuses(string value) =>
+        NormalizeStatuses(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    public static IReadOnlyList<string> NormalizeStatuses(IEnumerable<string> statuses) =>
+        statuses.Select(status => status.Trim())
+            .Where(status => status.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     // Writes only settings[aidashboard, Dashboard.AiLabels]; no generic settings write is exposed.
-    public void SaveDashboardAiLabels(IReadOnlyList<string> labels)
+    public void SaveDashboardAiLabels(IReadOnlyList<string> labels) =>
+        SaveDashboardSetting("Dashboard.AiLabels", string.Join(",", NormalizeAiLabels(labels)));
+
+    // Writes only settings[aidashboard, Dashboard.ActiveStatuses].
+    public void SaveDashboardActiveStatuses(IReadOnlyList<string> statuses) =>
+        SaveDashboardSetting("Dashboard.ActiveStatuses", string.Join(",", NormalizeStatuses(statuses)));
+
+    private void SaveDashboardSetting(string name, string value)
     {
-        var value = string.Join(",", NormalizeAiLabels(labels));
         using (var update = connectionFactory.CreateCommand(
-            "UPDATE `settings` SET `value` = @value WHERE `client` = 'aidashboard' AND `name` = 'Dashboard.AiLabels'"))
+            "UPDATE `settings` SET `value` = @value WHERE `client` = 'aidashboard' AND `name` = @name"))
         {
             update.AddParameter("@value", value);
+            update.AddParameter("@name", name);
             if (update.ExecuteNonQuery() > 0)
             {
                 return;
@@ -104,7 +122,8 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
         }
 
         using var insert = connectionFactory.CreateCommand(
-            "INSERT INTO `settings` (`client`, `name`, `value`) VALUES ('aidashboard', 'Dashboard.AiLabels', @value)");
+            "INSERT INTO `settings` (`client`, `name`, `value`) VALUES ('aidashboard', @name, @value)");
+        insert.AddParameter("@name", name);
         insert.AddParameter("@value", value);
         insert.ExecuteNonQuery();
     }

@@ -4,6 +4,7 @@ import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
+import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
 import { POLL_INTERVAL_MS, listAgents, workingIssueKeys } from "./agentApi.js";
@@ -229,6 +230,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
 
 function ActiveAiTasksPanel({ labelsVersion }) {
   const [openKey, setOpenKey] = useState(null);
+  const [editing, setEditing] = useState(false);
   const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
   useEffect(() => {
     if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
@@ -278,7 +280,38 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   }, []);
   const workingKeys = workingIssueKeys(agentState.agents, agentState.nowMs);
   return (
-    <Panel title="Top 5 AI tasks" state={state} emptyText="No active AI tasks.">
+    <Panel
+      title="Top 5 AI tasks"
+      state={state}
+      emptyText="No active AI tasks."
+      extra={
+        editing && (
+          <ActiveStatusesEditor
+            onCancel={() => setEditing(false)}
+            onSaved={() => {
+              setEditing(false);
+              state.reload();
+            }}
+          />
+        )
+      }
+      actions={
+        !editing && (
+          <button
+            type="button"
+            aria-label="Configure statuses"
+            title="Configure statuses"
+            onClick={() => setEditing(true)}
+            className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        )
+      }
+    >
       {(items) => (
         <ul className="space-y-3">
           {items.map((task) => {
