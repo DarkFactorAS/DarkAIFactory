@@ -23,6 +23,7 @@ public interface IAgentDefinitionRepository
     AgentView? Find(long id);
     bool NameExists(string name, long? excludeId);
     IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys);
+    IReadOnlyList<string> ListProjectKeys();
     AgentView Create(AgentWrite agent);
     AgentView? Update(long id, AgentWrite agent);
     bool SetEnabled(long id, bool enabled);
@@ -129,6 +130,20 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
         command.AddParameter("@id", excludeId ?? 0L);
         using var reader = command.ExecuteReader();
         return reader.Read() && Convert.ToInt64(reader.GetValue(0)) > 0;
+    }
+
+    public IReadOnlyList<string> ListProjectKeys()
+    {
+        using var command = connectionFactory.CreateCommand(
+            "SELECT jira_project_key FROM manager_projects ORDER BY jira_project_key");
+        using var reader = command.ExecuteReader();
+        var keys = new List<string>();
+        while (reader.Read())
+        {
+            keys.Add(reader.GetString(0));
+        }
+
+        return keys;
     }
 
     public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys)
