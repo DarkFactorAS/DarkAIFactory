@@ -91,14 +91,26 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
 
 export default function AgentSlots() {
   const { token } = useWriteToken();
-  const [state, setState] = useState({ agents: null, nowMs: Date.now(), error: null });
+  const [state, setState] = useState(() => ({ agents: null, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
   const [editor, setEditor] = useState(null); // null | { agent }
   const [actionError, setActionError] = useState(null);
 
   const load = useCallback(() => {
     listAgents()
-      .then(({ agents, nowMs }) => setState({ agents, nowMs, error: null }))
-      .catch((e) => setState((prev) => ({ ...prev, error: e.message })));
+      .then(({ agents, nowMs }) => setState({ agents, nowMs, fetchedAt: Date.now(), error: null }))
+      .catch((e) =>
+        setState((prev) => {
+          // Keep cached agents, but advance the server-derived clock by the
+          // local time elapsed so stale heartbeats eventually show as Offline.
+          const localNow = Date.now();
+          return {
+            ...prev,
+            nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt),
+            fetchedAt: localNow,
+            error: e.message,
+          };
+        }),
+      );
   }, []);
 
   useEffect(() => {
