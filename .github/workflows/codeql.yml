@@ -47,7 +47,12 @@ jobs:
           for project in \
             aiteam/aiagent/src/AiAgent/AiAgent.csproj \
             aiteam/dbmigration/src/dbmigration/dbmigration.csproj \
-            aiteam/aidashboard/aidashboard.csproj; do
+            aiteam/aidashboard/aidashboard.csproj \
+            aiteam/aiworker/src/CodingAgent/CodingAgent.csproj \
+            aiteam/aiclaudeworker/src/ClaudeCodingAgent/ClaudeCodingAgent.csproj \
+            aiteam/aireviewworker/src/ReviewWorker/ReviewWorker.csproj \
+            aiteam/aimanager/src/ManagerAgent/ManagerAgent.csproj \
+            aiteam/aijiramanager/src/JiraManagerAgent/JiraManagerAgent.csproj; do
             dotnet restore "$project"
             dotnet build "$project" --no-restore -c Release
           done
