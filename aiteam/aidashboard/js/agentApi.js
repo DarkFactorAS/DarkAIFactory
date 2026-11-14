@@ -72,3 +72,11 @@ export function statusLabel(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   }
   return status.state;
 }
+
+export function activeCapability(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
+  const status = agent.status;
+  if (!agent.enabled || !status || isStale(status.heartbeatAt, nowMs, pollMs)) return null;
+  if (status.state !== "Running" || !status.currentCapability) return null;
+  const wanted = String(status.currentCapability).toLowerCase();
+  return CAPABILITIES.find((c) => c.toLowerCase() === wanted) ?? null;
+}
