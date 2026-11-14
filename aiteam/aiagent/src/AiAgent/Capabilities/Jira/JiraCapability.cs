@@ -47,7 +47,7 @@ public sealed class JiraCapability(
             foreach (var projectKey in context.ProjectKeys)
             {
                 await RunStepAsync($"recovery for {projectKey}", () => recovery.RecoverAsync(projectKey, cancellationToken), cancellationToken);
-                await RunStepAsync($"closing for {projectKey}", () => closer.CloseMergedAsync(context.AgentId, projectKey, cancellationToken), cancellationToken);
+                await RunStepAsync($"closing for {projectKey}", () => closer.CloseMergedAsync(projectKey, cancellationToken), cancellationToken);
                 await RunStepAsync($"unblocking for {projectKey}", () => unblocker.UnblockAsync(projectKey, cancellationToken), cancellationToken);
             }
         }

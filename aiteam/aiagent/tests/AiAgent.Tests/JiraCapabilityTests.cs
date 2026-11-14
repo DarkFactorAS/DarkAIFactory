@@ -73,6 +73,7 @@ internal sealed class FakePullRequests : IAgentPullRequestRepository
     public List<AgentPullRequestRecord> Records { get; } = [];
     public void Record(AgentPullRequestRecord pr) => Records.Add(pr);
     public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) => Records.Where(r => r.AgentId == agentId).ToList();
+    public IReadOnlyList<AgentPullRequestRecord> GetAll() => Records.ToList();
 }
 
 internal sealed class FakeMerge(HashSet<string> merged) : IPullRequestMergeChecker
@@ -184,6 +185,20 @@ public sealed class JiraCapabilityTests
         prs.Records.Add(new(1, "DFAI-2", "https://github.com/o/r", 3, "u3"));
         prs.Records.Add(new(1, "DFAI-2", "https://github.com/o/r", 4, "u4"));
         await Capability(jira, new FakeTasks(), prs, Config(), "u1", "u2", "u3").RunCycleAsync(Context("DFAI"), default);
+
+        Assert.Equal([("DFAI-1", "Done")], jira.Transitions);
+    }
+
+    [Fact]
+    public async Task ClosesIssuesWhosePullRequestsWereOpenedByOtherAgents()
+    {
+        var jira = new FakeJira { MatchQuery = q => q.Contains("\"In Review\"") };
+        jira.Issues.Add(Issue("DFAI-1", "In Review"));
+        jira.Issues.Add(Issue("DFAI-2", "In Review"));
+        var prs = new FakePullRequests();
+        prs.Records.Add(new(2, "DFAI-1", "https://github.com/o/r", 1, "u1"));
+        prs.Records.Add(new(2, "DFAI-2", "https://github.com/o/r", 2, "u2"));
+        await Capability(jira, new FakeTasks(), prs, Config(), "u1").RunCycleAsync(Context("DFAI"), default);
 
         Assert.Equal([("DFAI-1", "Done")], jira.Transitions);
     }
