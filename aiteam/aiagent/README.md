@@ -127,8 +127,11 @@ comments until the next cycle.
   reviewers were ignored. When a pull request has no unresolved review threads (outdated ones included) and no
   fix failed, `... is ready to be merged` is logged.
 - Automatic merge (opt-in, `AIAGENT_AUTO_MERGE=true`): a ready pull request is merged when it is not a draft, GitHub
-  reports `mergeable_state` `clean` (checks and branch protection are never bypassed), and it has at least one
-  review thread. It is never merged when its head branch is a parent branch (`aiagent/parent/<KEY>`, a task with
+  reports `mergeable_state` `clean` (checks and branch protection are never bypassed), every check run and commit
+  status on the head is green (success/skipped/neutral), and it has at least one review thread or the reviewer
+  (`ReviewerLogin`) recommended approval (review body or PR comment containing `Approval recommended`, not older than
+  the latest non-merge commit). A branch behind its base is updated through GitHub's update-branch API (no force
+  push) and merged in a later cycle once the builds are green again. It is never merged when its head branch is a parent branch (`aiagent/parent/<KEY>`, a task with
   sub-tasks) or when it changes agent code (path prefixes from `AIAGENT_AGENT_CODE_PATHS`, comma separated, default
   `aiteam/,.agents/,AGENTS.md,CLAUDE.md,.github/`); the reason is logged. `AIAGENT_MERGE_METHOD` is `squash` (default),
   `merge` or `rebase`. The merge is pinned to the checked head SHA. Jira is moved to Done by the existing flow.

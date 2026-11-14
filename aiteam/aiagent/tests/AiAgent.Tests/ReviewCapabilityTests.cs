@@ -502,6 +502,21 @@ public class AutoMergePolicyTests
     }
 
     [Fact]
+    public void Allows_ReviewerApproval_WithoutThreads_ButNotWhenBehindOrBuildsRed()
+    {
+        var approved = Info(files: ["src/Foo.cs"]) with { };
+        Assert.Null(Reason(new PullRequestMergeInfo(false, "clean", "sha", "aiagent/DFAI-1", ["src/Foo.cs"])
+            { ReviewerApproved = true }, total: 0));
+        Assert.NotNull(Reason(new PullRequestMergeInfo(false, "clean", "sha", "aiagent/DFAI-1", [])
+            { ReviewerApproved = true, BehindBy = 2, BaseBranch = "main" }, total: 0));
+        Assert.NotNull(Reason(new PullRequestMergeInfo(false, "clean", "sha", "aiagent/DFAI-1", [])
+            { ReviewerApproved = true, ChecksProblem = "check 'build' concluded 'failure'" }, total: 0));
+        Assert.NotNull(Reason(new PullRequestMergeInfo(false, "clean", "sha", "aiagent/DFAI-1", [])
+            { ReviewerApproved = true }, total: 1, unresolved: 1));
+        Assert.NotNull(approved);
+    }
+
+    [Fact]
     public void Blocks_ParentBranchAndAgentCode()
     {
         Assert.NotNull(Reason(Info(branch: "aiagent/parent/DFAI-2")));
