@@ -11,16 +11,25 @@ public sealed record ReviewComment(
     int? Line,
     string Body,
     string Author,
-    string HeadSha);
+    string HeadSha,
+    string ThreadId = "");
 
-/// <summary>Unresolved comments of a pull request: the actionable ones plus diagnostics counts.</summary>
+public sealed record ReviewThreadMember(long Id, string ThreadId, string Status);
+
+/// <summary>
+/// Unresolved comments of a pull request: the actionable ones, the total count, how many of the reviewer's were
+/// already handled (Resolved) or failed (Failed / attempts exhausted), and comment counts per other author.
+/// </summary>
 public sealed record ReviewCommentScan(
     IReadOnlyList<ReviewComment> Actionable,
     int OpenComments,
     int HandledComments,
+    int FailedComments,
     IReadOnlyDictionary<string, int> OtherAuthors)
 {
-    public static ReviewCommentScan Empty { get; } = new([], 0, 0, new Dictionary<string, int>());
+    public IReadOnlyList<ReviewThreadMember> ThreadMembers { get; init; } = [];
+
+    public static ReviewCommentScan Empty { get; } = new([], 0, 0, 0, new Dictionary<string, int>());
 }
 
 /// <summary>Settings of the Review capability.</summary>
@@ -31,11 +40,17 @@ public sealed record ReviewOptions(
     string? BuildCommand = null,
     string? TestCommand = null,
     string? CopilotToken = null,
-    string? WorkspaceRoot = null);
+    string? WorkspaceRoot = null)
+{
+    /// <summary>Maximum duration of one runner call (LLM run plus build and test) for one review comment.</summary>
+    public TimeSpan RunnerTimeout { get; init; } = TimeSpan.FromMinutes(30);
+}
 
 public enum FixOutcome { Skipped, NoChanges, Failed, Pushed }
 
-public sealed record FixResult(FixOutcome Outcome, string? Error = null);
+/// <summary>Result of fixing a pull request's comments; counts are per comment.</summary>
+public sealed record FixResult(
+    FixOutcome Outcome, string? Error = null, int PushedCount = 0, int FailedCount = 0, bool QuarantineWorkspace = false);
 
 public interface IFixRunner
 {
@@ -48,10 +63,20 @@ public interface IProjectCommandRunner
     Task<string?> RunAsync(string command, string workspacePath, CancellationToken cancellationToken);
 }
 
+public interface IReviewThreadResolver
+{
+    /// <summary>Resolves the review thread on GitHub.</summary>
+    Task ResolveThreadAsync(StoredAgentPullRequest pullRequest, string threadId, CancellationToken cancellationToken);
+}
+
 /// <summary>Persistence of per-comment attempts (agent_review_attempts).</summary>
 public interface IReviewAttemptStore
 {
-    IReadOnlySet<long> GetHandledCommentIds(long pullRequestId, int maxAttempts);
+    /// <summary>
+    /// Comments that are finished (Resolved/Failed) or have used up their attempts, with their status
+    /// (comment id to status).
+    /// </summary>
+    IReadOnlyDictionary<long, string> GetHandledComments(long pullRequestId, int maxAttempts);
     IReadOnlyDictionary<long, int> GetAttempts(long pullRequestId, IReadOnlyCollection<long> commentIds);
     void Record(
         long agentId, long pullRequestId, IReadOnlyCollection<long> commentIds, string status, bool countAttempt,

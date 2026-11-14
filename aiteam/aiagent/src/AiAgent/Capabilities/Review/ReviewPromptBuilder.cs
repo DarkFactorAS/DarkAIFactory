@@ -52,30 +52,6 @@ public static class ReviewPromptBuilder
         return prompt.ToString();
     }
 
-    public static (IReadOnlyList<ReviewComment> Comments, string Prompt) BuildBatch(
-        IReadOnlyList<ReviewComment> comments)
-    {
-        var batch = new List<ReviewComment>();
-        foreach (var comment in comments)
-        {
-            var candidate = batch.Append(comment).ToList();
-            var prompt = Build(candidate);
-            if (Encoding.UTF8.GetByteCount(prompt) > MaxPromptLengthBytes)
-            {
-                if (batch.Count == 0)
-                {
-                    throw new InvalidOperationException("A review comment exceeds the maximum prompt size.");
-                }
-
-                break;
-            }
-
-            batch.Add(comment);
-        }
-
-        return (batch, Build(batch));
-    }
-
     /// <summary>Truncates and neutralises the wrapper tags so a comment cannot close the data block.</summary>
     internal static string Sanitize(string body)
     {

@@ -21,7 +21,7 @@ Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchange
   package access); on the `aiagent-runner` network.
 - Both: `cap_drop: ALL`, `no-new-privileges`, `init: true`, `HOME=/tmp`.
 
-Claude Code login for the runner: `./login_claude.sh --aiagent`.
+Claude Code login for the runner: `./login_claude.sh --aiagent` (Windows: `login_claude.cmd --aiagent`).
 
 Configuration is read from `aiteam/config/appsettings.<Environment>.json` (`PollIntervalSeconds`).
 CI: `.github/workflows/aiagent-ci-*.yml`; deploy: job `aiagent` in `aiteam-deploy.yml`.
@@ -45,10 +45,17 @@ to the agent's projects:
 
 `src/AiAgent/Capabilities/Planning` is copied from aimanager (`ManagerPlanner`, `TriageResult`, prompts);
 aimanager itself is unchanged. For every Selected-for-Development issue of the agent's projects it runs the
-runner in `plan` mode and applies one of the five triage decisions: `clarify` (questions as Jira comment and
+runner in `plan` mode and applies one of the six triage decisions: `clarify` (questions as Jira comment and
 the clarification label), `analysis_only` (analysis comment, transition to the analysis status), `small`,
-`needs_approval` (approval label until a human adds the approved label) and `split` (full plan proposed on the
-parent, sub-tasks created with dependency links after approval, at most 10).
+`needs_approval` (approval label until a human adds the approved label), `split` (full plan proposed on the
+parent, sub-tasks created with dependency links after approval, at most 10) and `create_tasks` (see below).
+
+- `create_tasks`: the title or description explicitly asks for Jira tasks to be created. Up to 20 top-level
+  issues of `Jira.JiraTaskIssueType` (default `Task`) are created in the same project, in dependency order with
+  "Blocks" links; no approval is needed. Each task carries an `aiagent-task-correlation-<id>` label and its key is
+  checkpointed in `agent_plans` right after creation, so a failed run resumes (after removing `aiagent-failed`)
+  without duplicates. The new tasks stay in their initial status until a human moves them to Selected for
+  Development; the source issue gets a comment listing them and is moved to `Jira.JiraDoneStatus`.
 
 - The plan is stored in `agent_plans` together with the requirements fingerprint (`requirements_hash`:
   SHA-256 of summary, description and repository URL). A stored plan is reused until the title or
@@ -74,3 +81,27 @@ from `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND`), pushes, opens the PR thr
 (recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
 `aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is
 generated (fallback). Settings are read from the `aiagent` client and the `aiagent` workflow labels.
+
+## Review capability (`Capabilities/Review`)
+
+Copied from `aireviewworker`. Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
+request in `agent_pull_requests` it collects unresolved, current inline comments by `AIAGENT_REVIEWER_LOGIN`
+(default `copilot-pull-request-reviewer`) that are not handled yet, clones the head branch and fixes the comments
+**one at a time**: one runner call in `review` mode with only that comment (build/test run inside the runner),
+a check that only the comment's file changed, then a separate commit and push (never forced). The commit subject
+says what was fixed and where (`DFAI-166: The HttpClient is never disposed (src/Worker/Client.cs:42)`); the body
+quotes the comment. A failing comment is reset and the next one is tried; a failed push stops the remaining
+comments until the next cycle.
+
+- Attempts are recorded in `agent_review_attempts` (at most 3 per comment). A runner call that exceeds
+  `RunnerTimeoutMinutes` (appsettings, default `30`) counts as a failed attempt; an agent shutdown or a busy
+  runner does not.
+- If the runner makes no changes for a comment, that is not an error: the comment is recorded as `Resolved` and
+  its GitHub thread is left open for a human.
+- After a fix is pushed the review thread is resolved (GraphQL `resolveReviewThread`) once all of its comments
+  were pushed in that run; threads with a failed, unchanged or retried comment stay open. If resolving fails
+  (for example missing permission) only a warning is logged. The token therefore needs Contents: write and
+  Pull requests: write.
+- Each scan logs how many comments are actionable, already handled and marked failed (warning), and which other
+  reviewers were ignored. When a pull request has no unresolved review threads (outdated ones included) and no
+  fix failed, `... is ready to be merged` is logged.

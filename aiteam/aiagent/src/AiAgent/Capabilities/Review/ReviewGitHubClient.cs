@@ -11,7 +11,7 @@ namespace AiAgent.Capabilities.Review;
 /// Reads inline review comments through the GitHub GraphQL API (the REST API does not expose
 /// resolved state). Threads are paged with cursors.
 /// </summary>
-public sealed class ReviewGitHubClient : IDisposable
+public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 {
     public const int PageSize = 100;
     private const string PullRequestQuery =
@@ -53,6 +53,8 @@ public sealed class ReviewGitHubClient : IDisposable
           }
         }
         """;
+    private const string ResolveThreadMutation =
+        "mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { id isResolved } } }";
 
     private readonly HttpClient _httpClient;
     private readonly IReviewAttemptStore _attempts;
@@ -116,11 +118,13 @@ public sealed class ReviewGitHubClient : IDisposable
     public async Task<ReviewCommentScan> ScanCommentsAsync(
         StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
     {
-        var handled = _attempts.GetHandledCommentIds(pullRequest.Id, _maxAttempts);
+        var handled = _attempts.GetHandledComments(pullRequest.Id, _maxAttempts);
         var result = new List<ReviewComment>();
+        var threadMembers = new List<ReviewThreadMember>();
         var otherAuthors = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var openComments = 0;
         var handledComments = 0;
+        var failedComments = 0;
         string? cursor = null;
         while (true)
         {
@@ -137,7 +141,7 @@ public sealed class ReviewGitHubClient : IDisposable
                     continue;
                 }
 
-                AddActionableComments(thread.Comments, page.HeadSha);
+                AddActionableComments(thread.Comments, page.HeadSha, thread.Id);
                 var hasNextCommentPage = thread.HasNextCommentPage;
                 var commentCursor = thread.CommentEndCursor;
                 while (hasNextCommentPage)
@@ -149,7 +153,7 @@ public sealed class ReviewGitHubClient : IDisposable
 
                     var commentPage = await FetchThreadCommentsPageAsync(
                         pullRequest, thread.Id, commentCursor, cancellationToken);
-                    AddActionableComments(commentPage.Comments, page.HeadSha);
+                    AddActionableComments(commentPage.Comments, page.HeadSha, thread.Id);
                     hasNextCommentPage = commentPage.HasNextPage;
                     commentCursor = commentPage.EndCursor;
                 }
@@ -157,33 +161,89 @@ public sealed class ReviewGitHubClient : IDisposable
 
             if (!page.HasNextPage || page.EndCursor is null)
             {
-                return new ReviewCommentScan(result, openComments, handledComments, otherAuthors);
+                return new ReviewCommentScan(result, openComments, handledComments, failedComments, otherAuthors)
+                {
+                    ThreadMembers = threadMembers
+                };
             }
 
             cursor = page.EndCursor;
         }
 
-        void AddActionableComments(IEnumerable<CommentInfo> comments, string headSha)
+        void AddActionableComments(IEnumerable<CommentInfo> comments, string headSha, string threadId)
         {
             foreach (var comment in comments)
             {
                 openComments++;
+                var status = "Actionable";
                 if (!string.Equals(comment.Author, _reviewerLogin, StringComparison.OrdinalIgnoreCase))
                 {
                     var author = string.IsNullOrEmpty(comment.Author) ? "(unknown)" : comment.Author;
                     otherAuthors[author] = otherAuthors.GetValueOrDefault(author) + 1;
+                    status = "OtherAuthor";
                 }
-                else if (handled.Contains(comment.Id))
+                else if (handled.TryGetValue(comment.Id, out var handledStatus))
                 {
-                    handledComments++;
+                    if (string.Equals(handledStatus, "Resolved", StringComparison.OrdinalIgnoreCase))
+                    {
+                        handledComments++;
+                        status = "Resolved";
+                    }
+                    else
+                    {
+                        failedComments++;
+                        status = "Failed";
+                    }
                 }
                 else
                 {
                     result.Add(new ReviewComment(
                         comment.Id, pullRequest.Id, pullRequest.PullRequest.PullRequestNumber, comment.Path, comment.Line,
-                        comment.Body, comment.Author, headSha));
+                        comment.Body, comment.Author, headSha, threadId));
                 }
+
+                threadMembers.Add(new ReviewThreadMember(comment.Id, threadId, status));
             }
+        }
+    }
+
+    /// <summary>Resolves a review thread on GitHub (needs a token allowed to resolve conversations).</summary>
+    public async Task ResolveThreadAsync(
+        StoredAgentPullRequest pullRequest, string threadId, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject
+        {
+            ["query"] = ResolveThreadMutation,
+            ["variables"] = new JsonObject { ["threadId"] = threadId }
+        };
+        await SendGraphQlAsync(body, pullRequest.PullRequest.PullRequestUrl, cancellationToken);
+    }
+
+    /// <summary>
+    /// Counts every unresolved review thread, including outdated ones: readiness to merge must not ignore
+    /// outdated threads even though they are not actionable for automatic fixes. Returns null when the pull
+    /// request is no longer open, since a closed or merged pull request must never be reported as ready.
+    /// </summary>
+    public async Task<int?> CountUnresolvedThreadsAsync(
+        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var unresolved = 0;
+        string? cursor = null;
+        while (true)
+        {
+            var page = await FetchThreadsPageAsync(pullRequest, cursor, cancellationToken);
+            if (!string.Equals(page.State, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            unresolved += page.Threads.Count(thread => !thread.IsResolved);
+            if (!page.HasNextPage || page.EndCursor is null)
+            {
+                return unresolved;
+            }
+
+            cursor = page.EndCursor;
         }
     }
 

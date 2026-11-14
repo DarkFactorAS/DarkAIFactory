@@ -207,6 +207,7 @@ internal static class RunnerServer
                 process.Kill(entireProcessTree: true);
             }
 
+            await process.WaitForExitAsync(CancellationToken.None);
             throw;
         }
 

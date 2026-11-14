@@ -17,12 +17,18 @@ internal interface IPlanningJira
     Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken);
     Task TransitionToAsync(string issueKey, string statusName, CancellationToken cancellationToken);
     Task<string> CreateSubtaskAsync(string parentKey, string summary, string description, CancellationToken cancellationToken);
+    Task<string> CreateTaskAsync(
+        string projectKey, string summary, string description, string correlationId, CancellationToken cancellationToken);
+    Task<string?> FindTaskByCorrelationIdAsync(string projectKey, string correlationId, CancellationToken cancellationToken);
     Task LinkIssuesAsync(string blockerKey, string blockedKey, CancellationToken cancellationToken);
 }
 
 internal sealed class JiraClient : IPlanningJira, IDisposable
 {
+    public const string TaskCorrelationLabelPrefix = "aiagent-task-correlation-";
+
     private readonly string _subtaskIssueType;
+    private readonly string _taskIssueType;
     private readonly HttpClient _httpClient;
 
     public JiraClient(JiraSettings configuration, HttpMessageHandler? handler = null)
@@ -30,6 +36,9 @@ internal sealed class JiraClient : IPlanningJira, IDisposable
         _subtaskIssueType = string.IsNullOrWhiteSpace(configuration.JiraSubtaskIssueType)
             ? "Sub-task"
             : configuration.JiraSubtaskIssueType.Trim();
+        _taskIssueType = string.IsNullOrWhiteSpace(configuration.JiraTaskIssueType)
+            ? "Task"
+            : configuration.JiraTaskIssueType.Trim();
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
         _httpClient.BaseAddress = new Uri(configuration.JiraBaseUrl.Trim());
         var credentials = Convert.ToBase64String(
@@ -220,33 +229,69 @@ internal sealed class JiraClient : IPlanningJira, IDisposable
         transitionResponse.EnsureSuccessStatusCode();
     }
 
-    public async Task<string> CreateSubtaskAsync(
+    public Task<string> CreateSubtaskAsync(
         string parentKey, string summary, string description, CancellationToken cancellationToken)
     {
-        var dash = parentKey.LastIndexOf('-');
-        if (dash <= 0)
+        var fields = new JsonObject
         {
-            throw new InvalidDataException($"Cannot derive the Jira project from issue key \"{parentKey}\".");
-        }
-
-        var body = new JsonObject
-        {
-            ["fields"] = new JsonObject
-            {
-                ["project"] = new JsonObject { ["key"] = parentKey[..dash] },
-                ["parent"] = new JsonObject { ["key"] = parentKey },
-                ["issuetype"] = new JsonObject { ["name"] = _subtaskIssueType },
-                ["summary"] = summary,
-                ["description"] = CreateAdfDocument(description)
-            }
+            ["project"] = new JsonObject { ["key"] = ProjectKeyOf(parentKey) },
+            ["parent"] = new JsonObject { ["key"] = parentKey },
+            ["issuetype"] = new JsonObject { ["name"] = _subtaskIssueType },
+            ["summary"] = summary,
+            ["description"] = CreateAdfDocument(description)
         };
+        return CreateIssueAsync(fields, "sub-task", cancellationToken);
+    }
+
+    /// <summary>Creates a top-level issue of Jira.JiraTaskIssueType, labelled with its correlation id.</summary>
+    public Task<string> CreateTaskAsync(
+        string projectKey, string summary, string description, string correlationId, CancellationToken cancellationToken)
+    {
+        var fields = new JsonObject
+        {
+            ["project"] = new JsonObject { ["key"] = projectKey },
+            ["issuetype"] = new JsonObject { ["name"] = _taskIssueType },
+            ["summary"] = summary,
+            ["description"] = CreateAdfDocument(description),
+            ["labels"] = new JsonArray(JsonValue.Create(TaskCorrelationLabelPrefix + correlationId))
+        };
+        return CreateIssueAsync(fields, "task", cancellationToken);
+    }
+
+    /// <summary>Key of the task created earlier with this correlation id, so a retried run does not duplicate it.</summary>
+    public async Task<string?> FindTaskByCorrelationIdAsync(
+        string projectKey, string correlationId, CancellationToken cancellationToken)
+    {
+        var label = TaskCorrelationLabelPrefix + correlationId;
+        var matches = await SearchAsync(
+            $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND labels = \"{JiraQuery.EscapeJql(label)}\"",
+            cancellationToken);
+        return matches.Count switch
+        {
+            0 => null,
+            1 => matches[0].Key,
+            _ => throw new InvalidDataException($"Multiple Jira tasks have correlation label \"{label}\".")
+        };
+    }
+
+    public static string ProjectKeyOf(string issueKey)
+    {
+        var dash = issueKey.LastIndexOf('-');
+        return dash > 0
+            ? issueKey[..dash]
+            : throw new InvalidDataException($"Cannot derive the Jira project from issue key \"{issueKey}\".");
+    }
+
+    private async Task<string> CreateIssueAsync(JsonObject fields, string kind, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["fields"] = fields };
         using var response = await _httpClient.PostAsJsonAsync("/rest/api/3/issue", body, cancellationToken);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         return ReadString(document.RootElement, "key") is { Length: > 0 } key
             ? key
-            : throw new InvalidDataException("Jira did not return a key for the created sub-task.");
+            : throw new InvalidDataException($"Jira did not return a key for the created {kind}.");
     }
 
     public async Task LinkIssuesAsync(string blockerKey, string blockedKey, CancellationToken cancellationToken)
