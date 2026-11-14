@@ -277,7 +277,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
     /// <summary>Draft flag, mergeable state, head and every changed file of the pull request (REST).</summary>
     public async Task<PullRequestMergeInfo> GetMergeInfoAsync(
-        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+        StoredAgentPullRequest pullRequest, string approvalPhrase, CancellationToken cancellationToken)
     {
         var path = RestPath(pullRequest);
         var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
@@ -313,12 +313,132 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             }
         }
 
+        var headSha = node["head"]?["sha"]?.GetValue<string>() ?? string.Empty;
+        var baseBranch = node["base"]?["ref"]?.GetValue<string>() ?? string.Empty;
+        var repoPath = path[..path.IndexOf("/pulls/", StringComparison.Ordinal)];
+        var headRef = node["head"]?["ref"]?.GetValue<string>() ?? string.Empty;
+
+        var compare = await SendRestAsync(
+            HttpMethod.Get,
+            $"{repoPath}/compare/{Uri.EscapeDataString(baseBranch)}...{Uri.EscapeDataString(headSha)}", null, cancellationToken);
+        var behindBy = compare?["behind_by"]?.GetValue<int>() ?? 0;
+
         return new PullRequestMergeInfo(
             node["draft"]?.GetValue<bool>() ?? false,
             node["mergeable_state"]?.GetValue<string>() ?? "unknown",
-            node["head"]?["sha"]?.GetValue<string>() ?? string.Empty,
-            node["head"]?["ref"]?.GetValue<string>() ?? string.Empty,
-            files);
+            headSha,
+            headRef,
+            files)
+        {
+            BaseBranch = baseBranch,
+            BehindBy = behindBy,
+            ChecksProblem = await GetChecksProblemAsync(repoPath, headSha, cancellationToken),
+            ReviewerApproved = await HasReviewerApprovalAsync(path, approvalPhrase, cancellationToken)
+        };
+    }
+
+    /// <summary>Asks GitHub to merge the base branch into the head branch (no force push), pinned to the head.</summary>
+    public async Task UpdateBranchAsync(
+        StoredAgentPullRequest pullRequest, string headSha, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["expected_head_sha"] = headSha };
+        await SendRestAsync(HttpMethod.Put, $"{RestPath(pullRequest)}/update-branch", body, cancellationToken);
+    }
+
+    /// <summary>
+    /// Null when every check run is completed with success, skipped or neutral and the combined commit status is
+    /// not failing or pending; otherwise a description.
+    /// </summary>
+    private async Task<string?> GetChecksProblemAsync(string repoPath, string headSha, CancellationToken cancellationToken)
+    {
+        var runs = await SendRestAsync(HttpMethod.Get, $"{repoPath}/commits/{headSha}/check-runs?per_page={PageSize}", null, cancellationToken);
+        var total = runs?["total_count"]?.GetValue<int>() ?? 0;
+        var list = runs?["check_runs"]?.AsArray() ?? [];
+        if (total > list.Count)
+        {
+            return "too many check runs to verify";
+        }
+
+        foreach (var run in list)
+        {
+            var name = run?["name"]?.GetValue<string>() ?? "check";
+            if (!string.Equals(run?["status"]?.GetValue<string>(), "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"check '{name}' is not finished";
+            }
+
+            var conclusion = run?["conclusion"]?.GetValue<string>() ?? string.Empty;
+            if (conclusion is not ("success" or "skipped" or "neutral"))
+            {
+                return $"check '{name}' concluded '{conclusion}'";
+            }
+        }
+
+        var status = await SendRestAsync(HttpMethod.Get, $"{repoPath}/commits/{headSha}/status", null, cancellationToken);
+        var state = status?["state"]?.GetValue<string>() ?? "success";
+        var statusCount = status?["total_count"]?.GetValue<int>() ?? 0;
+        return statusCount > 0 && !string.Equals(state, "success", StringComparison.OrdinalIgnoreCase)
+            ? $"commit status is '{state}'"
+            : null;
+    }
+
+    /// <summary>
+    /// True when a review body or conversation comment by the reviewer contains the approval phrase and is not
+    /// older than the latest non-merge commit (commits that only merge the base branch do not invalidate it).
+    /// </summary>
+    private async Task<bool> HasReviewerApprovalAsync(string pullPath, string phrase, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(phrase))
+        {
+            return false;
+        }
+
+        var commits = new List<JsonNode>();
+        for (var page = 1; page <= 3; page++)
+        {
+            var list = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/commits?per_page={PageSize}&page={page}", null, cancellationToken))
+                ?.AsArray() ?? [];
+            commits.AddRange(list.Where(item => item is not null)!);
+            if (list.Count < PageSize)
+            {
+                break;
+            }
+        }
+
+        var lastIndex = commits.FindLastIndex(commit => (commit["parents"]?.AsArray().Count ?? 1) <= 1);
+        if (lastIndex < 0)
+        {
+            lastIndex = 0;
+        }
+
+        var shas = commits.Select(commit => commit["sha"]?.GetValue<string>() ?? string.Empty).ToList();
+        var since = commits.Count == 0
+            ? DateTimeOffset.MinValue
+            : DateTimeOffset.TryParse(
+                commits[lastIndex]["commit"]?["committer"]?["date"]?.GetValue<string>(),
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ? date : DateTimeOffset.MaxValue;
+
+        bool IsReviewer(JsonNode? item) =>
+            string.Equals(item?["user"]?["login"]?.GetValue<string>(), _reviewerLogin, StringComparison.OrdinalIgnoreCase)
+            && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
+
+        var reviews = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}", null, cancellationToken))
+            ?.AsArray() ?? [];
+        foreach (var review in reviews.Where(IsReviewer))
+        {
+            var index = shas.IndexOf(review!["commit_id"]?.GetValue<string>() ?? string.Empty);
+            if (index >= lastIndex)
+            {
+                return true;
+            }
+        }
+
+        var issuePath = pullPath.Replace("/pulls/", "/issues/", StringComparison.Ordinal);
+        var comments = (await SendRestAsync(HttpMethod.Get, $"{issuePath}/comments?per_page={PageSize}", null, cancellationToken))
+            ?.AsArray() ?? [];
+        return comments.Where(IsReviewer).Any(comment =>
+            DateTimeOffset.TryParse(comment!["created_at"]?.GetValue<string>(), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var created) && created >= since);
     }
 
     /// <summary>
