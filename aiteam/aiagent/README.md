@@ -106,7 +106,8 @@ A failing build or test makes the runner return a non-zero exit code, and the ru
 ## Review capability (`Capabilities/Review`)
 
 Copied from `aireviewworker`. Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
-request in `agent_pull_requests` it collects unresolved, current inline comments by `AIAGENT_REVIEWER_LOGIN`
+request in `agent_pull_requests` in the agent's projects, whichever agent opened it (so a Review-only agent fixes
+the pull requests of a Builder agent), it collects unresolved, current inline comments by `AIAGENT_REVIEWER_LOGIN`
 (default `copilot-pull-request-reviewer`) that are not handled yet, clones the head branch and fixes the comments
 **one at a time**: one runner call in `review` mode with only that comment (the runner builds and tests the affected projects),
 a check that only the comment's file changed, then a separate commit and push (never forced). The commit subject

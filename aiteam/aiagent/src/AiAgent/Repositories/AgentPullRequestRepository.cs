@@ -15,6 +15,13 @@ public interface IAgentPullRequestRepository
     /// </summary>
     IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId) =>
         throw new NotSupportedException($"{GetType().Name} does not expose persisted pull request IDs.");
+
+    /// <summary>
+    /// Every tracked pull request, whichever agent opened it, with its persisted ID. A reviewer agent handles pull
+    /// requests opened by the builder agent(s), so it cannot filter on its own agent ID.
+    /// </summary>
+    IReadOnlyList<StoredAgentPullRequest> GetAllStored() =>
+        throw new NotSupportedException($"{GetType().Name} does not expose persisted pull request IDs.");
 }
 
 /// <summary>A pull request row from agent_pull_requests including its database ID.</summary>
@@ -40,12 +47,24 @@ public sealed class AgentPullRequestRepository(IDbConnectionFactory connectionFa
     public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) =>
         GetStoredForAgent(agentId).Select(stored => stored.PullRequest).ToList();
 
+    private const string SelectColumns =
+        "SELECT `id`, `agent_id`, `jira_key`, `repository_url`, `pr_number`, `pr_url` FROM `agent_pull_requests` ";
+
     public IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId)
     {
-        using var command = connectionFactory.CreateCommand(
-            "SELECT `id`, `agent_id`, `jira_key`, `repository_url`, `pr_number`, `pr_url` " +
-            "FROM `agent_pull_requests` WHERE `agent_id` = @agent_id ORDER BY `id`");
+        using var command = connectionFactory.CreateCommand(SelectColumns + "WHERE `agent_id` = @agent_id ORDER BY `id`");
         command.AddParameter("@agent_id", agentId);
+        return ReadStored(command);
+    }
+
+    public IReadOnlyList<StoredAgentPullRequest> GetAllStored()
+    {
+        using var command = connectionFactory.CreateCommand(SelectColumns + "ORDER BY `id`");
+        return ReadStored(command);
+    }
+
+    private static List<StoredAgentPullRequest> ReadStored(IBluDbCommand command)
+    {
         using var reader = command.ExecuteReader();
         var result = new List<StoredAgentPullRequest>();
         while (reader.Read())

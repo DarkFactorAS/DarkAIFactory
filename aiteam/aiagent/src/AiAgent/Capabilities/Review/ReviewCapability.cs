@@ -8,7 +8,8 @@ using DFCommonLib.Logger;
 namespace AiAgent.Capabilities.Review;
 
 /// <summary>
-/// Handles unresolved review comments on the agent's own pull requests (agent_pull_requests): runs the runner in
+/// Handles unresolved review comments on the tracked pull requests (agent_pull_requests) in the agent's projects,
+/// whichever agent opened them: runs the runner in
 /// 'review' mode, accepts only changes to cited files, builds and tests, and pushes without force.
 /// The number of attempts per comment is limited and recorded in agent_review_attempts.
 /// </summary>
@@ -33,7 +34,10 @@ public sealed class ReviewCapability(
 
     public async Task RunCycleAsync(AgentContext context, CancellationToken cancellationToken)
     {
-        var tracked = pullRequests.GetStoredForAgent(context.AgentId)
+        // Every tracked pull request in the agent's projects, not only the ones this agent opened: with separate
+        // agents the builder opens the pull request and the reviewer fixes its comments. The per-issue claim keeps
+        // two reviewers off the same pull request.
+        var tracked = pullRequests.GetAllStored()
             .Where(stored => context.ProjectKeys.Contains(
                 ProjectKeyOf(stored.PullRequest.JiraKey), StringComparer.OrdinalIgnoreCase))
             .ToList();
