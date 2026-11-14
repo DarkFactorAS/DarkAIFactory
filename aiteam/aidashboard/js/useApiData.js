@@ -1,27 +1,52 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Fetches JSON from the API and exposes loading/error state.
-export default function useApiData(url) {
+// With options.pollMs the data is re-fetched at that interval; background
+// refreshes keep the existing data, and a failed poll keeps the last good data.
+export default function useApiData(url, { pollMs } = {}) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     const controller = new AbortController();
-    setState({ data: null, loading: true, error: null });
-    fetch(url, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Request failed (${response.status})`);
-        }
-        return response.json();
-      })
-      .then((data) => setState({ data, loading: false, error: null }))
-      .catch((error) => {
-        if (error.name !== "AbortError") {
-          setState({ data: null, loading: false, error: error.message });
-        }
-      });
-    return () => controller.abort();
-  }, [url]);
+    let cancelled = false;
+    let inFlight = false;
 
-  return state;
+    const load = (initial) => {
+      // Skip a poll tick while the previous request is still running, so slow
+      // responses can complete instead of being aborted by the next tick.
+      if (inFlight) return;
+      inFlight = true;
+      fetch(url, { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Request failed (${response.status})`);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (!cancelled) setState({ data, loading: false, error: null });
+        })
+        .catch((error) => {
+          if (cancelled || error.name === "AbortError") return;
+          setState((prev) => ({ data: initial ? null : prev.data, loading: false, error: error.message }));
+        })
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+
+    setState({ data: null, loading: true, error: null });
+    load(true);
+    const timer = pollMs ? setInterval(() => load(false), pollMs) : null;
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      controller.abort();
+    };
+  }, [url, pollMs, version]);
+
+  return { ...state, reload };
 }

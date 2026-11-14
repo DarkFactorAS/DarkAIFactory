@@ -56,8 +56,9 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
 
     public async Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken)
     {
-        var aiLabels = _settings.Dashboard.AiLabels.Count > 0
-            ? _settings.Dashboard.AiLabels.ToArray()
+        var configuredAiLabels = _settings.Dashboard.AiLabels;
+        var aiLabels = configuredAiLabels.Count > 0
+            ? configuredAiLabels.ToArray()
             : AiLabelKeys
                 .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
                 .Distinct(StringComparer.Ordinal)

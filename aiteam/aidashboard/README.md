@@ -13,6 +13,9 @@ credentials are never logged).
 `AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
 `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
+The dashboard's "Top 3 AI tasks" panel polls this endpoint every 30 seconds
+(background refreshes keep the current list; a failed poll keeps the last list
+and shows the error).
 Jira failures return 502. Tests: `dotnet test aiteam/aidashboard/tests/aidashboard.Tests.csproj`.
 
 The frontend sources live in `aiteam/aidashboard` (`package.json`,
@@ -85,6 +88,11 @@ stored in browser storage or returned by an API. Missing configuration disables 
 writes (401). Only issues currently returned by the active AI task list in the configured
 Jira project are authorized (403 otherwise).
 `GET /api/tasks/config` returns only the non-secret configured `projectKey` used by task creation.
+AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, Bearer write
+token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
+only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
+list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
+panel uses it and redraws the graph; the labels also drive the "Top 3 AI tasks" panel.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
