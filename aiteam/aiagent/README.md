@@ -21,7 +21,7 @@ Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchange
   package access); on the `aiagent-runner` network.
 - Both: `cap_drop: ALL`, `no-new-privileges`, `init: true`, `HOME=/tmp`.
 
-Claude Code login for the runner: `./login_claude.sh --aiagent` (Windows: `login_claude.cmd --aiagent`).
+Claude Code login for the runner: `./login_claude.sh` (Windows: `login_claude.cmd`).
 
 Configuration is read from `aiteam/config/appsettings.<Environment>.json` (`PollIntervalSeconds`).
 CI: `.github/workflows/aiagent-ci-*.yml`; deploy: job `aiagent` in `aiteam-deploy.yml`.

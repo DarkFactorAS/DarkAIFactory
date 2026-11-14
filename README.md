@@ -115,24 +115,22 @@ git submodule update --init --recursive
 
 ## CI
 
-Pushes to `main` and pull requests run the worker and manager .NET and Docker
-workflows in [.github/workflows](.github/workflows). The worker .NET workflow
-also builds aidashboard and builds/tests dbmigration. Docker CI uses the shared
+Pushes to `main` and pull requests run the aiagent and aidashboard .NET and Docker
+workflows in [.github/workflows](.github/workflows). The aiagent .NET workflow
+also builds/tests dbmigration. Docker CI uses the shared
 `infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
 
-### Review worker setup
+### Docker Compose
 
-The review worker (compose service `review-worker`) runs after `dbmigration`
-and reads the same `aiteam/config/appsettings.<Environment>.json` as the other
-workers (`PollIntervalSeconds`, `ReviewerLogin`, `MaxAttemptsPerPullRequest`; see
-[its README](aiteam/aireviewworker/README.md)). Export `NUGET_USERNAME` and
-`NUGET_TOKEN` (see `aiteam/.env.example`) and start it with
-`docker compose -f aiteam/docker-compose.yml up -d review-worker`.
-The GitHub token stored in the `settings` table needs these permissions on the
-target repository:
-
-- Contents: write (clone and push fixes to the PR branch)
-- Pull requests: read (read review comments)
+`aiteam/docker-compose.yml` runs `dbmigration`, `aiagent` with `aiagent-runner`,
+`aidashboard`, `adminer` and the MariaDB database. The older agents (aiworker,
+aiclaudeworker, aireviewworker, aimanager, aijiramanager) are no longer part of
+Compose; aiagent replaces them. Export `NUGET_USERNAME` and `NUGET_TOKEN` (see
+`aiteam/.env.example`) and start everything with
+`docker compose -f aiteam/docker-compose.yml up -d --build --remove-orphans`.
+Log the runner in to Claude Code with `./login_claude.sh` (Windows: `login_claude.cmd`).
+The GitHub token stored in the `settings` table needs Contents: write and
+Pull requests: write on the target repository (see [aiagent](aiteam/aiagent/README.md)).
 
 ### AI auto-approve
 
