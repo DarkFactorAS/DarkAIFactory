@@ -83,8 +83,8 @@ as a new Jira comment on that issue (the description is never changed; 400 on in
 502 if Jira fails or times out); its GitHub token can remain empty.
 Comment submissions require a bearer write token configured server-side through
 `Dashboard__WriteToken`. Set a strong secret using the deployment's secret management,
-serve the dashboard over HTTPS, and enter that token in the comment form. It is not
-stored in browser storage or returned by an API. Missing configuration disables comment
+serve the dashboard over HTTPS, and enter that token in the comment form. It is remembered in the
+`dashboard_write_token` browser cookie (see below) and is never returned by an API. Missing configuration disables comment
 writes (401). Only issues currently returned by the active AI task list in the configured
 Jira project are authorized (403 otherwise).
 `GET /api/tasks/config` returns only the non-secret configured `projectKey` used by task creation.
@@ -109,7 +109,7 @@ task editor in the centre column and uses `/api/agents` (writes need the Bearer 
 interval). A card shows Disabled when not enabled, otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / `Running on KEY` / Error. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header. The write token is asked for in the page and
-kept in memory only (never in browser storage); a 401 clears it. No write request is sent without a token.
+remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
 
 Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete shows the
