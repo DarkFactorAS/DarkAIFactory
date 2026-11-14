@@ -453,8 +453,19 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
                 StringComparison.OrdinalIgnoreCase)
             && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
 
-        var reviews = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}", null, cancellationToken))
-            ?.AsArray() ?? [];
+        // Read every page of reviews so a qualifying approval beyond the first page is not missed.
+        var reviews = new List<JsonNode?>();
+        for (var page = 1; ; page++)
+        {
+            var list = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}&page={page}", null, cancellationToken))
+                ?.AsArray() ?? [];
+            reviews.AddRange(list);
+            if (list.Count < PageSize)
+            {
+                break;
+            }
+        }
+
         // Only submitted APPROVED or COMMENTED reviews count; dismissed and pending reviews keep their body and
         // commit ID but must never enable a merge.
         foreach (var review in reviews.Where(IsReviewer).Where(review =>
