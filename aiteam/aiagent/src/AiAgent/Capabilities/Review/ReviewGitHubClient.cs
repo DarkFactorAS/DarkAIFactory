@@ -17,6 +17,10 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
     /// <summary>GitHub's pull-request files endpoint returns at most this many files.</summary>
     public const int MaxListedFiles = 3000;
+
+    /// <summary>The compare endpoint returns at most this many files; a full list may be truncated.</summary>
+    private const int MaxCompareFiles = 300;
+
     private const string PullRequestQuery =
         """
         query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -333,7 +337,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             BaseBranch = baseBranch,
             BehindBy = behindBy,
             ChecksProblem = await GetChecksProblemAsync(repoPath, headSha, cancellationToken),
-            ReviewerApproved = await HasReviewerApprovalAsync(path, headSha, approvalPhrase, cancellationToken)
+            ReviewerApproved = await HasReviewerApprovalAsync(path, repoPath, baseBranch, headSha, approvalPhrase, cancellationToken)
         };
     }
 
@@ -384,12 +388,14 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
     /// <summary>
     /// True when a review body or conversation comment by the reviewer contains the approval phrase and is not
-    /// older than the latest non-merge commit (commits that only merge the base branch do not invalidate it).
+    /// older than the latest commit that is not a verified base-only merge. A merge commit preserves an earlier
+    /// approval only when its second parent is on the base branch and every file in it matches one of its parents,
+    /// so feature merges and merges with manual edits or conflict resolutions invalidate the approval.
     /// Fails closed (false) when the retrieved commit history does not end at <paramref name="headSha"/>, for
     /// example because GitHub caps the pull request commit list at 250 entries.
     /// </summary>
     private async Task<bool> HasReviewerApprovalAsync(
-        string pullPath, string headSha, string phrase, CancellationToken cancellationToken)
+        string pullPath, string repoPath, string baseBranch, string headSha, string phrase, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(headSha))
         {
@@ -414,10 +420,14 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             return false;
         }
 
-        var lastIndex = commits.FindLastIndex(commit => (commit["parents"]?.AsArray().Count ?? 1) <= 1);
-        if (lastIndex < 0)
+        var lastIndex = 0;
+        for (var index = commits.Count - 1; index >= 0; index--)
         {
-            lastIndex = 0;
+            if (!await IsVerifiedBaseOnlyMergeAsync(repoPath, baseBranch, commits[index], cancellationToken))
+            {
+                lastIndex = index;
+                break;
+            }
         }
 
         var shas = commits.Select(commit => commit["sha"]?.GetValue<string>() ?? string.Empty).ToList();
@@ -448,6 +458,80 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         return comments.Where(IsReviewer).Any(comment =>
             DateTimeOffset.TryParse(comment!["created_at"]?.GetValue<string>(), CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal, out var created) && created >= since);
+    }
+
+    /// <summary>
+    /// True only when <paramref name="commit"/> is a two-parent merge whose second parent is on the base branch and
+    /// whose content adds nothing of its own: every file differs from at most one parent, so it equals either the
+    /// previous head or the base version. Fails closed on truncated comparisons or GitHub errors.
+    /// </summary>
+    private async Task<bool> IsVerifiedBaseOnlyMergeAsync(
+        string repoPath, string baseBranch, JsonNode commit, CancellationToken cancellationToken)
+    {
+        var parents = commit["parents"]?.AsArray();
+        var sha = commit["sha"]?.GetValue<string>();
+        if (parents is not { Count: 2 } || string.IsNullOrWhiteSpace(sha) || string.IsNullOrWhiteSpace(baseBranch))
+        {
+            return false;
+        }
+
+        var headParent = parents[0]?["sha"]?.GetValue<string>();
+        var baseParent = parents[1]?["sha"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(headParent) || string.IsNullOrWhiteSpace(baseParent))
+        {
+            return false;
+        }
+
+        try
+        {
+            var onBase = await SendRestAsync(
+                HttpMethod.Get,
+                $"{repoPath}/compare/{Uri.EscapeDataString(baseBranch)}...{Uri.EscapeDataString(baseParent)}", null, cancellationToken);
+            if (onBase?["status"]?.GetValue<string>() is not ("behind" or "identical"))
+            {
+                return false;
+            }
+
+            var fromHead = await ChangedFilesAsync(repoPath, headParent, sha, cancellationToken);
+            var fromBase = await ChangedFilesAsync(repoPath, baseParent, sha, cancellationToken);
+            return fromHead is not null && fromBase is not null && !fromHead.Overlaps(fromBase);
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Files changed from ancestor <paramref name="fromSha"/> to <paramref name="toSha"/> (including rename
+    /// sources), or null when the comparison is not a plain descendant or the file list may be truncated.
+    /// </summary>
+    private async Task<HashSet<string>?> ChangedFilesAsync(
+        string repoPath, string fromSha, string toSha, CancellationToken cancellationToken)
+    {
+        var compare = await SendRestAsync(
+            HttpMethod.Get,
+            $"{repoPath}/compare/{Uri.EscapeDataString(fromSha)}...{Uri.EscapeDataString(toSha)}", null, cancellationToken);
+        var mergeBase = compare?["merge_base_commit"]?["sha"]?.GetValue<string>();
+        var files = compare?["files"]?.AsArray();
+        if (files is null
+            || files.Count >= MaxCompareFiles
+            || !string.Equals(mergeBase, fromSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            names.Add(file?["filename"]?.GetValue<string>() ?? string.Empty);
+            if (file?["previous_filename"]?.GetValue<string>() is { Length: > 0 } previous)
+            {
+                names.Add(previous);
+            }
+        }
+
+        return names;
     }
 
     /// <summary>
