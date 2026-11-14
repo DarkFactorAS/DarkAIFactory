@@ -150,12 +150,16 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
     }
 
     // Projects builders actually pick up: enabled, non-deleted agents with the Builder capability enabled,
-    // limited to keys present in manager_projects. Falls back to all manager_projects when no agent
-    // definitions exist (legacy workers read manager_projects directly).
+    // limited to keys present in manager_projects. Falls back to all manager_projects when no agent has
+    // been explicitly configured as a builder (legacy workers read manager_projects directly). Definition
+    // counts are not used because migrations seed a disabled 'aiAgent' with every capability off; an agent
+    // whose Builder capability is on but which is disabled or has no projects still yields an empty list.
     public IReadOnlyList<string> ListBuilderProjectKeys()
     {
         using (var count = connectionFactory.CreateCommand(
-            "SELECT COUNT(*) FROM agent_definitions WHERE deleted_at IS NULL"))
+            "SELECT COUNT(*) FROM agent_capabilities c " +
+            "JOIN agent_definitions a ON a.id = c.agent_id AND a.deleted_at IS NULL " +
+            "WHERE c.capability = 'Builder' AND c.enabled = TRUE"))
         using (var countReader = count.ExecuteReader())
         {
             if (countReader.Read() && Convert.ToInt64(countReader.GetValue(0)) == 0)
