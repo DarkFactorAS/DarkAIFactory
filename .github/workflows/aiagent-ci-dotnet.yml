@@ -31,3 +31,15 @@ jobs:
 
       - name: Unit tests
         run: dotnet test aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj --no-restore -c Release
+
+      - name: Restore dbmigration
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: dotnet restore aiteam/dbmigration/tests/dbmigration.Tests/dbmigration.Tests.csproj
+
+      - name: Build dbmigration
+        run: dotnet build aiteam/dbmigration/src/dbmigration/dbmigration.csproj --no-restore -c Release
+
+      - name: Test dbmigration
+        run: dotnet test aiteam/dbmigration/tests/dbmigration.Tests/dbmigration.Tests.csproj --no-restore -c Release
