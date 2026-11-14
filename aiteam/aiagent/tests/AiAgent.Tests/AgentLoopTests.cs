@@ -139,6 +139,57 @@ public sealed class AgentLoopTests
         Assert.Contains("Fix it", prompt);
     }
 
+    private sealed class ClaimingCapability(bool claim) : IAgentCapability
+    {
+        public AgentCapabilityKind Kind => AgentCapabilityKind.Builder;
+        public Task RunCycleAsync(AgentContext context, CancellationToken cancellationToken)
+        {
+            if (claim)
+            {
+                using var held = context.ClaimLock.TryAcquire(1, "DFAI-1");
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class AlwaysLock : IAgentClaimLock
+    {
+        public IDisposable? TryAcquire(long agentId, string issueKey) => new Handle();
+        private sealed class Handle : IDisposable { public void Dispose() { } }
+    }
+
+    [Fact]
+    public async Task CapabilityWithoutClaimIsNeverReportedRunning()
+    {
+        var writer = new FakeStatusWriter();
+        var repo = new FakeRepository { Capabilities = [AgentCapabilityKind.Builder] };
+        var loop = new AgentLoop(1, repo, [new ClaimingCapability(false)], new NoLock(),
+            TimeSpan.FromMilliseconds(10), writer);
+        await loop.RunCycleAsync(default);
+        Assert.NotEmpty(writer.Sets);
+        Assert.All(writer.Sets, set =>
+        {
+            Assert.NotEqual(AgentState.Running, set.State);
+            Assert.Null(set.Capability);
+        });
+    }
+
+    [Fact]
+    public async Task ClaimedCapabilityIsRunningOnlyWhileClaimHeld()
+    {
+        var writer = new FakeStatusWriter();
+        var repo = new FakeRepository { Capabilities = [AgentCapabilityKind.Builder] };
+        var loop = new AgentLoop(1, repo, [new ClaimingCapability(true)], new AlwaysLock(),
+            TimeSpan.FromMilliseconds(10), writer);
+        await loop.RunCycleAsync(default);
+        var running = writer.Sets.Single(set => set.State == AgentState.Running);
+        Assert.Equal("DFAI-1", running.Issue);
+        Assert.Equal(AgentCapabilityKind.Builder, running.Capability);
+        var last = writer.Sets[^1];
+        Assert.Equal(AgentState.Idle, last.State);
+        Assert.Null(last.Capability);
+    }
+
     private sealed class ThrowingCapability : IAgentCapability
     {
         public AgentCapabilityKind Kind => AgentCapabilityKind.Jira;
