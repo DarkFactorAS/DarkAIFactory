@@ -1,0 +1,59 @@
+name: Snyk
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Once per day (UTC), regardless of repository activity, so newly disclosed
+    # vulnerabilities are detected even when main is unchanged.
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: snyk
+  cancel-in-progress: false
+
+jobs:
+  snyk:
+    name: Snyk dependency scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify SNYK_TOKEN
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "::error::Repository secret SNYK_TOKEN is not configured."
+            exit 1
+          fi
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: |
+          # Restore every .NET project so --all-projects can analyze
+          # each project's NuGet dependency graph (obj/project.assets.json).
+          set -euo pipefail
+          mapfile -t projects < <(find . -name '*.csproj' -not -path '*/node_modules/*' | sort)
+          if [ "${#projects[@]}" -eq 0 ]; then
+            echo "::error::No .NET projects found to restore."
+            exit 1
+          fi
+          for p in "${projects[@]}"; do
+            dotnet restore "$p"
+          done
+
+      - uses: snyk/actions/setup@v1.0.0
+
+      - name: Snyk test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --all-projects --severity-threshold=high

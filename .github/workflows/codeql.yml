@@ -1,0 +1,63 @@
+name: CodeQL
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, actions]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'none' }}
+
+      - name: Build
+        if: matrix.language == 'csharp'
+        env:
+          NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+          NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
+        run: |
+          for project in \
+            aiteam/aiagent/src/AiAgent/AiAgent.csproj \
+            aiteam/dbmigration/src/dbmigration/dbmigration.csproj \
+            aiteam/aidashboard/aidashboard.csproj \
+            aiteam/aiworker/src/CodingAgent/CodingAgent.csproj \
+            aiteam/aiclaudeworker/src/ClaudeCodingAgent/ClaudeCodingAgent.csproj \
+            aiteam/aireviewworker/src/ReviewWorker/ReviewWorker.csproj \
+            aiteam/aimanager/src/ManagerAgent/ManagerAgent.csproj \
+            aiteam/aijiramanager/src/JiraManagerAgent/JiraManagerAgent.csproj; do
+            dotnet restore "$project"
+            dotnet build "$project" --no-restore -c Release
+          done
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
