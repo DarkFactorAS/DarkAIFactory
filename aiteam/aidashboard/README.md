@@ -95,6 +95,19 @@ The dashboard editor instead uses `PATCH /api/agent-tasks/{id}` (`title`, `descr
 which atomically edits only tasks still in `New` status, preserves workflow fields,
 and returns 409 if the task has progressed.
 
+Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js/WriteToken.jsx`) sits above the
+task editor in the centre column and uses `/api/agents` (writes need the Bearer write token) plus the read-only
+`GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
+interval). A card shows Disabled when not enabled, otherwise Offline when there is no status or the heartbeat is
+older than 90 s (3 polls), else Idle / `Running on KEY` / Error. `heartbeatAt` is treated as UTC (the heartbeat
+writer must store UTC); "now" comes from the response `Date` header. The write token is asked for in the page and
+kept in memory only (never in browser storage); a 401 clears it. No write request is sent without a token.
+There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
+
+Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete shows the
+inline Confirm/Cancel; status changes within one poll after updating `agent_status`; Offline after a stale
+heartbeat; the Network tab shows no write without a token, and a bad token gives 401 and asks again.
+
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
 for restore to succeed.

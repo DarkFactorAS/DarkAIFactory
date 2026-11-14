@@ -3,6 +3,8 @@ import { useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
+import AgentSlots from "./AgentSlots.jsx";
+import { WriteTokenProvider } from "./WriteToken.jsx";
 
 function Panel({ title, state, emptyText, children }) {
   const { data, loading, error } = state;
@@ -174,6 +176,7 @@ function ActiveAiTasksPanel() {
 
 export default function App() {
   return (
+    <WriteTokenProvider>
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="bg-slate-900 px-6 py-4 shadow">
         <h1 className="text-2xl font-bold text-white text-center">
@@ -182,9 +185,13 @@ export default function App() {
       </header>
       <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
         <SolvedByProjectPanel />
-        <TaskEditor />
+        <div className="space-y-6">
+          <AgentSlots />
+          <TaskEditor />
+        </div>
         <ActiveAiTasksPanel />
       </main>
     </div>
+    </WriteTokenProvider>
   );
 }

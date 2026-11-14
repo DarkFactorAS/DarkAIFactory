@@ -23,6 +23,7 @@ public sealed class AgentEndpointsTests
         public AgentView? Find(long id) => List().FirstOrDefault(a => a.Id == id);
         public bool NameExists(string name, long? excludeId) =>
             List().Any(a => a.Name == name && a.Id != excludeId);
+        public IReadOnlyList<string> ListProjectKeys() => Projects;
         public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys) =>
             Projects.Where(p => keys.Contains(p, StringComparer.OrdinalIgnoreCase)).ToList();
 
@@ -207,6 +208,7 @@ public sealed class AgentEndpointsTests
         public AgentView? Find(long id) => throw new InvalidOperationException("secret");
         public bool NameExists(string name, long? excludeId) => throw new InvalidOperationException("secret");
         public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys) => [];
+        public IReadOnlyList<string> ListProjectKeys() => [];
         public AgentView Create(AgentWrite agent) => throw new InvalidOperationException("secret");
         public AgentView? Update(long id, AgentWrite agent) => throw new InvalidOperationException("secret");
         public bool SetEnabled(long id, bool enabled) => throw new InvalidOperationException("secret");
@@ -324,4 +326,29 @@ public sealed class AgentEndpointsTests
     }
 
     private const string JsonValueKindNull = "Null";
+
+    [Fact]
+    public async Task ListProjects_ReturnsSortedKeysWithoutToken()
+    {
+        var (app, client, repository) = await StartAsync();
+        await using var _ = app;
+        repository.Projects = ["ZED", "ABC", "MID"];
+        var response = await client.SendAsync(Request(HttpMethod.Get, "/api/agents/projects", null));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["ABC", "MID", "ZED"], await response.Content.ReadFromJsonAsync<string[]>());
+    }
+
+    [Fact]
+    public async Task List_IncludesStatusFieldsUsedByTheUi()
+    {
+        var (app, client, repository) = await StartAsync();
+        await using var _ = app;
+        var heartbeat = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        repository.Rows.Add((new AgentView(1, "A", "R", "B", "Claude", null, true, DateTime.UtcNow, DateTime.UtcNow,
+            [], ["DFAI"], new AgentStatusView("Running", "DFAI-1", "Builder", heartbeat)), false));
+        var json = await client.GetStringAsync("/api/agents");
+        Assert.Contains("\"currentIssueKey\":\"DFAI-1\"", json);
+        Assert.Contains("\"state\":\"Running\"", json);
+        Assert.Contains("\"heartbeatAt\"", json);
+    }
 }
