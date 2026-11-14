@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(14, patcher.Sql.Count);
+        Assert.Equal(15, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -76,13 +76,23 @@ public sealed class AgentTablesPatcherTests
     }
 
     [Fact]
+    public void Patcher_AllowsDashboardActiveStatuses()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(AgentTablesPatcher.Run(patcher));
+
+        Assert.Contains("'Dashboard.ActiveStatuses'", patcher.Sql[^1]);
+        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", patcher.Sql[^1]);
+    }
+
+    [Fact]
     public void Patcher_AddsAgentStatusWithoutCascade()
     {
         var patcher = new RecordingPatcher(0);
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal(11, patcher.Numbers[10]);
-        Assert.Equal(14, patcher.Numbers[^1]);
+        Assert.Equal(15, patcher.Numbers[^1]);
         var sql = patcher.Sql[10];
         Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
         Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);

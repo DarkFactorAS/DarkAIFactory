@@ -93,6 +93,15 @@ token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitesp
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
 list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
 panel uses it and redraws the graph; the labels also drive the "Top 5 AI tasks" panel.
+
+Active statuses: `GET /api/settings/active-statuses` returns `{ statuses }`; `PUT /api/settings/active-statuses`
+(`statuses`, Bearer write token required, 401 otherwise) validates (max 20 statuses, 1-255 chars, no commas; spaces
+are allowed; 400 otherwise), writes only `settings[aidashboard, Dashboard.ActiveStatuses]` and updates the running app
+immediately. An empty list means: show every non-Done status. The cogwheel button in the "Top 5 AI tasks" header
+opens the editor and reloads the panel after saving.
+
+Manual check (cogwheel): open the cogwheel, save `In Progress` with a token and the list narrows without a reload;
+an empty value restores all non-Done statuses; a bad token gives 401 and the token prompt; the list survives a reload.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
