@@ -49,19 +49,37 @@ public sealed record ReviewOptions(
     /// <summary>GitHub merge method: merge, squash or rebase.</summary>
     public string MergeMethod { get; init; } = "squash";
 
+    /// <summary>Phrase in a reviewer comment or review that recommends approval.</summary>
+    public string ApprovalPhrase { get; init; } = AutoMergePolicy.DefaultApprovalPhrase;
+
     /// <summary>Path prefixes of agent code; a pull request changing any of them is never merged automatically.</summary>
     public IReadOnlyList<string> AgentCodePaths { get; init; } = AutoMergePolicy.DefaultAgentCodePaths;
 }
 
 /// <summary>Facts about a pull request that decide whether it may be merged automatically.</summary>
 public sealed record PullRequestMergeInfo(
-    bool IsDraft, string MergeableState, string HeadSha, string HeadBranch, IReadOnlyList<string> ChangedFiles);
+    bool IsDraft, string MergeableState, string HeadSha, string HeadBranch, IReadOnlyList<string> ChangedFiles)
+{
+    /// <summary>Base (parent) branch the pull request merges into.</summary>
+    public string BaseBranch { get; init; } = string.Empty;
+
+    /// <summary>Number of commits the base branch has that the head branch lacks; 0 when up to date.</summary>
+    public int BehindBy { get; init; }
+
+    /// <summary>Null when every check run and commit status on the head is green; otherwise why it is not.</summary>
+    public string? ChecksProblem { get; init; }
+
+    /// <summary>The reviewer recommended approval after the latest non-merge commit.</summary>
+    public bool ReviewerApproved { get; init; }
+}
 
 /// <summary>Rules deciding whether the Review capability may merge a pull request.</summary>
 public static class AutoMergePolicy
 {
     /// <summary>Head-branch prefix of a parent task's integration branch (see JiraWorkflowRules.ParentBranchName).</summary>
     public const string ParentBranchPrefix = "aiagent/parent/";
+
+    public const string DefaultApprovalPhrase = "Approval recommended";
 
     public static readonly IReadOnlyList<string> DefaultAgentCodePaths =
     [
@@ -83,9 +101,19 @@ public static class AutoMergePolicy
             return $"mergeable state is '{info.MergeableState}', not 'clean'";
         }
 
-        if (totalThreads == 0)
+        if (info.BehindBy > 0)
         {
-            return "the pull request has no review comments";
+            return $"the branch is {info.BehindBy} commit(s) behind '{info.BaseBranch}'";
+        }
+
+        if (info.ChecksProblem is not null)
+        {
+            return $"builds are not green: {info.ChecksProblem}";
+        }
+
+        if (totalThreads == 0 && !info.ReviewerApproved)
+        {
+            return "the pull request has no review comments and no reviewer approval";
         }
 
         if (!ReviewCapability.IsReadyToMerge(unresolvedThreads, failedCount))

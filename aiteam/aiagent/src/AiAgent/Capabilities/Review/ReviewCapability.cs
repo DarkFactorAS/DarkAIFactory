@@ -111,11 +111,18 @@ public sealed class ReviewCapability(
 
         try
         {
-            var info = await client.GetMergeInfoAsync(pullRequest, cancellationToken);
+            var info = await client.GetMergeInfoAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
             if (string.IsNullOrEmpty(checkedHead)
                 || !string.Equals(checkedHead, info.HeadSha, StringComparison.OrdinalIgnoreCase))
             {
                 Log($"{prefix}: not merged automatically: the head changed while review threads were checked; retrying in the next cycle.");
+                return;
+            }
+
+            if (info.BehindBy > 0 && !info.IsDraft && (info.ReviewerApproved || threads.Total > 0))
+            {
+                await client.UpdateBranchAsync(pullRequest, info.HeadSha, cancellationToken);
+                Log($"{prefix}: branch was {info.BehindBy} commit(s) behind '{info.BaseBranch}'; updated it. Merging after the builds are green.");
                 return;
             }
 

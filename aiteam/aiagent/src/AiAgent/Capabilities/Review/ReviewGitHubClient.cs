@@ -17,6 +17,10 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
     /// <summary>GitHub's pull-request files endpoint returns at most this many files.</summary>
     public const int MaxListedFiles = 3000;
+
+    /// <summary>The compare endpoint returns at most this many files; a full list may be truncated.</summary>
+    private const int MaxCompareFiles = 300;
+
     private const string PullRequestQuery =
         """
         query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -277,7 +281,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
     /// <summary>Draft flag, mergeable state, head and every changed file of the pull request (REST).</summary>
     public async Task<PullRequestMergeInfo> GetMergeInfoAsync(
-        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+        StoredAgentPullRequest pullRequest, string approvalPhrase, CancellationToken cancellationToken)
     {
         var path = RestPath(pullRequest);
         var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
@@ -313,12 +317,244 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             }
         }
 
+        var headSha = node["head"]?["sha"]?.GetValue<string>() ?? string.Empty;
+        var baseBranch = node["base"]?["ref"]?.GetValue<string>() ?? string.Empty;
+        var repoPath = path[..path.IndexOf("/pulls/", StringComparison.Ordinal)];
+        var headRef = node["head"]?["ref"]?.GetValue<string>() ?? string.Empty;
+
+        var compare = await SendRestAsync(
+            HttpMethod.Get,
+            $"{repoPath}/compare/{Uri.EscapeDataString(baseBranch)}...{Uri.EscapeDataString(headSha)}", null, cancellationToken);
+        var behindBy = compare?["behind_by"]?.GetValue<int>() ?? 0;
+
         return new PullRequestMergeInfo(
             node["draft"]?.GetValue<bool>() ?? false,
             node["mergeable_state"]?.GetValue<string>() ?? "unknown",
-            node["head"]?["sha"]?.GetValue<string>() ?? string.Empty,
-            node["head"]?["ref"]?.GetValue<string>() ?? string.Empty,
-            files);
+            headSha,
+            headRef,
+            files)
+        {
+            BaseBranch = baseBranch,
+            BehindBy = behindBy,
+            ChecksProblem = await GetChecksProblemAsync(repoPath, headSha, cancellationToken),
+            ReviewerApproved = await HasReviewerApprovalAsync(path, repoPath, baseBranch, headSha, approvalPhrase, cancellationToken)
+        };
+    }
+
+    /// <summary>Asks GitHub to merge the base branch into the head branch (no force push), pinned to the head.</summary>
+    public async Task UpdateBranchAsync(
+        StoredAgentPullRequest pullRequest, string headSha, CancellationToken cancellationToken)
+    {
+        var body = new JsonObject { ["expected_head_sha"] = headSha };
+        await SendRestAsync(HttpMethod.Put, $"{RestPath(pullRequest)}/update-branch", body, cancellationToken);
+    }
+
+    /// <summary>
+    /// Null when every check run is completed with success, skipped or neutral and the combined commit status is
+    /// not failing or pending; otherwise a description.
+    /// </summary>
+    private async Task<string?> GetChecksProblemAsync(string repoPath, string headSha, CancellationToken cancellationToken)
+    {
+        var runs = await SendRestAsync(HttpMethod.Get, $"{repoPath}/commits/{headSha}/check-runs?per_page={PageSize}", null, cancellationToken);
+        var total = runs?["total_count"]?.GetValue<int>() ?? 0;
+        var list = runs?["check_runs"]?.AsArray() ?? [];
+        if (total > list.Count)
+        {
+            return "too many check runs to verify";
+        }
+
+        foreach (var run in list)
+        {
+            var name = run?["name"]?.GetValue<string>() ?? "check";
+            if (!string.Equals(run?["status"]?.GetValue<string>(), "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"check '{name}' is not finished";
+            }
+
+            var conclusion = run?["conclusion"]?.GetValue<string>() ?? string.Empty;
+            if (conclusion is not ("success" or "skipped" or "neutral"))
+            {
+                return $"check '{name}' concluded '{conclusion}'";
+            }
+        }
+
+        var status = await SendRestAsync(HttpMethod.Get, $"{repoPath}/commits/{headSha}/status", null, cancellationToken);
+        var state = status?["state"]?.GetValue<string>() ?? "success";
+        var statusCount = status?["total_count"]?.GetValue<int>() ?? 0;
+        return statusCount > 0 && !string.Equals(state, "success", StringComparison.OrdinalIgnoreCase)
+            ? $"commit status is '{state}'"
+            : null;
+    }
+
+    /// <summary>
+    /// REST endpoints report GitHub App logins with a "[bot]" suffix (for example
+    /// "copilot-pull-request-reviewer[bot]") while GraphQL omits it, so strip the suffix before comparing.
+    /// </summary>
+    private static string? NormalizeBotLogin(string? login)
+    {
+        const string botSuffix = "[bot]";
+        return login is not null && login.EndsWith(botSuffix, StringComparison.OrdinalIgnoreCase)
+            ? login[..^botSuffix.Length]
+            : login;
+    }
+
+    /// <summary>
+    /// True when a submitted review by the reviewer contains the approval phrase and was made on the latest commit
+    /// that is not a verified base-only merge, or on a later commit. Conversation comments never count: GitHub does
+    /// not bind them to a head commit, and commit timestamps are author-controlled, so a commit created before the
+    /// comment but pushed afterwards could otherwise pass unreviewed. A merge commit preserves an earlier
+    /// approval only when its second parent is on the base branch and every file in it matches one of its parents,
+    /// so feature merges and merges with manual edits or conflict resolutions invalidate the approval.
+    /// Fails closed (false) when the retrieved commit history does not end at <paramref name="headSha"/>, for
+    /// example because GitHub caps the pull request commit list at 250 entries.
+    /// </summary>
+    private async Task<bool> HasReviewerApprovalAsync(
+        string pullPath, string repoPath, string baseBranch, string headSha, string phrase, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(headSha))
+        {
+            return false;
+        }
+
+        var commits = new List<JsonNode>();
+        for (var page = 1; page <= 3; page++)
+        {
+            var list = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/commits?per_page={PageSize}&page={page}", null, cancellationToken))
+                ?.AsArray() ?? [];
+            commits.AddRange(list.Where(item => item is not null)!);
+            if (list.Count < PageSize)
+            {
+                break;
+            }
+        }
+
+        if (commits.Count == 0
+            || !string.Equals(commits[^1]["sha"]?.GetValue<string>(), headSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var lastIndex = 0;
+        for (var index = commits.Count - 1; index >= 0; index--)
+        {
+            if (!await IsVerifiedBaseOnlyMergeAsync(repoPath, baseBranch, commits[index], cancellationToken))
+            {
+                lastIndex = index;
+                break;
+            }
+        }
+
+        var shas = commits.Select(commit => commit["sha"]?.GetValue<string>() ?? string.Empty).ToList();
+
+        bool IsReviewer(JsonNode? item) =>
+            string.Equals(
+                NormalizeBotLogin(item?["user"]?["login"]?.GetValue<string>()),
+                NormalizeBotLogin(_reviewerLogin),
+                StringComparison.OrdinalIgnoreCase)
+            && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
+
+        // Read every page of reviews so a qualifying approval beyond the first page is not missed.
+        var reviews = new List<JsonNode?>();
+        for (var page = 1; ; page++)
+        {
+            var list = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}&page={page}", null, cancellationToken))
+                ?.AsArray() ?? [];
+            reviews.AddRange(list);
+            if (list.Count < PageSize)
+            {
+                break;
+            }
+        }
+
+        // Only submitted APPROVED or COMMENTED reviews count; dismissed and pending reviews keep their body and
+        // commit ID but must never enable a merge.
+        foreach (var review in reviews.Where(IsReviewer).Where(review =>
+                     review?["state"]?.GetValue<string>() is { } reviewState
+                     && (string.Equals(reviewState, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(reviewState, "COMMENTED", StringComparison.OrdinalIgnoreCase))))
+        {
+            var index = shas.IndexOf(review!["commit_id"]?.GetValue<string>() ?? string.Empty);
+            if (index >= lastIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True only when <paramref name="commit"/> is a two-parent merge whose second parent is on the base branch and
+    /// whose content adds nothing of its own: every file differs from at most one parent, so it equals either the
+    /// previous head or the base version. Fails closed on truncated comparisons or GitHub errors.
+    /// </summary>
+    private async Task<bool> IsVerifiedBaseOnlyMergeAsync(
+        string repoPath, string baseBranch, JsonNode commit, CancellationToken cancellationToken)
+    {
+        var parents = commit["parents"]?.AsArray();
+        var sha = commit["sha"]?.GetValue<string>();
+        if (parents is not { Count: 2 } || string.IsNullOrWhiteSpace(sha) || string.IsNullOrWhiteSpace(baseBranch))
+        {
+            return false;
+        }
+
+        var headParent = parents[0]?["sha"]?.GetValue<string>();
+        var baseParent = parents[1]?["sha"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(headParent) || string.IsNullOrWhiteSpace(baseParent))
+        {
+            return false;
+        }
+
+        try
+        {
+            var onBase = await SendRestAsync(
+                HttpMethod.Get,
+                $"{repoPath}/compare/{Uri.EscapeDataString(baseBranch)}...{Uri.EscapeDataString(baseParent)}", null, cancellationToken);
+            if (onBase?["status"]?.GetValue<string>() is not ("behind" or "identical"))
+            {
+                return false;
+            }
+
+            var fromHead = await ChangedFilesAsync(repoPath, headParent, sha, cancellationToken);
+            var fromBase = await ChangedFilesAsync(repoPath, baseParent, sha, cancellationToken);
+            return fromHead is not null && fromBase is not null && !fromHead.Overlaps(fromBase);
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Files changed from ancestor <paramref name="fromSha"/> to <paramref name="toSha"/> (including rename
+    /// sources), or null when the comparison is not a plain descendant or the file list may be truncated.
+    /// </summary>
+    private async Task<HashSet<string>?> ChangedFilesAsync(
+        string repoPath, string fromSha, string toSha, CancellationToken cancellationToken)
+    {
+        var compare = await SendRestAsync(
+            HttpMethod.Get,
+            $"{repoPath}/compare/{Uri.EscapeDataString(fromSha)}...{Uri.EscapeDataString(toSha)}", null, cancellationToken);
+        var mergeBase = compare?["merge_base_commit"]?["sha"]?.GetValue<string>();
+        var files = compare?["files"]?.AsArray();
+        if (files is null
+            || files.Count >= MaxCompareFiles
+            || !string.Equals(mergeBase, fromSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            names.Add(file?["filename"]?.GetValue<string>() ?? string.Empty);
+            if (file?["previous_filename"]?.GetValue<string>() is { Length: > 0 } previous)
+            {
+                names.Add(previous);
+            }
+        }
+
+        return names;
     }
 
     /// <summary>
