@@ -55,7 +55,8 @@ public sealed class AgentPlanRepository(IDbConnectionFactory connectionFactory) 
         command.AddParameter("@project_id", plan.ManagerProjectId);
         command.AddParameter("@jira_key", plan.JiraKey);
         command.AddParameter("@plan", plan.Plan);
-        command.AddParameter("@posted", plan.PostedToJira);
+        // posted_to_jira is a TINYINT; a bool parameter is sent as 'True'/'False', which strict MariaDB rejects.
+        command.AddParameter("@posted", plan.PostedToJira ? 1 : 0);
         command.AddParameter("@requirements_hash", plan.RequirementsHash);
         command.AddParameter("@source_updated", plan.SourceUpdated);
         command.ExecuteNonQuery();

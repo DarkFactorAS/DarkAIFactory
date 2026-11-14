@@ -82,6 +82,8 @@ internal static class RunnerServer
                 var arguments = claude
                     ? RunnerPolicy.BuildClaudeArguments(request.Model, request.Mode)
                     : RunnerPolicy.BuildCopilotArguments(request.Model, request.Mode);
+                // Snapshot before the LLM run so validation can target the projects whose files it changed.
+                var before = request.Mode == RunnerModes.Plan ? null : WorkspaceSnapshot.Capture(workspace);
                 var stopwatch = Stopwatch.StartNew();
                 var result = await executor(
                     claude ? "claude" : "copilot",
@@ -107,17 +109,20 @@ internal static class RunnerServer
 
                 // The model's exit code alone does not prove the change builds and passes tests,
                 // so the runner verifies it itself before the builder is allowed to commit.
-                if (exitCode == 0 && request.Mode != RunnerModes.Plan)
+                if (exitCode == 0 && before is not null)
                 {
                     var validationEnvironment = new Dictionary<string, string?>(environment);
                     validationEnvironment.Remove("GH_TOKEN");
-                    var failure = await ValidateAsync(
-                        executor, request, workspace, validationEnvironment, cancellationToken);
-                    if (failure is not null)
+                    var changed = WorkspaceSnapshot.Capture(workspace).ChangedSince(before);
+                    var plan = ChangedProjects.Resolve(workspace, changed);
+                    var (failureCode, message) = await ValidateAsync(
+                        executor, plan, changed.Count, workspace, validationEnvironment, cancellationToken);
+                    if (failureCode is not null)
                     {
-                        exitCode = failure.Value.ExitCode;
-                        output = $"{output}\n\n{failure.Value.Message}".Trim();
+                        exitCode = failureCode.Value;
                     }
+
+                    output = $"{output}\n\n{message}".Trim();
                 }
 
                 return Results.Json(new RunnerResponse(exitCode, output, usage, null, duration));
@@ -132,30 +137,42 @@ internal static class RunnerServer
 
     public static Task RunAsync() => Build().RunAsync();
 
-    /// <summary>Runs the configured build and test commands; returns the first failure, if any.</summary>
-    private static async Task<(int ExitCode, string Message)?> ValidateAsync(
+    /// <summary>
+    /// Builds the projects that contain changed files and runs the test projects that depend on them. Returns the
+    /// exit code of the first failure (null when validation passed or had nothing to do) and a summary.
+    /// </summary>
+    private static async Task<(int? FailureCode, string Message)> ValidateAsync(
         ProcessExecutor executor,
-        RunnerRequest request,
+        ProjectValidationPlan plan,
+        int changedFiles,
         string workspace,
         IDictionary<string, string?> environment,
         CancellationToken cancellationToken)
     {
-        foreach (var (name, command) in new[] { ("Build", request.BuildCommand), ("Test", request.TestCommand) })
+        if (plan.IsEmpty)
         {
-            if (string.IsNullOrWhiteSpace(command))
-            {
-                continue;
-            }
+            return (null, changedFiles == 0
+                ? "Validation: no files changed; build and test skipped."
+                : $"Validation: none of the {changedFiles} changed file(s) belongs to a .NET project; build and test skipped.");
+        }
 
-            var result = await executor("/bin/sh", ["-c", command], workspace, environment, string.Empty, cancellationToken);
+        var steps = plan.BuildProjects.Select(project => ("build", project))
+            .Concat(plan.TestProjects.Select(project => ("test", project)));
+        foreach (var (verb, project) in steps)
+        {
+            // No shell: the project path comes from the (untrusted) workspace.
+            var result = await executor("dotnet", [verb, project], workspace, environment, string.Empty, cancellationToken);
             if (result.ExitCode != 0)
             {
                 var details = $"{result.Output}\n{result.Error}".Trim();
-                return (result.ExitCode, $"{name} command failed (exit code {result.ExitCode}): {command}\n{details}".Trim());
+                return (result.ExitCode,
+                    $"{(verb == "build" ? "Build" : "Test")} failed (exit code {result.ExitCode}): dotnet {verb} {project}\n{details}".Trim());
             }
         }
 
-        return null;
+        return (null,
+            $"Validation passed. Built: {string.Join(", ", plan.BuildProjects)}. " +
+            $"Tested: {(plan.TestProjects.Count == 0 ? "no test project references the changed projects" : string.Join(", ", plan.TestProjects))}.");
     }
 
     private static string Combine(ProcessResult result) =>

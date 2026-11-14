@@ -33,8 +33,12 @@ public sealed partial class GitHubCore(
         return slug.Length == 0 ? $"aiagent/{key}-{suffix}" : $"aiagent/{key}-{slug}-{suffix}";
     }
 
-    public static string PullRequestTitle(string issueKey, string summary) =>
-        $"aiagent: {issueKey} {WhiteSpace().Replace(summary, " ").Trim()}".TrimEnd();
+    /// <summary>'KEY: summary'; it becomes the commit subject when the PR is squash-merged, so no other prefix.</summary>
+    public static string PullRequestTitle(string issueKey, string summary)
+    {
+        var text = WhiteSpace().Replace(summary, " ").Trim();
+        return text.Length == 0 ? issueKey : $"{issueKey}: {text}";
+    }
 
     /// <summary>Clones with submodules into <paramref name="checkoutPath"/> and creates the work branch.</summary>
     public async Task<string> CloneAndBranchAsync(
@@ -159,7 +163,7 @@ public sealed partial class GitHubCore(
         }
     }
 
-    /// <summary>Opens the PR (title 'aiagent: KEY summary') and records it in agent_pull_requests.</summary>
+    /// <summary>Opens the PR (title 'KEY: summary', the squash-merge commit subject) and records it in agent_pull_requests.</summary>
     public async Task<AgentPullRequestRecord> OpenPullRequestAsync(
         long agentId, string issueKey, string summary, string branch, string? baseBranch, string body,
         CancellationToken cancellationToken)

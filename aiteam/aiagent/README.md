@@ -76,18 +76,34 @@ parent, sub-tasks created with dependency links after approval, at most 10) and 
 Copied from `aiclaudeworker` (Program.cs flow, PromptBuilder). For each assigned project key it picks
 planned issues (`aiagent-analyzed`, not `aiagent-picked`), requires a posted stored plan in `agent_plans`
 whose `requirements_hash` matches the current issue, claims the issue, branches (sub-tasks branch off and
-target the parent's `aiagent/parent/<KEY>` branch), runs the runner in `implement` mode (with build/test commands
-from `AIAGENT_BUILD_COMMAND` / `AIAGENT_TEST_COMMAND`), pushes, opens the PR through `GitHubCore`
+target the parent's `aiagent/parent/<KEY>` branch), runs the runner in `implement` mode, pushes, opens the PR through `GitHubCore`
 (recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
 `aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is
 generated (fallback). Settings are read from the `aiagent` client and the `aiagent` workflow labels.
+
+### Build and test validation (Builder and Review)
+
+After the LLM run in `implement` and `review` mode, aiagent-runner works out what to validate from the files the
+LLM changed; there is no build or test command to configure. The runner has no access to the checkout's Git
+metadata, so it compares a file snapshot (size and modification time) taken before the run with one taken after it,
+ignoring `bin`, `obj`, `.git`, `node_modules`, `.vs`, `.idea` and `TestResults`.
+
+- Each changed file belongs to the project(s) in the nearest folder at or above it that holds a
+  `.csproj`/`.fsproj`/`.vbproj`. Each of those projects is built with `dotnet build <project>`.
+- Every test project (`IsTestProject=true` or a `Microsoft.NET.Test.Sdk` package reference) that is one of
+  those projects, or references one of them directly or through other projects, is run with
+  `dotnet test <project>`.
+- If no changed file belongs to a project (for example documentation only), validation is skipped and the runner
+  output says so.
+
+A failing build or test makes the runner return a non-zero exit code, and the run fails.
 
 ## Review capability (`Capabilities/Review`)
 
 Copied from `aireviewworker`. Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
 request in `agent_pull_requests` it collects unresolved, current inline comments by `AIAGENT_REVIEWER_LOGIN`
 (default `copilot-pull-request-reviewer`) that are not handled yet, clones the head branch and fixes the comments
-**one at a time**: one runner call in `review` mode with only that comment (build/test run inside the runner),
+**one at a time**: one runner call in `review` mode with only that comment (the runner builds and tests the affected projects),
 a check that only the comment's file changed, then a separate commit and push (never forced). The commit subject
 says what was fixed and where (`DFAI-166: The HttpClient is never disposed (src/Worker/Client.cs:42)`); the body
 quotes the comment. A failing comment is reset and the next one is tried; a failed push stops the remaining

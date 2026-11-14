@@ -18,9 +18,7 @@ internal sealed record BuilderSettings(
     string InProgressStatus,
     string InReviewStatus,
     string DoneStatus,
-    string AssigneeAccountId,
-    string? BuildCommand,
-    string? TestCommand)
+    string AssigneeAccountId)
 {
     /// <summary>A custom JQL replaces the planned-issue gate: issues without a stored plan get a local plan.</summary>
     public bool AllowLocalPlan => !string.IsNullOrWhiteSpace(JiraJql);
@@ -45,8 +43,6 @@ internal sealed record BuilderSettings(
         string Required(string? value, string name) => string.IsNullOrWhiteSpace(value)
             ? throw new InvalidOperationException($"Required database setting {name} is not set.")
             : value.Trim();
-        string? Env(string name) =>
-            Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
 
         return new BuilderSettings(
             jiraUri,
@@ -60,8 +56,6 @@ internal sealed record BuilderSettings(
             Or(settings.Jira.JiraInProgressStatus, "In Progress"),
             Or(settings.Jira.JiraInReviewStatus, "In Review"),
             Or(settings.Jira.JiraDoneStatus, "Done"),
-            Or(settings.Jira.JiraAssigneeAccountId, string.Empty),
-            Env("AIAGENT_BUILD_COMMAND") ?? "dotnet build",
-            Env("AIAGENT_TEST_COMMAND") ?? "dotnet test");
+            Or(settings.Jira.JiraAssigneeAccountId, string.Empty));
     }
 }

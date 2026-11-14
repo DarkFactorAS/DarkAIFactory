@@ -172,15 +172,9 @@ internal static class RunnerPolicy
         var prompt = request.Prompt;
         if (request.Mode != RunnerModes.Plan)
         {
-            if (!string.IsNullOrWhiteSpace(request.BuildCommand))
-            {
-                prompt += $"\n\nBuild command: {request.BuildCommand}";
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.TestCommand))
-            {
-                prompt += $"\nTest command: {request.TestCommand}";
-            }
+            prompt += "\n\nAfter you finish, the runner runs `dotnet build` for every project that contains a file you " +
+                "changed and `dotnet test` for every test project that references those projects. The change is " +
+                "rejected if any of them fails.";
         }
 
         return prompt;

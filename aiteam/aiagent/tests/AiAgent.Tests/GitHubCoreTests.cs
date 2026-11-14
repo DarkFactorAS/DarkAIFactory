@@ -53,8 +53,11 @@ public sealed class GitHubCoreTests
     }
 
     [Fact]
-    public void TitleHasAiagentPrefix() =>
-        Assert.Equal("aiagent: DFAI-166 Do it", GitHubCore.PullRequestTitle("DFAI-166", "Do \n it"));
+    public void TitleStartsWithTheJiraKey()
+    {
+        Assert.Equal("DFAI-166: Do it", GitHubCore.PullRequestTitle("DFAI-166", "Do \n it"));
+        Assert.Equal("DFAI-166", GitHubCore.PullRequestTitle("DFAI-166", "  "));
+    }
 
     [Fact]
     public async Task CloneUsesSubmodulesAndCreatesBranch()
@@ -104,7 +107,7 @@ public sealed class GitHubCoreTests
         Assert.Equal(record, Assert.Single(recorder.Items));
         var post = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Post);
         Assert.Equal("/repos/o/r/pulls", post.Path);
-        Assert.Contains("\"title\":\"aiagent: DFAI-166 Core\"", post.Body);
+        Assert.Contains("\"title\":\"DFAI-166: Core\"", post.Body);
         Assert.Contains("\"base\":\"main\"", post.Body);
     }
 }

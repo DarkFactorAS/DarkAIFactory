@@ -469,7 +469,7 @@ public sealed class ReviewCapabilityTests
         var store = new FakeStore { Attempts = { [10] = 3, [11] = 3, [12] = 3 } };
         var capability = new ReviewCapability(
             new ReviewOptions("t", "reviewer", 3), new PrRepo(), store, git,
-            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), null, new GraphQlStub());
+            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), new GraphQlStub());
         var context = new AgentContext(new AgentDefinition(1, "a", "r", "b", "Claude", null, true, false), [], new NoLock());
 
         Assert.Equal(AgentCapabilityKind.Review, capability.Kind);

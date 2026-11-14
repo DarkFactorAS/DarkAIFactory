@@ -328,8 +328,6 @@ internal sealed class BuilderCapability(
                 mode,
                 workspace,
                 PromptComposer.Compose(agent, prompt),
-                settings.BuildCommand,
-                settings.TestCommand,
                 isCopilot ? settings.AgentGitHubToken : null),
             cancellationToken);
         return response.ExitCode == 0

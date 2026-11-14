@@ -37,8 +37,6 @@ public sealed record ReviewOptions(
     string RepositoryToken,
     string ReviewerLogin,
     int MaxAttempts = 3,
-    string? BuildCommand = null,
-    string? TestCommand = null,
     string? CopilotToken = null,
     string? WorkspaceRoot = null)
 {
