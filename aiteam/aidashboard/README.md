@@ -119,3 +119,6 @@ heartbeat; the Network tab shows no write without a token, and a bad token gives
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
 for restore to succeed.
+
+The centre panel list of tasks not yet sent to Jira (`status=New`) refreshes every 30 seconds, so tasks
+created in Jira disappear without a page reload; an open edit form keeps its input across refreshes.

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const TASK_REFRESH_INTERVAL_MS = 30000;
 
 async function request(url, options) {
   const response = await fetch(url, {
@@ -91,16 +93,41 @@ export default function TaskEditor() {
   const [editingId, setEditingId] = useState(null);
   const [projectKey, setProjectKey] = useState(null);
 
-  const load = useCallback(() => {
-    request("/api/agent-tasks?status=New")
-      .then((data) => {
-        setTasks(data);
-        setError(null);
-      })
-      .catch((e) => setError(e.message));
+  const latestRequest = useRef(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
-  useEffect(load, [load]);
+  const load = useCallback(() => {
+    const requestId = ++latestRequest.current;
+    request("/api/agent-tasks?status=New")
+      .then((data) => {
+        if (!mounted.current || requestId !== latestRequest.current) return;
+        setTasks(data);
+        setError(null);
+        // Close the edit form if the edited task has left the list (sent to Jira).
+        setEditingId((current) =>
+          current !== null && !data.some((t) => t.id === current) ? null : current
+        );
+      })
+      .catch((e) => {
+        if (!mounted.current || requestId !== latestRequest.current) return;
+        setError(e.message);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    const timer = setInterval(load, TASK_REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [load]);
   useEffect(() => {
     request("/api/tasks/config")
       .then((data) => setProjectKey(data.projectKey))
@@ -130,6 +157,7 @@ export default function TaskEditor() {
       <h2 className="text-lg font-semibold">New task</h2>
       <TaskForm submitLabel="Create task" onSubmit={create} />
       <h2 className="text-lg font-semibold">Tasks not yet sent to Jira</h2>
+      <p className="text-xs text-slate-500">Updates every 30 s</p>
       {error && (
         <p role="alert" className="text-red-600">
           Unable to load tasks: {error}
