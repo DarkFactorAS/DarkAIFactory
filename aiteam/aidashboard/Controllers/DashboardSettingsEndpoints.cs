@@ -21,6 +21,9 @@ public static class DashboardSettingsEndpoints
     public const int MaxLabels = 20;
     public const int MaxLabelLength = 255;
 
+    // Shared across requests so persisting and publishing labels happen atomically.
+    private static readonly object SaveLock = new();
+
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/settings/ai-labels", Get);
@@ -51,18 +54,22 @@ public static class DashboardSettingsEndpoints
             });
         }
 
-        try
+        lock (SaveLock)
         {
-            store.Save(labels);
-        }
-        catch (Exception ex)
-        {
-            DFLogger.LogOutput(DFLogLevel.ERROR, "Settings", $"Saving AI labels failed ({ex.GetType().Name}).");
-            return Results.Json(new { error = "Unable to save the AI labels." },
-                statusCode: StatusCodes.Status500InternalServerError);
+            try
+            {
+                store.Save(labels);
+            }
+            catch (Exception ex)
+            {
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Settings", $"Saving AI labels failed ({ex.GetType().Name}).");
+                return Results.Json(new { error = "Unable to save the AI labels." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            settings.Dashboard.AiLabels = labels;
         }
 
-        settings.Dashboard.AiLabels = labels;
         return Results.Ok(new { labels });
     }
 }
