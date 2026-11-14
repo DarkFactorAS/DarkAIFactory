@@ -122,3 +122,9 @@ for restore to succeed.
 
 The centre panel list of tasks not yet sent to Jira (`status=New`) refreshes every 30 seconds, so tasks
 created in Jira disappear without a page reload; an open edit form keeps its input across refreshes.
+
+## Theme
+
+The header has a Theme selector (System, Light, Dark). System, the default, follows the OS/browser
+`prefers-color-scheme` and updates live. The choice is stored only in the browser's `localStorage`
+(`aidashboard.theme`) and is never sent to the server.

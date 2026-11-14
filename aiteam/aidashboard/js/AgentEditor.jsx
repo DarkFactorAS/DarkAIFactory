@@ -64,12 +64,12 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
   }
 
   const label = "block text-sm font-medium";
-  const field = "w-full rounded border border-slate-300 p-1 text-sm";
+  const field = "w-full rounded border border-slate-300 dark:border-slate-600 p-1 text-sm";
   return (
     <form
       onSubmit={handleSubmit}
       aria-label={agent ? `Edit ${agent.name}` : "Create agent"}
-      className="space-y-2 rounded border border-slate-200 p-3"
+      className="space-y-2 rounded border border-slate-200 dark:border-slate-700 p-3"
     >
       <label className={label}>
         Name
@@ -128,17 +128,17 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
               {key}
             </label>
           ))}
-          {projectOptions.length === 0 && <span className="text-slate-500">No projects available.</span>}
+          {projectOptions.length === 0 && <span className="text-slate-500 dark:text-slate-400">No projects available.</span>}
         </div>
       </fieldset>
       {!token && (
         <div className="text-sm">
-          <p className="text-slate-600">Enter the write token to save.</p>
+          <p className="text-slate-600 dark:text-slate-300">Enter the write token to save.</p>
           <WriteTokenPrompt />
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
