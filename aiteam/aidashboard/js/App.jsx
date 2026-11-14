@@ -328,18 +328,62 @@ export default function App() {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [solvedOpen, setSolvedOpen] = useState(false);
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
+  const headerRef = useRef(null);
+  const mainRef = useRef(null);
+  const drawerRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const openerRef = useRef(null);
   useEffect(() => {
     if (!solvedOpen) return undefined;
+    const opener = document.activeElement;
+    openerRef.current = opener instanceof HTMLElement ? opener : null;
+    const background = [headerRef.current, mainRef.current].filter(Boolean);
+    background.forEach((el) => {
+      el.inert = true;
+    });
+    closeButtonRef.current?.focus();
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
     const onKey = (e) => {
-      if (e.key === "Escape") setSolvedOpen(false);
+      if (e.key === "Escape") {
+        setSolvedOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !drawerRef.current) return;
+      const focusable = Array.from(drawerRef.current.querySelectorAll(focusableSelector)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!drawerRef.current.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      background.forEach((el) => {
+        el.inert = false;
+      });
+      openerRef.current?.focus();
+    };
   }, [solvedOpen]);
   return (
     <WriteTokenProvider>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <header className="bg-slate-900 px-6 py-4 shadow lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
+      <header ref={headerRef} className="bg-slate-900 px-6 py-4 shadow lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
         <div className="mb-2 flex justify-center lg:mb-0 lg:justify-start">
           <button
             type="button"
@@ -361,7 +405,7 @@ export default function App() {
           <ThemeToggle theme={theme} onChange={setTheme} />
         </div>
       </header>
-      <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
+      <main ref={mainRef} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
         <AgentSlots />
         <TaskEditor />
         <ActiveAiTasksPanel labelsVersion={labelsVersion} />
@@ -371,13 +415,16 @@ export default function App() {
       )}
       <aside
         id="solved-overlay"
+        ref={drawerRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Tasks solved per project"
         className={`fixed inset-y-0 left-0 z-40 w-full max-w-xl overflow-y-auto bg-white p-4 shadow-xl dark:bg-slate-800 ${solvedOpen ? "" : "hidden"}`}
       >
         <div className="mb-2 flex justify-end">
           <button
             type="button"
+            ref={closeButtonRef}
             aria-label="Close tasks solved"
             onClick={() => setSolvedOpen(false)}
             className="rounded px-2 py-1 text-xl leading-none hover:bg-slate-100 dark:hover:bg-slate-700"
