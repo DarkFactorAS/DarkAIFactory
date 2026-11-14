@@ -114,7 +114,7 @@ internal sealed class BuilderCapability(
         {
             // Fall back to a valid posted plan made by any agent.
             var shared = plans.FindPostedForIssue(issue.Key, fingerprint);
-            if (shared is not null)
+            if (shared is not null && !string.IsNullOrWhiteSpace(shared.Plan))
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Log,
                     $"Using the plan for {issue.Key} made by agent {shared.AgentId}.");
