@@ -123,6 +123,11 @@ for restore to succeed.
 The centre panel list of tasks not yet sent to Jira (`status=New`) refreshes every 30 seconds, so tasks
 created in Jira disappear without a page reload; an open edit form keeps its input across refreshes.
 
+## AI vs non-AI details
+
+In the "Tasks solved per project" panel, the "AI vs non-AI per project" list and bar chart are collapsed by
+default. The chevron toggle next to the heading expands and collapses them; the state is not persisted.
+
 ## Theme
 
 The header has a Theme selector (System, Light, Dark). System, the default, follows the OS/browser
