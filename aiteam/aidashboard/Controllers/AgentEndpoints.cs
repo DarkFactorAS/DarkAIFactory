@@ -1,3 +1,4 @@
+using System.Data.Common;
 using AiDashboard.Agents;
 using DFCommonLib.Logger;
 
@@ -16,6 +17,7 @@ public static class AgentEndpoints
     public const int MaxNameLength = 255;
     public const int MaxBehaviorLength = 8000;
     public const int MaxModelLength = 255;
+    private const int MySqlDuplicateKeyError = 1062;
     public static readonly string[] LlmProviders = ["Claude", "Copilot"];
     public static readonly string[] Capabilities = ["Jira", "Planning", "Builder", "Review"];
 
@@ -181,11 +183,33 @@ public static class AgentEndpoints
         {
             return action();
         }
+        catch (Exception ex) when (IsDuplicateKey(ex))
+        {
+            // The database unique index on active agent names is the final authority:
+            // concurrent creates/renames can both pass the pre-check in Validate.
+            return Results.BadRequest(new { error = "An agent with that name already exists." });
+        }
         catch (Exception ex)
         {
             DFLogger.LogOutput(DFLogLevel.ERROR, "Agents", $"Agent request failed ({ex.GetType().Name}).");
             return Results.Json(new { error = "Unable to process the agent request." },
                 statusCode: StatusCodes.Status500InternalServerError);
         }
+    }
+
+    private static bool IsDuplicateKey(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is DbException db &&
+                (current.GetType().GetProperty("Number")?.GetValue(current) is int number
+                    ? number == MySqlDuplicateKeyError
+                    : db.Message.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
