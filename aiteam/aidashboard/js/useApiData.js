@@ -7,14 +7,16 @@ export default function useApiData(url, { pollMs } = {}) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
 
   useEffect(() => {
-    let controller = null;
+    const controller = new AbortController();
     let cancelled = false;
+    let inFlight = false;
 
     const load = (initial) => {
-      controller?.abort();
-      const current = new AbortController();
-      controller = current;
-      fetch(url, { signal: current.signal })
+      // Skip a poll tick while the previous request is still running, so slow
+      // responses can complete instead of being aborted by the next tick.
+      if (inFlight) return;
+      inFlight = true;
+      fetch(url, { signal: controller.signal })
         .then((response) => {
           if (!response.ok) {
             throw new Error(`Request failed (${response.status})`);
@@ -27,6 +29,9 @@ export default function useApiData(url, { pollMs } = {}) {
         .catch((error) => {
           if (cancelled || error.name === "AbortError") return;
           setState((prev) => ({ data: initial ? null : prev.data, loading: false, error: error.message }));
+        })
+        .finally(() => {
+          inFlight = false;
         });
     };
 
@@ -37,7 +42,7 @@ export default function useApiData(url, { pollMs } = {}) {
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
-      controller?.abort();
+      controller.abort();
     };
   }, [url, pollMs]);
 
