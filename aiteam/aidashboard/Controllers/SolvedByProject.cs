@@ -27,7 +27,7 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
     ];
 
     private readonly Func<string, WorkflowLabels> _loadLabels;
-    private readonly IReadOnlyList<string> _configuredAiLabels;
+    private readonly DashboardSettings _dashboard;
     private readonly HttpClient _httpClient;
 
     public JiraSolvedClient(
@@ -37,7 +37,7 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
     {
         var jira = settings.Jira;
         _loadLabels = loadLabels;
-        _configuredAiLabels = settings.Dashboard.AiLabels;
+        _dashboard = settings.Dashboard;
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler);
         _httpClient.BaseAddress = new Uri(jira.JiraBaseUrl);
         var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{jira.JiraEmail}:{jira.JiraApiToken}"));
@@ -49,8 +49,9 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
     public async Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken)
     {
         var issues = new List<SolvedIssue>();
-        var aiLabels = _configuredAiLabels.Count > 0
-            ? _configuredAiLabels.ToHashSet(StringComparer.Ordinal)
+        var configuredAiLabels = _dashboard.AiLabels;
+        var aiLabels = configuredAiLabels.Count > 0
+            ? configuredAiLabels.ToHashSet(StringComparer.Ordinal)
             : AiWorkLabelKeys
                 .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
                 .ToHashSet(StringComparer.Ordinal);

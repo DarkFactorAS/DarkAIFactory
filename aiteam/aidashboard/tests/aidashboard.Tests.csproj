@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="ActiveAiTaskServiceTests.cs" />
     <Compile Include="SolvedByProjectTests.cs" />
+    <Compile Include="DashboardSettingsEndpointsTests.cs" />
     <Compile Include="AgentTaskEndpointsTests.cs" />
     <Compile Include="AgentEndpointsTests.cs" />
     <Compile Include="JiraCommentEndpointTests.cs" />

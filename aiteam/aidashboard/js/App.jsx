@@ -4,13 +4,18 @@ import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
+import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
 
-function Panel({ title, state, emptyText, children }) {
+function Panel({ title, state, emptyText, children, actions, extra }) {
   const { data, loading, error } = state;
   return (
     <section className="rounded-lg bg-white p-4 shadow">
-      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {actions}
+      </div>
+      {extra}
       {loading && <p role="status" className="text-slate-500">Loading...</p>}
       {error && (
         <p role="alert" className="text-red-600">
@@ -119,8 +124,35 @@ function AiShareBarChart({ items }) {
 
 function SolvedByProjectPanel() {
   const state = useApiData("/api/stats/solved-by-project");
+  const [editing, setEditing] = useState(false);
   return (
-    <Panel title="Tasks solved per project" state={state} emptyText="No solved tasks yet.">
+    <Panel
+      title="Tasks solved per project"
+      state={state}
+      emptyText="No solved tasks yet."
+      extra={
+        editing && (
+          <AiLabelsEditor
+            onCancel={() => setEditing(false)}
+            onSaved={() => {
+              setEditing(false);
+              state.reload();
+            }}
+          />
+        )
+      }
+      actions={
+        !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded border border-slate-300 px-2 py-1 text-sm"
+          >
+            Edit AI labels
+          </button>
+        )
+      }
+    >
       {(items) => (
         <div>
           <PieWithLegend
