@@ -451,15 +451,24 @@ public sealed class ReviewCapabilityTests
 
     private sealed class PrRepo : IAgentPullRequestRepository
     {
+        public List<StoredAgentPullRequest> All { get; } = [Pr()];
         public void Record(AgentPullRequestRecord pullRequest) { }
-        public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) => [Pr().PullRequest];
-        public IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId) => [Pr()];
+        public IReadOnlyList<AgentPullRequestRecord> GetForAgent(long agentId) =>
+            GetStoredForAgent(agentId).Select(stored => stored.PullRequest).ToList();
+        public IReadOnlyList<StoredAgentPullRequest> GetStoredForAgent(long agentId) =>
+            All.Where(stored => stored.PullRequest.AgentId == agentId).ToList();
+        public IReadOnlyList<StoredAgentPullRequest> GetAllStored() => All;
     }
 
     private sealed class NoLock : IAgentClaimLock
     {
         public IDisposable? TryAcquire(long agentId, string issueKey) => new Nop();
         private sealed class Nop : IDisposable { public void Dispose() { } }
+    }
+
+    private sealed class HeldLock : IAgentClaimLock
+    {
+        public IDisposable? TryAcquire(long agentId, string issueKey) => null;
     }
 
     [Fact]
@@ -475,6 +484,47 @@ public sealed class ReviewCapabilityTests
         Assert.Equal(AgentCapabilityKind.Review, capability.Kind);
         await capability.RunCycleAsync(context, CancellationToken.None);
         Assert.Empty(git.Calls);
+    }
+
+    [Fact]
+    public async Task CapabilitySkipsCommentScanWhenPullRequestIsClaimedElsewhere()
+    {
+        var gitHub = new GraphQlStub();
+        var git = new FakeGit([]);
+        var capability = new ReviewCapability(
+            new ReviewOptions("t", "reviewer", 3), new PrRepo(), new FakeStore(), git,
+            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), gitHub);
+        var context = new AgentContext(
+            new AgentDefinition(2, "Roger Review", "r", "b", "Claude", null, true, false), ["DFAI"], new HeldLock());
+
+        await capability.RunCycleAsync(context, CancellationToken.None);
+
+        Assert.Single(gitHub.Requests);
+        Assert.Empty(git.Calls);
+    }
+
+    [Fact]
+    public async Task ReviewerAgentChecksPullRequestsOpenedByAnotherAgentInItsProjects()
+    {
+        // Agent 3 (builder) opened the pull request; agent 2 only has the Review capability.
+        var repo = new PrRepo();
+        repo.All.Clear();
+        repo.All.Add(new StoredAgentPullRequest(
+            5, new AgentPullRequestRecord(3, "DFAI-1", "https://github.com/o/r", 7, "https://github.com/o/r/pull/7")));
+        repo.All.Add(new StoredAgentPullRequest(
+            6, new AgentPullRequestRecord(3, "OTHER-1", "https://github.com/o/r", 8, "https://github.com/o/r/pull/8")));
+        var gitHub = new GraphQlStub();
+        var store = new FakeStore { Attempts = { [10] = 3, [11] = 3, [12] = 3 } };
+        var capability = new ReviewCapability(
+            new ReviewOptions("t", "reviewer", 3), repo, store, new FakeGit([]),
+            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), gitHub);
+        var context = new AgentContext(
+            new AgentDefinition(2, "Roger Review", "r", "b", "Claude", null, true, false), ["DFAI"], new NoLock());
+
+        await capability.RunCycleAsync(context, CancellationToken.None);
+
+        Assert.Contains(gitHub.Requests, request => request.Contains("\"number\":7") || request.Contains("number: 7"));
+        Assert.DoesNotContain(gitHub.Requests, request => request.Contains("\"number\":8") || request.Contains("number: 8"));
     }
 }
 
