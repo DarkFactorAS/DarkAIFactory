@@ -104,6 +104,8 @@ services:
     init: true
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      # Bearer token for dashboard writes (comments, agent changes); empty disables writes (401).
+      Dashboard__WriteToken: ${DASHBOARD_WRITE_TOKEN:-}
     security_opt:
       - no-new-privileges:true
     cap_drop:
