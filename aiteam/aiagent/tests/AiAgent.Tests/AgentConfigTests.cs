@@ -213,7 +213,6 @@ public sealed class AgentConfigTests
         };
         var loop = new AgentLoop(1, repo, [cap], new HandleLock(), TimeSpan.FromMilliseconds(10), status);
         await loop.RunCycleAsync(default);
-        Assert.Contains((1L, AgentState.Running, (string?)null, (AgentCapabilityKind?)AgentCapabilityKind.Builder), status.Sets);
         Assert.Contains((1L, AgentState.Running, "DFAI-9", (AgentCapabilityKind?)AgentCapabilityKind.Builder), status.Sets);
         Assert.Equal(AgentState.Idle, status.Sets[^1].State);
         Assert.Null(status.Sets[^1].Issue);

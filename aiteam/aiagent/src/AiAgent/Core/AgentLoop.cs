@@ -24,6 +24,8 @@ public sealed class AgentLoop(
     private readonly object _statusLock = new();
     private string? _currentIssue;
     private AgentCapabilityKind? _currentCapability;
+    // The capability being polled; only reported as working once it claims an issue.
+    private AgentCapabilityKind? _polling;
 
     public long AgentId => agentId;
 
@@ -91,7 +93,11 @@ public sealed class AgentLoop(
             using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var heartbeatTask = RunHeartbeatAsync(heartbeat.Token);
             var failed = false;
-            WriteStatus(AgentState.Running, null, capability.Kind);
+            lock (_statusLock)
+            {
+                _polling = capability.Kind;
+            }
+
             try
             {
                 await capability.RunCycleAsync(context, cancellationToken);
@@ -110,6 +116,10 @@ public sealed class AgentLoop(
             {
                 heartbeat.Cancel();
                 await heartbeatTask;
+                lock (_statusLock)
+                {
+                    _polling = null;
+                }
             }
 
             WriteStatus(failed ? AgentState.Error : AgentState.Idle, null, failed ? capability.Kind : null);
@@ -173,13 +183,21 @@ public sealed class AgentLoop(
         AgentCapabilityKind? capability;
         lock (_statusLock)
         {
-            capability = _currentCapability;
+            capability = _polling;
         }
 
         // Only update while a capability is running; the claim handle may be disposed after the run ends.
         if (capability is not null)
         {
-            WriteStatus(AgentState.Running, issueKey, capability);
+            // Highlight the capability only while it holds a claim; a released claim returns to Idle.
+            if (issueKey is null)
+            {
+                WriteStatus(AgentState.Idle, null, null);
+            }
+            else
+            {
+                WriteStatus(AgentState.Running, issueKey, capability);
+            }
         }
     }
 
