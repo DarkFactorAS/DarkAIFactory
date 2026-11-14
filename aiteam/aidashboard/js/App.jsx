@@ -247,11 +247,12 @@ export default function App() {
   return (
     <WriteTokenProvider>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <header className="relative bg-slate-900 px-6 py-4 shadow">
+      <header className="bg-slate-900 px-6 py-4 shadow lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
+        <div className="hidden lg:block" aria-hidden="true" />
         <h1 className="text-2xl font-bold text-white text-center">
           DarkAIFactory - AI Team workflow
         </h1>
-        <div className="mt-2 flex justify-center sm:absolute sm:right-6 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2">
+        <div className="mt-2 flex justify-center lg:mt-0 lg:justify-end">
           <ThemeToggle theme={theme} onChange={setTheme} />
         </div>
       </header>
