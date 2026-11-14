@@ -477,3 +477,35 @@ public sealed class ReviewCapabilityTests
         Assert.Empty(git.Calls);
     }
 }
+
+public class AutoMergePolicyTests
+{
+    private static PullRequestMergeInfo Info(
+        string branch = "aiagent/DFAI-1", string state = "clean", bool draft = false, params string[] files) =>
+        new(draft, state, "sha", branch, files);
+
+    private static string? Reason(PullRequestMergeInfo info, int total = 2, int unresolved = 0, int failed = 0) =>
+        AutoMergePolicy.BlockReason(info, total, unresolved, failed, AutoMergePolicy.DefaultAgentCodePaths);
+
+    [Fact]
+    public void Allows_CleanResolvedNonAgentPullRequest() =>
+        Assert.Null(Reason(Info(files: ["src/Foo.cs"])));
+
+    [Fact]
+    public void Blocks_Draft_Unclean_NoComments_Unresolved()
+    {
+        Assert.NotNull(Reason(Info(draft: true)));
+        Assert.NotNull(Reason(Info(state: "blocked")));
+        Assert.NotNull(Reason(Info(), total: 0));
+        Assert.NotNull(Reason(Info(), unresolved: 1));
+        Assert.NotNull(Reason(Info(), failed: 1));
+    }
+
+    [Fact]
+    public void Blocks_ParentBranchAndAgentCode()
+    {
+        Assert.NotNull(Reason(Info(branch: "aiagent/parent/DFAI-2")));
+        Assert.NotNull(Reason(Info(files: ["aiteam/aiagent/src/X.cs"])));
+        Assert.NotNull(Reason(Info(files: ["AGENTS.md"])));
+    }
+}
