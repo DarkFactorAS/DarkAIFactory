@@ -6,11 +6,34 @@ internal sealed class FakeRepository : IAgentRepository
 {
     public AgentDefinition? Agent { get; set; } = new(1, "a", "role", "behavior", "Claude", null, true, false);
     public HashSet<AgentCapabilityKind> Capabilities { get; set; } = [];
+    public List<AgentDefinition> Others { get; } = [];
+    public Dictionary<long, string[]> Projects { get; } = [];
     public IReadOnlyList<AgentDefinition> GetEnabledAgents() =>
-        Agent is { Enabled: true, Deleted: false } ? [Agent] : [];
-    public AgentDefinition? GetAgent(long agentId) => Agent;
+        GetAllAgents().Where(a => a is { Enabled: true, Deleted: false }).ToList();
+    public IReadOnlyList<AgentDefinition> GetAllAgents() =>
+        (Agent is null ? [] : new List<AgentDefinition> { Agent }).Concat(Others).ToList();
+    public AgentDefinition? GetAgent(long agentId) =>
+        GetAllAgents().FirstOrDefault(a => a.Id == agentId);
     public IReadOnlySet<AgentCapabilityKind> GetEnabledCapabilities(long agentId) => Capabilities.ToHashSet();
-    public IReadOnlyList<string> GetProjectKeys(long agentId) => ["DFAI"];
+    public IReadOnlyList<string> GetProjectKeys(long agentId) =>
+        Projects.TryGetValue(agentId, out var keys) ? keys : ["DFAI"];
+}
+
+internal sealed class FakeStatusWriter : IAgentStatusWriter
+{
+    public List<(long Id, AgentState State, string? Issue, AgentCapabilityKind? Capability)> Sets { get; } = [];
+    public int Heartbeats;
+    public bool Throw { get; set; }
+    public void Set(long agentId, AgentState state, string? issueKey, AgentCapabilityKind? capability)
+    {
+        if (Throw) throw new InvalidOperationException("db down");
+        lock (Sets) Sets.Add((agentId, state, issueKey, capability));
+    }
+    public void Heartbeat(long agentId)
+    {
+        if (Throw) throw new InvalidOperationException("db down");
+        Interlocked.Increment(ref Heartbeats);
+    }
 }
 
 internal sealed class FakeCapability(AgentCapabilityKind kind, List<AgentCapabilityKind> log) : IAgentCapability
@@ -109,7 +132,9 @@ public sealed class AgentLoopTests
     {
         var prompt = PromptComposer.Compose(new(1, "Bot", "Developer", "Be careful", "Claude", null, true, false), "Fix it");
         Assert.Contains("You are Bot.", prompt);
-        Assert.Contains("## Role\nDeveloper", prompt.Replace("\r", ""));
+        var text = prompt.Replace("\r", "");
+        Assert.Contains("## Agent role and behavior", text);
+        Assert.Contains("Role: Developer", text);
         Assert.Contains("Be careful", prompt);
         Assert.Contains("Fix it", prompt);
     }

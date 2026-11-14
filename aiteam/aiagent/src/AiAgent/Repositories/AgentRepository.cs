@@ -23,6 +23,20 @@ public sealed class AgentRepository(IDbConnectionFactory connectionFactory) : IA
         return agents;
     }
 
+    public IReadOnlyList<AgentDefinition> GetAllAgents()
+    {
+        using var command = connectionFactory.CreateCommand(
+            $"SELECT {Columns} FROM `agent_definitions` ORDER BY `id`");
+        using var reader = command.ExecuteReader();
+        var agents = new List<AgentDefinition>();
+        while (reader.Read())
+        {
+            agents.Add(Map(reader));
+        }
+
+        return agents;
+    }
+
     public AgentDefinition? GetAgent(long agentId)
     {
         using var command = connectionFactory.CreateCommand(

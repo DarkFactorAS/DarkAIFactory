@@ -122,5 +122,6 @@ var agentHost = new AgentHost(
     agentRepository,
     capabilities,
     new AgentClaimLock(connectionFactory),
-    TimeSpan.FromSeconds(pollSeconds));
+    TimeSpan.FromSeconds(pollSeconds),
+    new AgentStatusRepository(connectionFactory));
 await agentHost.RunAsync(cancellation.Token);

@@ -1,4 +1,5 @@
 using AiAgent.Core;
+using AiAgent.LanguageModel;
 using AiAgent.GitHub;
 using AiAgent.Repositories;
 using AiAgent.Runner;
@@ -25,9 +26,18 @@ public sealed class ReviewCapability(
 
     public AgentCapabilityKind Kind => AgentCapabilityKind.Review;
 
+    private static string ProjectKeyOf(string issueKey)
+    {
+        var dash = issueKey.LastIndexOf('-');
+        return dash > 0 ? issueKey[..dash] : issueKey;
+    }
+
     public async Task RunCycleAsync(AgentContext context, CancellationToken cancellationToken)
     {
-        var tracked = pullRequests.GetStoredForAgent(context.AgentId);
+        var tracked = pullRequests.GetStoredForAgent(context.AgentId)
+            .Where(stored => context.ProjectKeys.Contains(
+                ProjectKeyOf(stored.PullRequest.JiraKey), StringComparer.OrdinalIgnoreCase))
+            .ToList();
         if (tracked.Count == 0)
         {
             return;
@@ -210,7 +220,7 @@ public sealed class ReviewCapability(
     {
         public async Task RunAsync(string workspacePath, string prompt, CancellationToken cancellationToken)
         {
-            var provider = agent.LlmProvider.Trim().ToLowerInvariant() is "copilot" or "github" ? "copilot" : "claude";
+            var provider = new LanguageModelFactory().Create(agent).Provider;
             // Closing the request on timeout makes the runner cancel the job (it observes request abortion).
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(options.RunnerTimeout);
