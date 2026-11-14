@@ -1,4 +1,5 @@
 using AiAgent.Core;
+using AiAgent.Capabilities.Jira;
 using AiAgent.LanguageModel;
 using AiAgent.GitHub;
 using AiAgent.Repositories;
@@ -20,9 +21,11 @@ public sealed class ReviewCapability(
     IGitRunner gitRunner,
     RunnerClient runnerClient,
     HttpMessageHandler? gitHubHandler = null,
-    Uri? gitHubApiUrl = null) : IAgentCapability
+    Uri? gitHubApiUrl = null,
+    Func<IJiraClient>? createJiraClient = null) : IAgentCapability
 {
     private const string Category = "Review";
+    internal const string ReadyToMergeLabel = "aiagent-ready-to-merge";
 
     public AgentCapabilityKind Kind => AgentCapabilityKind.Review;
 
@@ -63,7 +66,7 @@ public sealed class ReviewCapability(
             LogScan(pullRequest, scan);
             if (scan.Actionable.Count == 0)
             {
-                await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
+                await LogIfReadyToMergeAsync(client, pullRequest, 0, cancellationToken);
                 continue;
             }
 
@@ -71,9 +74,9 @@ public sealed class ReviewCapability(
             {
                 var failedCount = await FixPullRequestAsync(
                     context, client, pullRequest, scan.Actionable, scan.ThreadMembers, cancellationToken);
-                if (failedCount == 0)
+                if (failedCount is { } completedFailedCount)
                 {
-                    await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
+                    await LogIfReadyToMergeAsync(client, pullRequest, completedFailedCount, cancellationToken);
                 }
             }
             catch (RunnerBusyException)
@@ -94,14 +97,42 @@ public sealed class ReviewCapability(
         unresolvedThreads == 0 && failedCount == 0;
 
     private async Task LogIfReadyToMergeAsync(
-        ReviewGitHubClient client, StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+        ReviewGitHubClient client, StoredAgentPullRequest pullRequest, int failedCount,
+        CancellationToken cancellationToken)
     {
         // Read the head before counting so the counts can be tied to the commit they were checked against.
         var checkedHead = options.AutoMergeEnabled
             ? (await client.GetHeadAsync(pullRequest, cancellationToken)).Sha
             : null;
         var counts = await client.CountThreadsAsync(pullRequest, cancellationToken);
-        if (counts is not { } threads || !IsReadyToMerge(threads.Unresolved, 0))
+        if (counts is not { } threads)
+        {
+            return;
+        }
+
+        var readyToMerge = IsReadyToMerge(threads.Unresolved, failedCount);
+        try
+        {
+            if (createJiraClient is not null)
+            {
+                var jira = createJiraClient();
+                try
+                {
+                    await SetReadinessLabelAsync(jira, pullRequest.PullRequest.JiraKey, readyToMerge, cancellationToken);
+                }
+                finally
+                {
+                    (jira as IDisposable)?.Dispose();
+                }
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category,
+                $"{pullRequest.PullRequest.JiraKey}: could not update the merge-readiness Jira label: {exception.Message}");
+        }
+
+        if (!readyToMerge)
         {
             return;
         }
@@ -130,7 +161,7 @@ public sealed class ReviewCapability(
                 return;
             }
 
-            var reason = AutoMergePolicy.BlockReason(info, threads.Total, threads.Unresolved, 0, options.AgentCodePaths);
+            var reason = AutoMergePolicy.BlockReason(info, threads.Total, threads.Unresolved, failedCount, options.AgentCodePaths);
             if (reason is not null)
             {
                 Log($"{prefix}: not merged automatically: {reason}.");
@@ -143,6 +174,21 @@ public sealed class ReviewCapability(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
+        }
+    }
+
+    internal static async Task SetReadinessLabelAsync(
+        IJiraClient jira, string issueKey, bool readyToMerge, CancellationToken cancellationToken)
+    {
+        var issue = await jira.GetIssueAsync(issueKey, cancellationToken);
+        var hasLabel = issue.Labels.Contains(ReadyToMergeLabel, StringComparer.Ordinal);
+        if (readyToMerge && !hasLabel)
+        {
+            await jira.AddLabelAsync(issueKey, ReadyToMergeLabel, cancellationToken);
+        }
+        else if (!readyToMerge && hasLabel)
+        {
+            await jira.RemoveLabelAsync(issueKey, ReadyToMergeLabel, cancellationToken);
         }
     }
 

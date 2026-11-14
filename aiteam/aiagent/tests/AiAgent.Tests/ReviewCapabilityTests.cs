@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using AiAgent.Capabilities.Jira;
 using AiAgent.Capabilities.Review;
 using AiAgent.Core;
 using AiAgent.GitHub;
@@ -11,6 +12,50 @@ namespace AiAgent.Tests;
 public sealed class ReviewCapabilityTests
 {
     private const string Sha = "0123456789abcdef0123456789abcdef01234567";
+
+    private sealed class ReadinessJira : IJiraClient
+    {
+        private readonly HashSet<string> _labels = [];
+        public List<string> AddedLabels { get; } = [];
+        public List<string> RemovedLabels { get; } = [];
+
+        public Task<JiraIssue> GetIssueAsync(string key, CancellationToken ct) =>
+            Task.FromResult(new JiraIssue(key, "", "") { Labels = _labels.ToArray() });
+        public Task AddLabelAsync(string key, string label, CancellationToken ct)
+        {
+            AddedLabels.Add(label);
+            _labels.Add(label);
+            return Task.CompletedTask;
+        }
+        public Task RemoveLabelAsync(string key, string label, CancellationToken ct)
+        {
+            RemovedLabels.Add(label);
+            _labels.Remove(label);
+            return Task.CompletedTask;
+        }
+        public Task<string> CreateIssueAsync(string projectKey, string title, string description, CancellationToken ct) =>
+            throw new NotImplementedException();
+        public Task<IReadOnlyList<JiraIssue>> SearchAsync(string jql, CancellationToken ct) =>
+            throw new NotImplementedException();
+        public Task<IReadOnlyList<string>> GetCommentsAsync(string key, CancellationToken ct) =>
+            throw new NotImplementedException();
+        public Task AssignAsync(string key, string accountId, CancellationToken ct) => throw new NotImplementedException();
+        public Task AddCommentAsync(string key, string text, CancellationToken ct) => throw new NotImplementedException();
+        public Task TransitionToAsync(string key, string status, CancellationToken ct) => throw new NotImplementedException();
+    }
+
+    [Fact]
+    public async Task ReadinessLabelTracksWhetherReviewIsReadyToMerge()
+    {
+        var jira = new ReadinessJira();
+
+        await ReviewCapability.SetReadinessLabelAsync(jira, "DFAI-1", true, CancellationToken.None);
+        await ReviewCapability.SetReadinessLabelAsync(jira, "DFAI-1", true, CancellationToken.None);
+        await ReviewCapability.SetReadinessLabelAsync(jira, "DFAI-1", false, CancellationToken.None);
+
+        Assert.Equal(new[] { "aiagent-ready-to-merge" }, jira.AddedLabels);
+        Assert.Equal(new[] { "aiagent-ready-to-merge" }, jira.RemovedLabels);
+    }
 
     private sealed class FakeStore : IReviewAttemptStore
     {

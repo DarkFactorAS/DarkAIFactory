@@ -9,7 +9,7 @@ counting Jira issues in the Done status category per project (limited to the pro
 credentials are never logged).
 
 `GET /api/tasks/active-ai` returns at most 5 Jira issues (`key`, `summary`,
-`status`, `description`) that carry an AI workflow label (the `PickupLabel` and
+`status`, `description`, `labels`) that carry an AI workflow label (the `PickupLabel` and
 `AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
 `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
@@ -121,9 +121,17 @@ writer must store UTC); "now" comes from the response `Date` header. The write t
 remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
 
-Top 3 AI tasks cards get a highlighted blue border (same as working agent cards) while an
+Top 5 AI tasks cards get a highlighted blue border (same as working agent cards) while an
 enabled agent with a fresh heartbeat is Running on that issue in the Planning, Builder or Review
 capability (agents are polled every 30 seconds).
+
+Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each Jira label
+`ai-approved`, `aiagent-needs-clarification`, and `aiagent-ready-to-merge` on the issue (exact match,
+`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label while all
+review threads are resolved, and removes it when unresolved or failed review work remains.
+Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
+30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
+`aiagent-ready-to-merge`; check light and dark themes.
 
 Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale

@@ -3,7 +3,8 @@ using System.Text;
 using System.Text.Json;
 using AiTeam.Configuration;
 
-public sealed record ActiveAiTask(string Key, string Summary, string Status, string Description);
+public sealed record ActiveAiTask(string Key, string Summary, string Status, string Description,
+    IReadOnlyList<string> Labels);
 
 public interface IActiveAiTaskService
 {
@@ -103,7 +104,8 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
                     ReadString(issue, "key"),
                     ReadString(fields, "summary"),
                     status,
-                    ReadDescription(fields)),
+                    ReadDescription(fields),
+                    labels),
                 ReadString(fields, "updated")));
         }
 

@@ -91,7 +91,19 @@ public sealed class ActiveAiTaskServiceTests
         var result = await service.GetActiveAsync(CancellationToken.None);
 
         var task = Assert.Single(result);
-        Assert.Equal(new ActiveAiTask("A-3", "S A-3", "In Review", "Hello"), task);
+        Assert.Equal(("A-3", "S A-3", "In Review", "Hello"), (task.Key, task.Summary, task.Status, task.Description));
+        Assert.Equal(new[] { "ai-analyzed" }, task.Labels);
+    }
+
+    [Fact]
+    public async Task IssueWithoutLabelsFieldIsExcludedWithoutError()
+    {
+        var body = "{\"issues\":[{\"key\":\"A-1\",\"fields\":{\"summary\":\"s\",\"status\":{\"name\":\"To Do\"},\"updated\":\"2026-01-01T10:00:00.000+0000\"}}]}";
+        using var service = Create(body, out _);
+
+        var result = await service.GetActiveAsync(CancellationToken.None);
+
+        Assert.Empty(result);
     }
 
     [Fact]

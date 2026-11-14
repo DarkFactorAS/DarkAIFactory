@@ -29,7 +29,7 @@ public sealed class JiraCommentEndpointTests
     {
         public Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken) =>
             error is null
-                ? Task.FromResult<IReadOnlyList<ActiveAiTask>>([new(key, "Task", "Active", "")])
+                ? Task.FromResult<IReadOnlyList<ActiveAiTask>>([new(key, "Task", "Active", "", [])])
                 : Task.FromException<IReadOnlyList<ActiveAiTask>>(error);
     }
 
