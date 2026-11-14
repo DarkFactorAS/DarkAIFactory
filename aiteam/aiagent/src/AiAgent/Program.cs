@@ -109,7 +109,12 @@ else
             CopilotToken: reviewSettings.GitHub.AgentGitHubToken,
             WorkspaceRoot: RunnerPolicy.WorkspaceRoot)
         {
-            RunnerTimeout = TimeSpan.FromMinutes(Math.Max(1, appSettings.RunnerTimeoutMinutes))
+            RunnerTimeout = TimeSpan.FromMinutes(Math.Max(1, appSettings.RunnerTimeoutMinutes)),
+            AutoMergeEnabled = string.Equals(Env("AIAGENT_AUTO_MERGE"), "true", StringComparison.OrdinalIgnoreCase),
+            MergeMethod = Env("AIAGENT_MERGE_METHOD") ?? "squash",
+            AgentCodePaths = Env("AIAGENT_AGENT_CODE_PATHS")?.Split(
+                    ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                ?? AutoMergePolicy.DefaultAgentCodePaths
         },
         new AgentPullRequestRepository(connectionFactory),
         new AgentReviewAttemptRepository(connectionFactory),
