@@ -228,6 +228,8 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   );
 }
 
+const CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification"];
+
 function ActiveAiTasksPanel({ labelsVersion }) {
   const [openKey, setOpenKey] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -337,7 +339,18 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                   {task.key}
                   {working && <span className="sr-only"> (being worked on)</span>}
                 </span>
-                <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs">{task.status}</span>
+                <span className="flex flex-wrap items-center justify-end gap-1">
+                  {CARD_BADGE_LABELS.filter((l) => (task.labels ?? []).includes(l)).map((l) => (
+                    <span
+                      key={l}
+                      data-testid="ai-task-label-badge"
+                      className="rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-0.5 text-xs"
+                    >
+                      {l}
+                    </span>
+                  ))}
+                  <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs">{task.status}</span>
+                </span>
               </div>
               <p className="mt-1 text-sm">{task.summary}</p>
               {task.description && (
