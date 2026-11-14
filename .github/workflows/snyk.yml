@@ -6,7 +6,8 @@ permissions:
 on:
   workflow_dispatch:
   schedule:
-    # Once per day (UTC). Skipped when main has no commits in the last 24 hours.
+    # Once per day (UTC), regardless of repository activity, so newly disclosed
+    # vulnerabilities are detected even when main is unchanged.
     - cron: "17 3 * * *"
 
 concurrency:
@@ -14,37 +15,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check-changes:
-    name: Check for changes
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.check.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for commits in the last 24 hours
-        id: check
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          count=$(git log --since="24 hours ago" --oneline origin/main | wc -l)
-          if [ "$count" -gt 0 ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No commits on main in the last 24 hours; skipping Snyk scan."
-          fi
-
   snyk:
     name: Snyk dependency scan
-    needs: check-changes
-    if: needs.check-changes.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
