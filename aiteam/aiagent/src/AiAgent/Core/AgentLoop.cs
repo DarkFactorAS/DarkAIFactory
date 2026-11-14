@@ -206,8 +206,12 @@ public sealed class AgentLoop(
         }
     }
 
-    private void LogStatusFailure(Exception exception) =>
+    private void LogStatusFailure(Exception exception)
+    {
+        // May run outside the cycle's scope (shutdown, disabled or deleted cycles), so fall back to the last known name.
+        using var scope = AgentLog.BeginScope(AgentLog.Current ?? _lastName);
         AgentLog.LogOutput(DFLogLevel.ERROR, "AgentLoop", $"Agent {agentId} status write failed: {exception.Message}");
+    }
 
     /// <summary>Records the claimed issue as current_issue_key while the claim is held.</summary>
     private sealed class StatusClaimLock(AgentLoop loop, IAgentClaimLock inner) : IAgentClaimLock
