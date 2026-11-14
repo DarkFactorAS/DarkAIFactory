@@ -45,10 +45,17 @@ to the agent's projects:
 
 `src/AiAgent/Capabilities/Planning` is copied from aimanager (`ManagerPlanner`, `TriageResult`, prompts);
 aimanager itself is unchanged. For every Selected-for-Development issue of the agent's projects it runs the
-runner in `plan` mode and applies one of the five triage decisions: `clarify` (questions as Jira comment and
+runner in `plan` mode and applies one of the six triage decisions: `clarify` (questions as Jira comment and
 the clarification label), `analysis_only` (analysis comment, transition to the analysis status), `small`,
-`needs_approval` (approval label until a human adds the approved label) and `split` (full plan proposed on the
-parent, sub-tasks created with dependency links after approval, at most 10).
+`needs_approval` (approval label until a human adds the approved label), `split` (full plan proposed on the
+parent, sub-tasks created with dependency links after approval, at most 10) and `create_tasks` (see below).
+
+- `create_tasks`: the title or description explicitly asks for Jira tasks to be created. Up to 20 top-level
+  issues of `Jira.JiraTaskIssueType` (default `Task`) are created in the same project, in dependency order with
+  "Blocks" links; no approval is needed. Each task carries an `aiagent-task-correlation-<id>` label and its key is
+  checkpointed in `agent_plans` right after creation, so a failed run resumes (after removing `aiagent-failed`)
+  without duplicates. The new tasks stay in their initial status until a human moves them to Selected for
+  Development; the source issue gets a comment listing them and is moved to `Jira.JiraDoneStatus`.
 
 - The plan is stored in `agent_plans` together with the requirements fingerprint (`requirements_hash`:
   SHA-256 of summary, description and repository URL). A stored plan is reused until the title or

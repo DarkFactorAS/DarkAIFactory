@@ -26,11 +26,42 @@ internal sealed class FakePlanningJira : IPlanningJira
     public List<string> Queries { get; } = [];
     private int _nextSubtask = 100;
 
+    public List<string> CreatedTasks { get; } = [];
+    public List<(string Blocker, string Blocked)> Links { get; } = [];
+    public int? FailCreateTaskAttempt { get; set; }
+    private int _createTaskAttempts;
+
     public Task<IReadOnlyList<JiraIssue>> SearchAsync(string jql, CancellationToken cancellationToken)
     {
         Queries.Add(jql);
-        return Task.FromResult<IReadOnlyList<JiraIssue>>(Issues.Values.ToList());
+        // Like Jira, a status filter only returns issues in that status.
+        return Task.FromResult<IReadOnlyList<JiraIssue>>(Issues.Values
+            .Where(issue => !jql.Contains("status = ", StringComparison.Ordinal) ||
+                jql.Contains($"status = \"{issue.StatusName}\"", StringComparison.Ordinal))
+            .ToList());
     }
+
+    public Task<string> CreateTaskAsync(
+        string projectKey, string summary, string description, string correlationId, CancellationToken cancellationToken)
+    {
+        if (++_createTaskAttempts == FailCreateTaskAttempt)
+        {
+            throw new HttpRequestException("Jira create failed.");
+        }
+
+        var key = $"{projectKey}-{_nextSubtask++}";
+        Issues[key] = new JiraIssue(key, summary, description, "To Do")
+        {
+            UpdatedAt = "u", Labels = [JiraClient.TaskCorrelationLabelPrefix + correlationId]
+        };
+        CreatedTasks.Add(key);
+        return Task.FromResult(key);
+    }
+
+    public Task<string?> FindTaskByCorrelationIdAsync(
+        string projectKey, string correlationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Issues.Values
+            .FirstOrDefault(issue => issue.Labels.Contains(JiraClient.TaskCorrelationLabelPrefix + correlationId))?.Key);
 
     public Task<JiraIssue> GetIssueAsync(string issueKey, CancellationToken cancellationToken) =>
         Task.FromResult(Issues[issueKey]);
@@ -85,8 +116,19 @@ internal sealed class FakePlanningJira : IPlanningJira
         return Task.FromResult(key);
     }
 
-    public Task LinkIssuesAsync(string blockerKey, string blockedKey, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task LinkIssuesAsync(string blockerKey, string blockedKey, CancellationToken cancellationToken)
+    {
+        Links.Add((blockerKey, blockedKey));
+        if (Issues.TryGetValue(blockedKey, out var blocked))
+        {
+            Issues[blockedKey] = blocked with
+            {
+                Blockers = [.. blocked.Blockers, new JiraBlocker(blockerKey, Issues[blockerKey].StatusName)]
+            };
+        }
+
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FakePlanningRunner(Func<JiraIssue, string> plan) : IPlanningRunner
@@ -267,6 +309,93 @@ public sealed class PlanningTests
         await f.RunAsync();
         Assert.Contains(PlanningConfiguration.DefaultApprovalLabel, f.Jira.Issues["DFAI-1"].Labels);
         Assert.DoesNotContain("aiagent-analyzed", f.Jira.Issues["DFAI-1"].Labels);
+    }
+
+    private const string CreateTasksPlan = """
+        {"decision":"create_tasks","plan":"Backlog for the reporting feature.","tasks":[
+          {"title":"Report API","description":"Add the report endpoint","dependsOn":[]},
+          {"title":"Report page","description":"Show the report","dependsOn":["Report API"]},
+          {"title":"Report docs","description":"Document the report","dependsOn":[]}]}
+        """;
+
+    [Fact]
+    public async Task CreateTasksCreatesTopLevelTasksInDependencyOrderAndMovesSourceToDone()
+    {
+        var f = new Fixture(CreateTasksPlan, true, Issue());
+        await f.RunAsync();
+
+        Assert.Equal(["Report API", "Report page", "Report docs"],
+            f.Jira.CreatedTasks.Select(key => f.Jira.Issues[key].Summary));
+        var (api, page, docs) = (f.Jira.CreatedTasks[0], f.Jira.CreatedTasks[1], f.Jira.CreatedTasks[2]);
+        Assert.All(f.Jira.CreatedTasks, key =>
+        {
+            Assert.Null(f.Jira.Issues[key].ParentKey);
+            Assert.StartsWith("DFAI-", key);
+            Assert.Contains("Created by aiAgent from DFAI-1.", f.Jira.Issues[key].Description);
+            Assert.DoesNotContain("aiagent-analyzed", f.Jira.Issues[key].Labels);
+            Assert.False(f.Plans.Plans.ContainsKey(key));
+        });
+        Assert.Contains($"Depends on: {api}", f.Jira.Issues[page].Description);
+        Assert.Equal([(api, page)], f.Jira.Links);
+        Assert.Equal("Done", f.Jira.Issues["DFAI-1"].StatusName);
+        Assert.Contains(f.Jira.Comments["DFAI-1"], comment =>
+            comment.Contains("Backlog for the reporting feature.") &&
+            comment.Contains($"{api} Report API") &&
+            comment.Contains($"{page} Report page (after {api})") &&
+            comment.Contains($"{docs} Report docs"));
+        Assert.StartsWith("[triage:create_tasks]", f.Plans.Plans["DFAI-1"].Plan);
+        Assert.True(f.Plans.Plans["DFAI-1"].PostedToJira);
+        Assert.Equal(["DFAI-1"], f.Runner.Planned);
+    }
+
+    [Fact]
+    public async Task CreateTasksResumesWithoutDuplicatesAfterFailure()
+    {
+        var f = new Fixture(CreateTasksPlan, true, Issue());
+        f.Jira.FailCreateTaskAttempt = 2;
+        await f.RunAsync();
+
+        Assert.Single(f.Jira.CreatedTasks);
+        Assert.Equal("Selected for Development", f.Jira.Issues["DFAI-1"].StatusName);
+        Assert.Contains("aiagent-failed", f.Jira.Issues["DFAI-1"].Labels);
+
+        await f.Jira.RemoveLabelAsync("DFAI-1", "aiagent-failed", default);
+        await f.RunAsync();
+
+        Assert.Single(f.Runner.Planned);
+        Assert.Equal(["Report API", "Report page", "Report docs"],
+            f.Jira.CreatedTasks.Select(key => f.Jira.Issues[key].Summary));
+        Assert.Contains($"Depends on: {f.Jira.CreatedTasks[0]}", f.Jira.Issues[f.Jira.CreatedTasks[1]].Description);
+        Assert.Equal("Done", f.Jira.Issues["DFAI-1"].StatusName);
+    }
+
+    [Fact]
+    public async Task CreateTasksRefusesToReplanWhenSourceChangedAfterCreatingTasks()
+    {
+        var f = new Fixture(CreateTasksPlan, true, Issue());
+        f.Jira.FailCreateTaskAttempt = 2;
+        await f.RunAsync();
+        await f.Jira.RemoveLabelAsync("DFAI-1", "aiagent-failed", default);
+        f.Jira.Issues["DFAI-1"] = f.Jira.Issues["DFAI-1"] with { Description = "Changed source description" };
+
+        await f.RunAsync();
+
+        Assert.Single(f.Runner.Planned);
+        Assert.Single(f.Jira.CreatedTasks);
+        Assert.StartsWith("[triage:create_tasks]", f.Plans.Plans["DFAI-1"].Plan);
+        Assert.Contains("aiagent-failed", f.Jira.Issues["DFAI-1"].Labels);
+    }
+
+    [Fact]
+    public void CreateTasksTriageNeedsTasksAndRejectsCycles()
+    {
+        Assert.Throws<InvalidDataException>(() => TriageResult.Parse("""{"decision":"create_tasks","tasks":[]}"""));
+        Assert.Throws<InvalidDataException>(() => TriageResult.Parse(
+            """{"decision":"create_tasks","tasks":[{"title":"a","description":"d","dependsOn":["b"]},{"title":"b","description":"d","dependsOn":["a"]}]}"""));
+        var result = TriageResult.Parse(CreateTasksPlan);
+        Assert.Equal(TriageDecision.CreateTasks, result.Decision);
+        Assert.Equal(3, result.Tasks.Count);
+        Assert.Contains("\"create_tasks\"", PlanningPrompts.BuildTriagePrompt(Issue()));
     }
 
     private const string SplitPlan = """
