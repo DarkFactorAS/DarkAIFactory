@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using AiDashboard.Agents;
 using AiDashboard.Stats;
 using AiTeam.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -11,8 +12,22 @@ public class SolvedByProjectTests
 {
     private sealed class FakeClient(IReadOnlyList<SolvedIssue>? issues = null, Exception? error = null) : IJiraSolvedClient
     {
-        public Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<SolvedIssue>> GetSolvedIssuesAsync(IReadOnlyCollection<string> projectKeys, CancellationToken cancellationToken) =>
             error is null ? Task.FromResult(issues ?? []) : Task.FromException<IReadOnlyList<SolvedIssue>>(error);
+    }
+
+    private sealed class FakeRepo(params string[] keys) : IAgentDefinitionRepository
+    {
+        public IReadOnlyList<AgentView> List() => [];
+        public AgentView? Find(long id) => null;
+        public bool NameExists(string name, long? excludeId) => false;
+        public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> k) => [];
+        public IReadOnlyList<string> ListProjectKeys() => keys;
+        public IReadOnlyList<string> ListBuilderProjectKeys() => keys;
+        public AgentView Create(AgentWrite agent) => throw new NotSupportedException();
+        public AgentView? Update(long id, AgentWrite agent) => throw new NotSupportedException();
+        public bool SetEnabled(long id, bool enabled) => false;
+        public bool SoftDelete(long id) => false;
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
@@ -43,7 +58,7 @@ public class SolvedByProjectTests
     public async Task Groups_and_counts_solved_issues_per_project()
     {
         var result = await SolvedByProjectEndpoint.HandleAsync(
-            new FakeClient([new("DFAI", true), new("ABC", false), new("DFAI", false), new("DFAI", true)]), CancellationToken.None);
+            new FakeClient([new("DFAI", true), new("ABC", false), new("DFAI", false), new("DFAI", true)]), new FakeRepo("DFAI"), CancellationToken.None);
 
         var ok = Assert.IsType<Ok<List<SolvedByProject>>>(result);
         Assert.Equal(
@@ -54,7 +69,7 @@ public class SolvedByProjectTests
     [Fact]
     public async Task Returns_empty_list_when_nothing_solved()
     {
-        var result = await SolvedByProjectEndpoint.HandleAsync(new FakeClient(), CancellationToken.None);
+        var result = await SolvedByProjectEndpoint.HandleAsync(new FakeClient(), new FakeRepo("DFAI"), CancellationToken.None);
 
         Assert.Empty(Assert.IsType<Ok<List<SolvedByProject>>>(result).Value!);
     }
@@ -63,7 +78,7 @@ public class SolvedByProjectTests
     public async Task Client_failure_returns_502_without_leaking_details()
     {
         var result = await SolvedByProjectEndpoint.HandleAsync(
-            new FakeClient(error: new HttpRequestException("secret-token")), CancellationToken.None);
+            new FakeClient(error: new HttpRequestException("secret-token")), new FakeRepo("DFAI"), CancellationToken.None);
 
         var json = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(StatusCodes.Status502BadGateway, json.StatusCode);
@@ -89,7 +104,7 @@ public class SolvedByProjectTests
         };
         using var client = new JiraSolvedClient(settings, LoadLabels, handler);
 
-        var issues = await client.GetSolvedIssuesAsync(CancellationToken.None);
+        var issues = await client.GetSolvedIssuesAsync(["AI"], CancellationToken.None);
 
         Assert.Equal(
             [new SolvedIssue("DFAI", true), new SolvedIssue("DFAI", false), new SolvedIssue("DFAI", false), new SolvedIssue("ABC", true)],
@@ -104,7 +119,7 @@ public class SolvedByProjectTests
     public async Task Json_contract_contains_ai_counts()
     {
         var result = await SolvedByProjectEndpoint.HandleAsync(
-            new FakeClient([new("DFAI", true)]), CancellationToken.None);
+            new FakeClient([new("DFAI", true)]), new FakeRepo("DFAI"), CancellationToken.None);
 
         var ok = Assert.IsType<Ok<List<SolvedByProject>>>(result);
         var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
@@ -124,9 +139,27 @@ public class SolvedByProjectTests
         using var client = new JiraSolvedClient(settings, LoadLabels, handler);
 
         settings.Dashboard.AiLabels = ["runtime"];
-        Assert.Equal([true, false], (await client.GetSolvedIssuesAsync(CancellationToken.None)).Select(i => i.IsAi));
+        Assert.Equal([true, false], (await client.GetSolvedIssuesAsync(["AI"], CancellationToken.None)).Select(i => i.IsAi));
 
         settings.Dashboard.AiLabels = [];
-        Assert.Equal([false, true], (await client.GetSolvedIssuesAsync(CancellationToken.None)).Select(i => i.IsAi));
+        Assert.Equal([false, true], (await client.GetSolvedIssuesAsync(["AI"], CancellationToken.None)).Select(i => i.IsAi));
+    }
+
+    [Fact]
+    public void Jql_limits_to_quoted_escaped_project_keys()
+    {
+        Assert.Equal(
+            "statusCategory = Done AND project in (\"A\", \"B\\\"C\")",
+            JiraSolvedClient.BuildJql(["A", "B\"C"]));
+    }
+
+    [Fact]
+    public async Task Empty_project_set_skips_jira()
+    {
+        var handler = new StubHandler(_ => Json("{\"issues\":[]}"));
+        var settings = new IntegrationSettings { Jira = new JiraSettings { JiraBaseUrl = "https://example.atlassian.net" } };
+        using var client = new JiraSolvedClient(settings, LoadLabels, handler);
+        Assert.Empty(await client.GetSolvedIssuesAsync([], CancellationToken.None));
+        Assert.Empty(handler.Requests);
     }
 }

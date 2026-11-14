@@ -24,6 +24,7 @@ public sealed class AgentEndpointsTests
         public bool NameExists(string name, long? excludeId) =>
             List().Any(a => a.Name == name && a.Id != excludeId);
         public IReadOnlyList<string> ListProjectKeys() => Projects;
+        public IReadOnlyList<string> ListBuilderProjectKeys() => Projects;
         public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys) =>
             Projects.Where(p => keys.Contains(p, StringComparer.OrdinalIgnoreCase)).ToList();
 
@@ -210,6 +211,7 @@ public sealed class AgentEndpointsTests
         public bool NameExists(string name, long? excludeId) => throw new InvalidOperationException("secret");
         public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> keys) => [];
         public IReadOnlyList<string> ListProjectKeys() => [];
+        public IReadOnlyList<string> ListBuilderProjectKeys() => [];
         public AgentView Create(AgentWrite agent) => throw new InvalidOperationException("secret");
         public AgentView? Update(long id, AgentWrite agent) => throw new InvalidOperationException("secret");
         public bool SetEnabled(long id, bool enabled) => throw new InvalidOperationException("secret");
