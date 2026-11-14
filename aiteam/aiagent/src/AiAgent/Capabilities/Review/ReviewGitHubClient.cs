@@ -443,7 +443,12 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
         var reviews = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}", null, cancellationToken))
             ?.AsArray() ?? [];
-        foreach (var review in reviews.Where(IsReviewer))
+        // Only submitted APPROVED or COMMENTED reviews count; dismissed and pending reviews keep their body and
+        // commit ID but must never enable a merge.
+        foreach (var review in reviews.Where(IsReviewer).Where(review =>
+                     review?["state"]?.GetValue<string>() is { } reviewState
+                     && (string.Equals(reviewState, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(reviewState, "COMMENTED", StringComparison.OrdinalIgnoreCase))))
         {
             var index = shas.IndexOf(review!["commit_id"]?.GetValue<string>() ?? string.Empty);
             if (index >= lastIndex)
