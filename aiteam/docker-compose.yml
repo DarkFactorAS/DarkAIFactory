@@ -47,7 +47,7 @@ services:
       AIAGENT_WORKSPACE_ROOT: /workspaces
       AIAGENT_RUNNER_URL: http://aiagent-runner:8080/
       # Agents per container (1-3); separate from AIAGENT_INSTANCES (number of containers).
-      AIAGENT_AGENTS_PER_INSTANCE: ${AIAGENT_AGENTS_PER_INSTANCE:-1}
+      AIAGENT_AGENTS_PER_INSTANCE: "${AIAGENT_AGENTS_PER_INSTANCE:-}"
     security_opt:
       - no-new-privileges:true
     cap_drop:
