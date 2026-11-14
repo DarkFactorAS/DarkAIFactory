@@ -57,7 +57,7 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
         className="w-full rounded border border-slate-300 dark:border-slate-600 p-1 text-sm"
       />
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        An empty list uses the workflow pickup/analyzed labels. These labels also drive the Top 3 AI tasks panel.
+        An empty list uses the workflow pickup/analyzed labels. These labels also drive the Top 5 AI tasks panel.
       </p>
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

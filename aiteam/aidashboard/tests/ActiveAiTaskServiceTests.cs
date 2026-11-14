@@ -52,19 +52,22 @@ public sealed class ActiveAiTaskServiceTests
     }
 
     [Fact]
-    public async Task ReturnsAtMostThreeMostRecentlyUpdatedMatchingIssues()
+    public async Task ReturnsAtMostFiveMostRecentlyUpdatedMatchingIssues()
     {
         var body = "{\"issues\":[" + string.Join(",",
             Issue("A-1", "In Progress", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
             Issue("A-2", "In Progress", "2026-01-04T10:00:00.000+0000", "ai-analyzed"),
             Issue("A-3", "In Progress", "2026-01-03T10:00:00.000+0000", "ai-agent-picked"),
-            Issue("A-4", "In Progress", "2026-01-02T10:00:00.000+0000", "ai-manager-planned")) + "]}";
+            Issue("A-4", "In Progress", "2026-01-02T10:00:00.000+0000", "ai-manager-planned"),
+            Issue("A-5", "In Progress", "2026-01-05T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-6", "In Progress", "2026-01-06T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-7", "In Progress", "2026-01-07T10:00:00.000+0000", "ai-analyzed")) + "]}";
         using var service = Create(body, out var handler);
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
-        Assert.Equal(new[] { "A-2", "A-3", "A-4" }, result.Select(task => task.Key));
-        Assert.Contains("maxResults=3", handler.RequestUri!.Query);
+        Assert.Equal(new[] { "A-7", "A-6", "A-5", "A-2", "A-3" }, result.Select(task => task.Key));
+        Assert.Contains($"maxResults={ActiveAiTaskService.MaxTasks}", handler.RequestUri!.Query);
     }
 
     [Fact]
@@ -84,18 +87,20 @@ public sealed class ActiveAiTaskServiceTests
     }
 
     [Fact]
-    public async Task MoreThanThreeTiedIssuesReturnTheThreeLowestKeys()
+    public async Task MoreThanFiveTiedIssuesReturnTheFiveLowestKeys()
     {
         var body = "{\"issues\":[" + string.Join(",",
             Issue("A-9", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
             Issue("A-4", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
             Issue("A-1", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
-            Issue("A-3", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed")) + "]}";
+            Issue("A-3", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-8", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed"),
+            Issue("A-2", "To Do", "2026-01-01T10:00:00.000+0000", "ai-analyzed")) + "]}";
         using var service = Create(body, out _);
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
-        Assert.Equal(new[] { "A-1", "A-3", "A-4" }, result.Select(task => task.Key));
+        Assert.Equal(new[] { "A-1", "A-2", "A-3", "A-4", "A-8" }, result.Select(task => task.Key));
     }
 
     [Fact]

@@ -278,7 +278,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   }, []);
   const workingKeys = workingIssueKeys(agentState.agents, agentState.nowMs);
   return (
-    <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
+    <Panel title="Top 5 AI tasks" state={state} emptyText="No active AI tasks.">
       {(items) => (
         <ul className="space-y-3">
           {items.map((task) => {
