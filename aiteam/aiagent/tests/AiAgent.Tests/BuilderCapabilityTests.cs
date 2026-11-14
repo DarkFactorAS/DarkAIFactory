@@ -87,7 +87,7 @@ public sealed class BuilderCapabilityTests : IDisposable
     private static BuilderSettings Settings(string jql = "") => new(
         new Uri("https://x.atlassian.net"), "e", "t", "repo-token", "", jql, "Selected for Development",
         "aiagent-picked", "aiagent-failed", "aiagent-analyzed", "aiagent-ignored",
-        "In Progress", "In Review", "Done", "", "dotnet build", "dotnet test");
+        "In Progress", "In Review", "Done", "");
 
     private static BuilderIssue Issue(string summary = "Do it") =>
         new("DFAI-1", summary, "desc", "Selected for Development") { Labels = ["aiagent-analyzed"] };
@@ -131,8 +131,6 @@ public sealed class BuilderCapabilityTests : IDisposable
 
         var request = Assert.Single(runner.Requests);
         Assert.Equal(RunnerModes.Implement, request.Mode);
-        Assert.Equal("dotnet build", request.BuildCommand);
-        Assert.Equal("dotnet test", request.TestCommand);
         Assert.Contains("the plan", request.Prompt);
         var record = Assert.Single(prs.Items);
         Assert.Equal("https://github.com/o/r/pull/9", record.PullRequestUrl);

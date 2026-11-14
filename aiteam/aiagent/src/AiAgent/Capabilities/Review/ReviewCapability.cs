@@ -17,7 +17,6 @@ public sealed class ReviewCapability(
     IReviewAttemptStore attempts,
     IGitRunner gitRunner,
     RunnerClient runnerClient,
-    IProjectCommandRunner? commands = null,
     HttpMessageHandler? gitHubHandler = null,
     Uri? gitHubApiUrl = null) : IAgentCapability
 {
@@ -148,14 +147,12 @@ public sealed class ReviewCapability(
 
             var runner = new RunnerFixRunner(runnerClient, context.Agent, options);
             // Project code (build/test) must never execute in the orchestrator container, which holds the mounted
-            // configuration and private Git metadata. Validation runs inside aiagent-runner: the build/test commands
-            // are sent with the runner request and a non-zero runner exit status fails the attempt. Local command
-            // execution is only used when a command runner is explicitly injected (e.g. by tests).
+            // configuration and private Git metadata. Validation runs inside aiagent-runner, which builds the projects
+            // containing the changed files and runs the test projects that reference them; a non-zero runner exit
+            // status fails the attempt.
             var flow = new ReviewFixFlow(
-                context.AgentId, runner, git, commands ?? NoLocalCommands.Instance, attempts, client,
-                options.MaxAttempts,
-                commands is null ? null : options.BuildCommand,
-                commands is null ? null : options.TestCommand);
+                context.AgentId, runner, git, NoLocalCommands.Instance, attempts, client,
+                options.MaxAttempts, buildCommand: null, testCommand: null);
             Log($"PR #{number}: fixing {comments.Count} comment(s) one at a time.");
             var result = await flow.RunAsync(pullRequest, branch, comments, workspace, cancellationToken, threadMembers);
             quarantineWorkspace = result.QuarantineWorkspace;
@@ -221,8 +218,6 @@ public sealed class ReviewCapability(
                     new RunnerRequest(
                         provider, agent.LlmModel ?? string.Empty, RunnerModes.Review, workspacePath,
                         PromptComposer.Compose(agent, prompt),
-                        ProjectCommands.Resolve(options.BuildCommand, "build", workspacePath),
-                        ProjectCommands.Resolve(options.TestCommand, "test", workspacePath),
                         provider == "copilot" ? options.CopilotToken : null),
                     timeout.Token);
             }

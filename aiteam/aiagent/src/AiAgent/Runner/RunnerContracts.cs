@@ -16,8 +16,6 @@ public sealed record RunnerRequest(
     string Mode = RunnerModes.Plan,
     string Workspace = "",
     string Prompt = "",
-    string? BuildCommand = null,
-    string? TestCommand = null,
     string? CopilotToken = null);
 
 public sealed record RunnerUsage(long InputTokens, long OutputTokens);

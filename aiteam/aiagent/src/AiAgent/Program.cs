@@ -106,8 +106,6 @@ else
             repositoryToken,
             Env("AIAGENT_REVIEWER_LOGIN") ?? "copilot-pull-request-reviewer",
             MaxAttempts: 3,
-            BuildCommand: Env("AIAGENT_BUILD_COMMAND"),
-            TestCommand: Env("AIAGENT_TEST_COMMAND"),
             CopilotToken: reviewSettings.GitHub.AgentGitHubToken,
             WorkspaceRoot: RunnerPolicy.WorkspaceRoot)
         {

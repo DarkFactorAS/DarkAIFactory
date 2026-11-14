@@ -42,9 +42,6 @@ services:
       HOME: /tmp
       AIAGENT_WORKSPACE_ROOT: /workspaces
       AIAGENT_RUNNER_URL: http://aiagent-runner:8080/
-      # Empty: build/test the solution or project at the repository root, or skip when there is none.
-      AIAGENT_BUILD_COMMAND: ${AIAGENT_BUILD_COMMAND:-}
-      AIAGENT_TEST_COMMAND: ${AIAGENT_TEST_COMMAND:-}
     security_opt:
       - no-new-privileges:true
     cap_drop:
