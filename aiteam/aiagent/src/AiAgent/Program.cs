@@ -126,5 +126,9 @@ var agentHost = new AgentHost(
     capabilities,
     new AgentClaimLock(connectionFactory),
     TimeSpan.FromSeconds(pollSeconds),
-    new AgentStatusRepository(connectionFactory));
+    new AgentStatusRepository(connectionFactory),
+    ownership: new AgentOwnershipLock(connectionFactory),
+    maxAgents: Math.Max(1, appSettings.AgentsPerInstance));
+DFLogger.LogOutput(DFLogLevel.INFO, "Startup",
+    $"This instance runs up to {Math.Max(1, appSettings.AgentsPerInstance)} agent(s) not owned by another instance.");
 await agentHost.RunAsync(cancellation.Token);

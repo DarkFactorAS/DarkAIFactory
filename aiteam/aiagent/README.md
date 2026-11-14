@@ -15,7 +15,12 @@ Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchange
 ## Compose
 
 - `aiagent` – orchestrator; mounts `/app/Config` and `aiagent_workspaces`; starts after
-  `dbmigration` completed and `aiagent-runner` is healthy.
+  `dbmigration` completed and `aiagent-runner` is healthy. Runs as `AIAGENT_INSTANCES` containers (default 3).
+  Each container takes one enabled, non-deleted agent from `agent_definitions` (`AgentsPerInstance` in the
+  config, default 1) by holding a MariaDB named lock `aiagent-agent-<id>`, so two containers never run the same
+  agent. The lock is released when the agent is disabled or the container stops, and a waiting container takes the
+  agent over on its next cycle. Add one agent row per container; containers without a free agent idle.
+  `aiagent-runner` stays a single container with `AIAGENT_RUNNER_MAX_JOBS` slots (default 3, one per agent).
 - `aiagent-runner` – runs `--runner-server` (`/health` on 8080); mounts `aiagent_workspaces` and
   `aiteam_aiagent_claude_config`, no `/app/Config`, only `NUGET_USERNAME`/`NUGET_TOKEN` (read-only
   package access); on the `aiagent-runner` network.
