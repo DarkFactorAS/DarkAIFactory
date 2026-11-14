@@ -14,6 +14,8 @@ public sealed record ReviewComment(
     string HeadSha,
     string ThreadId = "");
 
+public sealed record ReviewThreadMember(long Id, string ThreadId, string Status);
+
 /// <summary>
 /// Unresolved comments of a pull request: the actionable ones, the total count, how many of the reviewer's were
 /// already handled (Resolved) or failed (Failed / attempts exhausted), and comment counts per other author.
@@ -25,6 +27,8 @@ public sealed record ReviewCommentScan(
     int FailedComments,
     IReadOnlyDictionary<string, int> OtherAuthors)
 {
+    public IReadOnlyList<ReviewThreadMember> ThreadMembers { get; init; } = [];
+
     public static ReviewCommentScan Empty { get; } = new([], 0, 0, 0, new Dictionary<string, int>());
 }
 
@@ -45,7 +49,8 @@ public sealed record ReviewOptions(
 public enum FixOutcome { Skipped, NoChanges, Failed, Pushed }
 
 /// <summary>Result of fixing a pull request's comments; counts are per comment.</summary>
-public sealed record FixResult(FixOutcome Outcome, string? Error = null, int PushedCount = 0, int FailedCount = 0);
+public sealed record FixResult(
+    FixOutcome Outcome, string? Error = null, int PushedCount = 0, int FailedCount = 0, bool QuarantineWorkspace = false);
 
 public interface IFixRunner
 {

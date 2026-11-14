@@ -120,6 +120,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
     {
         var handled = _attempts.GetHandledComments(pullRequest.Id, _maxAttempts);
         var result = new List<ReviewComment>();
+        var threadMembers = new List<ReviewThreadMember>();
         var otherAuthors = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var openComments = 0;
         var handledComments = 0;
@@ -160,7 +161,10 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 
             if (!page.HasNextPage || page.EndCursor is null)
             {
-                return new ReviewCommentScan(result, openComments, handledComments, failedComments, otherAuthors);
+                return new ReviewCommentScan(result, openComments, handledComments, failedComments, otherAuthors)
+                {
+                    ThreadMembers = threadMembers
+                };
             }
 
             cursor = page.EndCursor;
@@ -171,20 +175,24 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             foreach (var comment in comments)
             {
                 openComments++;
+                var status = "Actionable";
                 if (!string.Equals(comment.Author, _reviewerLogin, StringComparison.OrdinalIgnoreCase))
                 {
                     var author = string.IsNullOrEmpty(comment.Author) ? "(unknown)" : comment.Author;
                     otherAuthors[author] = otherAuthors.GetValueOrDefault(author) + 1;
+                    status = "OtherAuthor";
                 }
-                else if (handled.TryGetValue(comment.Id, out var status))
+                else if (handled.TryGetValue(comment.Id, out var handledStatus))
                 {
-                    if (string.Equals(status, "Resolved", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(handledStatus, "Resolved", StringComparison.OrdinalIgnoreCase))
                     {
                         handledComments++;
+                        status = "Resolved";
                     }
                     else
                     {
                         failedComments++;
+                        status = "Failed";
                     }
                 }
                 else
@@ -193,6 +201,8 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
                         comment.Id, pullRequest.Id, pullRequest.PullRequest.PullRequestNumber, comment.Path, comment.Line,
                         comment.Body, comment.Author, headSha, threadId));
                 }
+
+                threadMembers.Add(new ReviewThreadMember(comment.Id, threadId, status));
             }
         }
     }

@@ -244,11 +244,15 @@ public sealed class ReviewCapabilityTests
     {
         var store = new FakeStore();
         var runner = new FakeRunner { Throw = new TimeoutException("The runner did not finish within 30 minute(s).") };
+        var git = new FakeGit([]);
 
-        var result = await Flow(runner, new FakeGit([]), store, new FakeCommands(), max: 3)
-            .RunAsync(Pr(), "aiagent/x", [Comment(10)], "/w/checkout", CancellationToken.None);
+        var result = await Flow(runner, git, store, new FakeCommands(), max: 3)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10), Comment(11)], "/w/checkout", CancellationToken.None);
 
         Assert.Equal(FixOutcome.Failed, result.Outcome);
+        Assert.True(result.QuarantineWorkspace);
+        Assert.Equal(1, runner.Runs);
+        Assert.DoesNotContain(git.Calls, c => c[0] == "reset");
         Assert.Equal(1, store.Attempts[10]);
         Assert.Equal("Pending", store.Statuses[10]);
         Assert.Contains("30 minute", store.Errors[10]);
@@ -301,6 +305,25 @@ public sealed class ReviewCapabilityTests
             .RunAsync(Pr(), "aiagent/x", [Comment(10, thread: "T1")], "/w/checkout", CancellationToken.None);
 
         Assert.Equal("Resolved", store.Statuses[10]);
+        Assert.Empty(resolver.Resolved);
+    }
+
+    [Fact]
+    public async Task ThreadWithFailedSiblingStaysOpen()
+    {
+        var git = new FakeGit([]);
+        var resolver = new FakeResolver();
+        var threadMembers = new[]
+        {
+            new ReviewThreadMember(10, "T1", "Actionable"),
+            new ReviewThreadMember(11, "T1", "Failed"),
+            new ReviewThreadMember(12, "T1", "OtherAuthor")
+        };
+
+        await Flow(EditingRunner(git), git, new FakeStore(), new FakeCommands(), resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10, thread: "T1")], "/w/checkout",
+                CancellationToken.None, threadMembers);
+
         Assert.Empty(resolver.Resolved);
     }
 
@@ -400,6 +423,9 @@ public sealed class ReviewCapabilityTests
         var actionable = Assert.Single(scan.Actionable);
         Assert.Equal((12L, "t"), (actionable.Id, actionable.ThreadId));
         Assert.Equal(1, scan.OtherAuthors["someone"]);
+        Assert.Equal(
+            [(10L, "Resolved"), (11L, "Failed"), (12L, "Actionable"), (13L, "OtherAuthor")],
+            scan.ThreadMembers.Select(member => (member.Id, member.Status)));
     }
 
     [Fact]

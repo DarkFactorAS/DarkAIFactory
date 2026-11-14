@@ -56,7 +56,8 @@ public sealed class ReviewCapability(
 
             try
             {
-                var failedCount = await FixPullRequestAsync(context, client, pullRequest, scan.Actionable, cancellationToken);
+                var failedCount = await FixPullRequestAsync(
+                    context, client, pullRequest, scan.Actionable, scan.ThreadMembers, cancellationToken);
                 if (failedCount == 0)
                 {
                     await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
@@ -120,6 +121,7 @@ public sealed class ReviewCapability(
         ReviewGitHubClient client,
         StoredAgentPullRequest pullRequest,
         IReadOnlyList<ReviewComment> comments,
+        IReadOnlyList<ReviewThreadMember> threadMembers,
         CancellationToken cancellationToken)
     {
         var number = pullRequest.PullRequest.PullRequestNumber;
@@ -133,6 +135,7 @@ public sealed class ReviewCapability(
         var git = new ReviewGit(gitRunner);
         var workspaceRoot = options.WorkspaceRoot ?? RunnerPolicy.WorkspaceRoot;
         var workspace = Path.Combine(workspaceRoot, Guid.NewGuid().ToString("N"), "checkout");
+        var quarantineWorkspace = false;
         try
         {
             await git.CloneAsync(new Uri(pullRequest.PullRequest.RepositoryUrl), branch, workspace, cancellationToken);
@@ -154,7 +157,8 @@ public sealed class ReviewCapability(
                 commands is null ? null : options.BuildCommand,
                 commands is null ? null : options.TestCommand);
             Log($"PR #{number}: fixing {comments.Count} comment(s) one at a time.");
-            var result = await flow.RunAsync(pullRequest, branch, comments, workspace, cancellationToken);
+            var result = await flow.RunAsync(pullRequest, branch, comments, workspace, cancellationToken, threadMembers);
+            quarantineWorkspace = result.QuarantineWorkspace;
             Log($"PR #{number}: fix run finished with {result.Outcome}; " +
                 $"{result.PushedCount} pushed, {result.FailedCount} failed" +
                 (result.Error is null ? "." : $". Last error: {result.Error}"));
@@ -162,10 +166,17 @@ public sealed class ReviewCapability(
         }
         finally
         {
-            TryDelete(Path.GetDirectoryName(workspace)!);
-            // GitRunner clones with --separate-git-dir into its private metadata root, outside the workspace;
-            // remove that object database too so per-attempt clones do not accumulate on disk.
-            TryDelete(Builder.BuilderCapability.GitMetadataDirectoryFor(workspace));
+            if (quarantineWorkspace || cancellationToken.IsCancellationRequested)
+            {
+                Log($"PR #{number}: quarantining checkout '{workspace}' after runner timeout or cancellation.");
+            }
+            else
+            {
+                TryDelete(Path.GetDirectoryName(workspace)!);
+                // GitRunner clones with --separate-git-dir into its private metadata root, outside the workspace;
+                // remove that object database too so per-attempt clones do not accumulate on disk.
+                TryDelete(Builder.BuilderCapability.GitMetadataDirectoryFor(workspace));
+            }
         }
     }
 

@@ -45,7 +45,8 @@ public sealed class ReviewFixFlow(
         string headBranch,
         IReadOnlyList<ReviewComment> comments,
         string workspacePath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ReviewThreadMember>? threadMembers = null)
     {
         var number = pullRequest.PullRequest.PullRequestNumber;
         if (!ReviewGit.IsPushableBranch(headBranch))
@@ -66,6 +67,7 @@ public sealed class ReviewFixFlow(
 
         var pushed = 0;
         var failed = 0;
+        var quarantineWorkspace = false;
         string? lastError = null;
         var pushedIds = new HashSet<long>();
         try
@@ -90,6 +92,7 @@ public sealed class ReviewFixFlow(
                         lastError = result.Error;
                         break;
                 }
+                quarantineWorkspace |= result.QuarantineWorkspace;
 
                 if (result.StopRemaining)
                 {
@@ -103,12 +106,13 @@ public sealed class ReviewFixFlow(
         {
             if (!cancellationToken.IsCancellationRequested)
             {
-                await ResolveCompletedThreadsAsync(pullRequest, comments, pushedIds, used, cancellationToken);
+                await ResolveCompletedThreadsAsync(
+                    pullRequest, comments, pushedIds, used, threadMembers, cancellationToken);
             }
         }
 
         var outcome = pushed > 0 ? FixOutcome.Pushed : failed > 0 ? FixOutcome.Failed : FixOutcome.NoChanges;
-        return new FixResult(outcome, lastError, pushed, failed);
+        return new FixResult(outcome, lastError, pushed, failed, quarantineWorkspace);
     }
 
     private async Task<CommentResult> FixCommentAsync(
@@ -138,6 +142,17 @@ public sealed class ReviewFixFlow(
             {
                 await runner.RunAsync(workspacePath, prompt, cancellationToken);
             }
+            catch (TimeoutException exception)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException("Runner cancelled by agent shutdown.", exception, cancellationToken);
+                }
+
+                attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
+                return Fail(
+                    pullRequest, ids, attemptsUsed, exception.Message, stopRemaining: true, quarantineWorkspace: true);
+            }
             catch (RunnerBusyException)
             {
                 attempts.Record(agentId, pullRequest.Id, ids, "Pending", countAttempt: false,
@@ -146,7 +161,7 @@ public sealed class ReviewFixFlow(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                // Includes TimeoutException from the runner: a slow run is a real, counted attempt.
+                // Other runner failures are real, counted attempts.
                 attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
                 throw;
             }
@@ -246,6 +261,7 @@ public sealed class ReviewFixFlow(
         IReadOnlyList<ReviewComment> comments,
         IReadOnlySet<long> pushedIds,
         IReadOnlyDictionary<long, int> priorAttempts,
+        IReadOnlyList<ReviewThreadMember>? threadMembers,
         CancellationToken cancellationToken)
     {
         if (pushedIds.Count == 0)
@@ -254,17 +270,30 @@ public sealed class ReviewFixFlow(
         }
 
         var number = pullRequest.PullRequest.PullRequestNumber;
-        var threads = comments
-            .Where(c => !string.IsNullOrEmpty(c.ThreadId))
-            .GroupBy(c => c.ThreadId, StringComparer.Ordinal);
+        var threads = threadMembers is null
+            ? comments
+                .Where(c => !string.IsNullOrEmpty(c.ThreadId))
+                .GroupBy(c => c.ThreadId, StringComparer.Ordinal)
+                .Select(thread => (
+                    ThreadId: thread.Key,
+                    Members: thread.Select(c => (c.Id, Status: "Actionable")).ToList()))
+            : threadMembers
+                .Where(c => !string.IsNullOrEmpty(c.ThreadId))
+                .GroupBy(c => c.ThreadId, StringComparer.Ordinal)
+                .Select(thread => (
+                    ThreadId: thread.Key,
+                    Members: thread.Select(c => (c.Id, c.Status)).ToList()));
         foreach (var thread in threads)
         {
-            if (!thread.Any(c => pushedIds.Contains(c.Id)))
+            if (!thread.Members.Any(c => pushedIds.Contains(c.Id)))
             {
                 continue;
             }
 
-            var unfinished = thread.Where(c => !pushedIds.Contains(c.Id)).Select(c => c.Id).ToList();
+            var unfinished = thread.Members
+                .Where(c => c.Status != "Actionable" || !pushedIds.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToList();
             if (unfinished.Count > 0)
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category,
@@ -272,7 +301,10 @@ public sealed class ReviewFixFlow(
                 continue;
             }
 
-            var retried = thread.Where(c => priorAttempts.GetValueOrDefault(c.Id) > 0).Select(c => c.Id).ToList();
+            var retried = thread.Members
+                .Where(c => priorAttempts.GetValueOrDefault(c.Id) > 0)
+                .Select(c => c.Id)
+                .ToList();
             if (retried.Count > 0)
             {
                 DFLogger.LogOutput(DFLogLevel.INFO, Category,
@@ -282,7 +314,8 @@ public sealed class ReviewFixFlow(
             }
 
             // A failure to resolve must not turn a pushed fix into a failure.
-            await ResolveThreadAsync(pullRequest, thread.Key, thread.Select(c => c.Id).ToList(), cancellationToken);
+            await ResolveThreadAsync(
+                pullRequest, thread.ThreadId, thread.Members.Select(c => c.Id).ToList(), cancellationToken);
         }
     }
 
@@ -315,7 +348,8 @@ public sealed class ReviewFixFlow(
         string baselineRevision,
         string error,
         CancellationToken cancellationToken,
-        bool stopRemaining = false)
+        bool stopRemaining = false,
+        bool quarantineWorkspace = false)
     {
         try
         {
@@ -333,19 +367,21 @@ public sealed class ReviewFixFlow(
             stopRemaining = true;
         }
 
-        return Fail(pullRequest, ids, attemptsUsed, error, stopRemaining: stopRemaining);
+        return Fail(
+            pullRequest, ids, attemptsUsed, error, stopRemaining: stopRemaining, quarantineWorkspace: quarantineWorkspace);
     }
 
     private CommentResult Fail(
         StoredAgentPullRequest pullRequest, IReadOnlyCollection<long> ids, int attemptsUsed, string error,
-        bool terminal = false, bool stopRemaining = false)
+        bool terminal = false, bool stopRemaining = false, bool quarantineWorkspace = false)
     {
         DFLogger.LogOutput(DFLogLevel.ERROR, Category,
             $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {string.Join(", ", ids)}: {error}");
         var status = terminal ? "Failed" : FixDecision.StatusAfterUnsuccessfulAttempt(attemptsUsed + 1, maxAttempts);
         attempts.Record(agentId, pullRequest.Id, ids, status, countAttempt: false, error);
-        return new CommentResult(FixOutcome.Failed, error, stopRemaining);
+        return new CommentResult(FixOutcome.Failed, error, stopRemaining, quarantineWorkspace);
     }
 
-    private sealed record CommentResult(FixOutcome Outcome, string? Error = null, bool StopRemaining = false);
+    private sealed record CommentResult(
+        FixOutcome Outcome, string? Error = null, bool StopRemaining = false, bool QuarantineWorkspace = false);
 }
