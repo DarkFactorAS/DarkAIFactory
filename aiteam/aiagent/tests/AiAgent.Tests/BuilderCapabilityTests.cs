@@ -36,9 +36,11 @@ public sealed class BuilderCapabilityTests : IDisposable
         public void Dispose() { }
     }
 
-    private sealed class FakePlans(AgentPlan? plan) : IAgentPlanRepository
+    private sealed class FakePlans(AgentPlan? plan, AgentPlan? shared = null) : IAgentPlanRepository
     {
         public AgentPlan? Get(long agentId, string jiraKey) => plan;
+        public AgentPlan? FindPostedForIssue(string jiraKey, string requirementsHash) =>
+            shared is { PostedToJira: true } p && p.RequirementsHash == requirementsHash && p.Plan != "" ? p : null;
         public void Save(AgentPlan p) { }
         public void MarkPostedToJira(long agentId, string jiraKey, string requirementsHash) { }
         public void ReplacePlan(long agentId, string jiraKey, string requirementsHash, string updatedPlan) { }
@@ -96,13 +98,14 @@ public sealed class BuilderCapabilityTests : IDisposable
         1, 1, issue.Key, "the plan", posted, ManagerPlan.Fingerprint(issue.Summary, issue.Description, RepoUrl));
 
     private (BuilderCapability Capability, Prs Prs) Create(
-        FakeJira jira, AgentPlan? plan, FakeRunner runner, BuilderSettings? settings = null, bool changes = true)
+        FakeJira jira, AgentPlan? plan, FakeRunner runner, BuilderSettings? settings = null, bool changes = true,
+        AgentPlan? sharedPlan = null)
     {
         var prs = new Prs();
         var capability = new BuilderCapability(
             () => settings ?? Settings(),
             () => [new ManagerProject(1, "DFAI", RepoUrl.AbsoluteUri)],
-            new FakePlans(plan),
+            new FakePlans(plan, sharedPlan),
             _ => jira,
             (url, s) => new GitHubCore(new Git(changes), url, "token", prs, new GitHubStub()),
             runner,
@@ -154,6 +157,52 @@ public sealed class BuilderCapabilityTests : IDisposable
             Assert.Empty(prs.Items);
             Assert.DoesNotContain("label+:aiagent-picked", jira.Calls);
         }
+    }
+
+    [Fact]
+    public async Task PostedPlanFromAnotherAgentIsUsed()
+    {
+        var issue = Issue();
+        var jira = new FakeJira(issue);
+        var runner = new FakeRunner();
+        var other = CurrentPlan(issue) with { AgentId = 2 };
+        var (capability, prs) = Create(jira, null, runner, sharedPlan: other);
+
+        await capability.RunCycleAsync(Context(), default);
+
+        Assert.Contains("transition:In Progress", jira.Calls);
+        Assert.Single(prs.Items);
+        Assert.DoesNotContain(jira.Calls, c => c.StartsWith("comment:") && c.Contains("Skipping") );
+        Assert.DoesNotContain("label+:ai-ignored", jira.Calls);
+    }
+
+    [Fact]
+    public async Task UnusablePlanFromAnotherAgentIsIgnored()
+    {
+        var issue = Issue();
+        foreach (var other in new[] { CurrentPlan(issue, posted: false) with { AgentId = 2 }, CurrentPlan(Issue("Old title")) with { AgentId = 2 } })
+        {
+            var jira = new FakeJira(issue);
+            var runner = new FakeRunner();
+            var (capability, _) = Create(jira, null, runner, sharedPlan: other);
+            await capability.RunCycleAsync(Context(), default);
+            Assert.Empty(runner.Requests);
+            Assert.DoesNotContain("transition:In Progress", jira.Calls);
+            Assert.Contains("label+:ai-ignored", jira.Calls);
+        }
+    }
+
+    [Fact]
+    public async Task OwnPlanTakesPriorityOverOtherAgentsPlan()
+    {
+        var issue = Issue();
+        var runner = new FakeRunner();
+        var other = CurrentPlan(issue) with { AgentId = 2, Plan = "other plan" };
+        var (capability, _) = Create(new FakeJira(issue), CurrentPlan(issue), runner, sharedPlan: other);
+        await capability.RunCycleAsync(Context(), default);
+        var request = Assert.Single(runner.Requests);
+        Assert.Contains("the plan", request.Prompt);
+        Assert.DoesNotContain("other plan", request.Prompt);
     }
 
     [Fact]

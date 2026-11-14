@@ -105,11 +105,25 @@ internal sealed class BuilderCapability(
         }
 
         var repositoryUrl = new Uri(project.TargetRepositoryUrl);
+        var fingerprint = ManagerPlan.Fingerprint(issue.Summary, issue.Description, repositoryUrl);
         var plan = plans.Get(context.AgentId, issue.Key);
         // Plan gate: a stored plan must be posted and its fingerprint must match the current requirements.
-        if (plan is not null && !(plan.PostedToJira && !string.IsNullOrWhiteSpace(plan.Plan) &&
-            string.Equals(plan.RequirementsHash,
-                ManagerPlan.Fingerprint(issue.Summary, issue.Description, repositoryUrl), StringComparison.Ordinal)))
+        var ownPlanInvalid = plan is not null && !(plan.PostedToJira && !string.IsNullOrWhiteSpace(plan.Plan) &&
+            string.Equals(plan.RequirementsHash, fingerprint, StringComparison.Ordinal));
+        if (plan is null || ownPlanInvalid)
+        {
+            // Fall back to a valid posted plan made by any agent.
+            var shared = plans.FindPostedForIssue(issue.Key, fingerprint);
+            if (shared is not null && !string.IsNullOrWhiteSpace(shared.Plan))
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Log,
+                    $"Using the plan for {issue.Key} made by agent {shared.AgentId}.");
+                plan = shared;
+                ownPlanInvalid = false;
+            }
+        }
+
+        if (ownPlanInvalid)
         {
             await IgnoreAsync(context, jira, issue, "the stored plan is stale or not yet posted. Waiting for refreshed planning.", cancellationToken);
             return;
