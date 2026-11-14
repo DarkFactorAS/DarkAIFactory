@@ -326,12 +326,34 @@ function ActiveAiTasksPanel({ labelsVersion }) {
 export default function App() {
   const [labelsVersion, setLabelsVersion] = useState(0);
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const [solvedOpen, setSolvedOpen] = useState(false);
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
+  useEffect(() => {
+    if (!solvedOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setSolvedOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [solvedOpen]);
   return (
     <WriteTokenProvider>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <header className="bg-slate-900 px-6 py-4 shadow lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
-        <div className="hidden lg:block" aria-hidden="true" />
+        <div className="mb-2 flex justify-center lg:mb-0 lg:justify-start">
+          <button
+            type="button"
+            aria-label="Show tasks solved"
+            aria-expanded={solvedOpen}
+            aria-controls="solved-overlay"
+            onClick={() => setSolvedOpen((o) => !o)}
+            className="rounded p-2 text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10m6 10V4m6 16v-7m4 7H2" />
+            </svg>
+          </button>
+        </div>
         <h1 className="text-2xl font-bold text-white text-center">
           DarkAIFactory - AI Team workflow
         </h1>
@@ -340,13 +362,31 @@ export default function App() {
         </div>
       </header>
       <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
-        <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} resolvedTheme={resolvedTheme} />
-        <div className="space-y-6">
-          <AgentSlots />
-          <TaskEditor />
-        </div>
+        <AgentSlots />
+        <TaskEditor />
         <ActiveAiTasksPanel labelsVersion={labelsVersion} />
       </main>
+      {solvedOpen && (
+        <div className="fixed inset-0 z-30 bg-black/30" aria-hidden="true" onClick={() => setSolvedOpen(false)} />
+      )}
+      <aside
+        id="solved-overlay"
+        role="dialog"
+        aria-label="Tasks solved per project"
+        className={`fixed inset-y-0 left-0 z-40 w-full max-w-xl overflow-y-auto bg-white p-4 shadow-xl dark:bg-slate-800 ${solvedOpen ? "" : "hidden"}`}
+      >
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            aria-label="Close tasks solved"
+            onClick={() => setSolvedOpen(false)}
+            className="rounded px-2 py-1 text-xl leading-none hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            ×
+          </button>
+        </div>
+        <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} resolvedTheme={resolvedTheme} />
+      </aside>
     </div>
     </WriteTokenProvider>
   );

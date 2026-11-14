@@ -133,7 +133,7 @@ export default function AgentSlots() {
         </div>
       )}
       {agents && (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <ul className="flex flex-col gap-3">
           {agents.map((agent) => (
             <AgentCard
               key={agent.id}
