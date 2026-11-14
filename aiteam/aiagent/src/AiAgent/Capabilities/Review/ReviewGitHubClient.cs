@@ -387,8 +387,10 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
     }
 
     /// <summary>
-    /// True when a review body or conversation comment by the reviewer contains the approval phrase and is not
-    /// older than the latest commit that is not a verified base-only merge. A merge commit preserves an earlier
+    /// True when a submitted review by the reviewer contains the approval phrase and was made on the latest commit
+    /// that is not a verified base-only merge, or on a later commit. Conversation comments never count: GitHub does
+    /// not bind them to a head commit, and commit timestamps are author-controlled, so a commit created before the
+    /// comment but pushed afterwards could otherwise pass unreviewed. A merge commit preserves an earlier
     /// approval only when its second parent is on the base branch and every file in it matches one of its parents,
     /// so feature merges and merges with manual edits or conflict resolutions invalidate the approval.
     /// Fails closed (false) when the retrieved commit history does not end at <paramref name="headSha"/>, for
@@ -431,11 +433,6 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         }
 
         var shas = commits.Select(commit => commit["sha"]?.GetValue<string>() ?? string.Empty).ToList();
-        var since = commits.Count == 0
-            ? DateTimeOffset.MinValue
-            : DateTimeOffset.TryParse(
-                commits[lastIndex]["commit"]?["committer"]?["date"]?.GetValue<string>(),
-                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ? date : DateTimeOffset.MaxValue;
 
         bool IsReviewer(JsonNode? item) =>
             string.Equals(item?["user"]?["login"]?.GetValue<string>(), _reviewerLogin, StringComparison.OrdinalIgnoreCase)
@@ -457,12 +454,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             }
         }
 
-        var issuePath = pullPath.Replace("/pulls/", "/issues/", StringComparison.Ordinal);
-        var comments = (await SendRestAsync(HttpMethod.Get, $"{issuePath}/comments?per_page={PageSize}", null, cancellationToken))
-            ?.AsArray() ?? [];
-        return comments.Where(IsReviewer).Any(comment =>
-            DateTimeOffset.TryParse(comment!["created_at"]?.GetValue<string>(), CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal, out var created) && created >= since);
+        return false;
     }
 
     /// <summary>
