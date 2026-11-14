@@ -29,15 +29,15 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   }
 
   return (
-    <li data-testid="agent-card" className="rounded border border-slate-200 p-3 text-sm">
+    <li data-testid="agent-card" className="rounded border border-slate-200 dark:border-slate-700 p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold">{agent.name}</span>
-        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs" data-testid="agent-status">
+        <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs" data-testid="agent-status">
           {label}
         </span>
       </div>
-      <p className="text-slate-600">{agent.role}</p>
-      <p className="text-xs text-slate-500">
+      <p className="text-slate-600 dark:text-slate-300">{agent.role}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         {agent.llmProvider} / {agent.llmModel || "default"}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">
@@ -54,13 +54,13 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
               <span className="sr-only"> (active)</span>
             </span>
           ) : (
-            <span key={c} className="rounded bg-blue-100 px-2 py-0.5 text-xs">
+            <span key={c} className="rounded bg-blue-100 dark:bg-blue-900 px-2 py-0.5 text-xs">
               {c}
             </span>
           ),
         )}
       </div>
-      <p className="mt-1 text-xs text-slate-500">Projects: {agent.projects.join(", ") || "none"}</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-xs">
           <input
@@ -77,13 +77,13 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="rounded border px-2 py-0.5 text-xs text-red-700"
+          className="rounded border px-2 py-0.5 text-xs text-red-700 dark:text-red-400"
         >
           Delete
         </button>
       </div>
       {confirming && (
-        <div role="alertdialog" aria-label={`Delete ${agent.name}`} className="mt-2 rounded bg-red-50 p-2 text-xs">
+        <div role="alertdialog" aria-label={`Delete ${agent.name}`} className="mt-2 rounded bg-red-50 dark:bg-red-950 p-2 text-xs">
           <p>Delete {agent.name}?</p>
           <div className="mt-1 flex gap-2">
             <button
@@ -136,26 +136,26 @@ export default function AgentSlots() {
 
   const { agents, nowMs, error } = state;
   return (
-    <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white p-4 shadow">
+    <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <h2 className="text-lg font-semibold">Agents</h2>
       {!agents && !error && (
-        <p role="status" className="text-slate-500">
+        <p role="status" className="text-slate-500 dark:text-slate-400">
           Loading...
         </p>
       )}
       {error && (
-        <p role="alert" className="text-red-600">
+        <p role="alert" className="text-red-600 dark:text-red-400">
           Unable to load agents: {error}
         </p>
       )}
       {actionError && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {actionError}
         </p>
       )}
       {!token && (
         <div className="text-sm">
-          <p className="text-slate-600">Enter the write token to change agents.</p>
+          <p className="text-slate-600 dark:text-slate-300">Enter the write token to change agents.</p>
           <WriteTokenPrompt />
         </div>
       )}
@@ -176,7 +176,7 @@ export default function AgentSlots() {
               type="button"
               aria-label="Add agent"
               onClick={() => setEditor({ agent: null })}
-              className="flex h-full min-h-24 w-full items-center justify-center rounded border-2 border-dashed border-slate-300 text-3xl text-slate-400"
+              className="flex h-full min-h-24 w-full items-center justify-center rounded border-2 border-dashed border-slate-300 dark:border-slate-600 text-3xl text-slate-400 dark:text-slate-500"
             >
               +
             </button>

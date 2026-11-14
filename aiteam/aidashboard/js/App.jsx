@@ -7,6 +7,19 @@ import AgentSlots from "./AgentSlots.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
 import { POLL_INTERVAL_MS } from "./agentApi.js";
+import useTheme from "./useTheme.js";
+import ThemeToggle from "./ThemeToggle.jsx";
+
+const CHART_TEXT = { light: "#334155", dark: "#e2e8f0" };
+
+function tooltipStyle(resolvedTheme) {
+  const dark = resolvedTheme === "dark";
+  return {
+    contentStyle: { backgroundColor: dark ? "#1e293b" : "#ffffff", borderColor: dark ? "#475569" : "#cbd5e1", color: CHART_TEXT[resolvedTheme] },
+    itemStyle: { color: CHART_TEXT[resolvedTheme] },
+    labelStyle: { color: CHART_TEXT[resolvedTheme] },
+  };
+}
 
 // Reloads the given query whenever refreshKey changes (skipping the initial render).
 function useReloadOn(refreshKey, reload) {
@@ -23,19 +36,19 @@ function useReloadOn(refreshKey, reload) {
 function Panel({ title, state, emptyText, children, actions, extra }) {
   const { data, loading, error } = state;
   return (
-    <section className="rounded-lg bg-white p-4 shadow">
+    <section className="rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{title}</h2>
         {actions}
       </div>
       {extra}
-      {loading && <p role="status" className="text-slate-500">Loading...</p>}
+      {loading && <p role="status" className="text-slate-500 dark:text-slate-400">Loading...</p>}
       {error && (
-        <p role="alert" className="text-red-600">
+        <p role="alert" className="text-red-600 dark:text-red-400">
           Unable to load data: {error}
         </p>
       )}
-      {data && data.length === 0 && <p className="text-slate-500">{emptyText}</p>}
+      {data && data.length === 0 && <p className="text-slate-500 dark:text-slate-400">{emptyText}</p>}
       {data && data.length > 0 && children(data)}
     </section>
   );
@@ -52,14 +65,14 @@ export function legendLabel(name, value, total) {
   return `${name} (${value}, ${formatPercent(value, total)}%)`;
 }
 
-function PieWithLegend({ title, slices, testId }) {
+function PieWithLegend({ title, slices, testId, resolvedTheme }) {
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const visible = slices.filter((slice) => slice.value > 0);
   return (
     <div data-testid={testId} className="mb-4">
       <h3 className="mb-1 text-sm font-semibold">{title}</h3>
       {total === 0 ? (
-        <p className="text-sm text-slate-500">No solved tasks.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">No solved tasks.</p>
       ) : (
         <>
           <ResponsiveContainer width="100%" height={160}>
@@ -69,7 +82,7 @@ function PieWithLegend({ title, slices, testId }) {
                   <Cell key={slice.name} fill={slice.color} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip {...tooltipStyle(resolvedTheme)} />
             </PieChart>
           </ResponsiveContainer>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -86,7 +99,7 @@ function PieWithLegend({ title, slices, testId }) {
   );
 }
 
-function AiShareBarChart({ items }) {
+function AiShareBarChart({ items, resolvedTheme }) {
   const data = items.map((item) => {
     const aiCount = item.aiCount ?? 0;
     const nonAiCount = item.nonAiCount ?? 0;
@@ -118,14 +131,14 @@ function AiShareBarChart({ items }) {
         </ul>
       )}
       {!hasData ? (
-        <p className="text-sm text-slate-500">No solved tasks.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">No solved tasks.</p>
       ) : (
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data}>
-            <XAxis dataKey="project" />
-            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-            <Tooltip formatter={tooltipFormatter} />
-            <Legend />
+            <XAxis dataKey="project" stroke={CHART_TEXT[resolvedTheme]} />
+            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke={CHART_TEXT[resolvedTheme]} />
+            <Tooltip formatter={tooltipFormatter} {...tooltipStyle(resolvedTheme)} />
+            <Legend wrapperStyle={{ color: CHART_TEXT[resolvedTheme] }} />
             <Bar dataKey="aiPercent" name="% AI" stackId="share" fill={AI_COLORS.ai} />
             <Bar dataKey="nonAiPercent" name="% non-AI" stackId="share" fill={AI_COLORS.nonAi} />
           </BarChart>
@@ -135,7 +148,7 @@ function AiShareBarChart({ items }) {
   );
 }
 
-function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
+function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   const state = useApiData("/api/stats/solved-by-project");
   useReloadOn(labelsVersion, state.reload);
   const [editing, setEditing] = useState(false);
@@ -160,7 +173,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="rounded border border-slate-300 px-2 py-1 text-sm"
+            className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm"
           >
             Edit AI labels
           </button>
@@ -170,6 +183,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
       {(items) => (
         <div>
           <PieWithLegend
+            resolvedTheme={resolvedTheme}
             testId="solved-total-chart"
             title="Solved tasks per project"
             slices={items.map((item, index) => ({
@@ -178,7 +192,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
               color: PROJECT_COLORS[index % PROJECT_COLORS.length],
             }))}
           />
-          <AiShareBarChart items={items} />
+          <AiShareBarChart items={items} resolvedTheme={resolvedTheme} />
         </div>
       )}
     </Panel>
@@ -199,7 +213,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       {(items) => (
         <ul className="space-y-3">
           {items.map((task) => (
-            <li key={task.key} className="rounded border border-slate-200 p-3">
+            <li key={task.key} className="rounded border border-slate-200 dark:border-slate-700 p-3">
               <button
                 type="button"
                 aria-expanded={openKey === task.key}
@@ -208,11 +222,11 @@ function ActiveAiTasksPanel({ labelsVersion }) {
               >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">{task.key}</span>
-                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{task.status}</span>
+                <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs">{task.status}</span>
               </div>
               <p className="mt-1 text-sm">{task.summary}</p>
               {task.description && (
-                <p className="mt-1 line-clamp-3 whitespace-pre-line text-xs text-slate-500">
+                <p className="mt-1 line-clamp-3 whitespace-pre-line text-xs text-slate-500 dark:text-slate-400">
                   {task.description}
                 </p>
               )}
@@ -228,17 +242,21 @@ function ActiveAiTasksPanel({ labelsVersion }) {
 
 export default function App() {
   const [labelsVersion, setLabelsVersion] = useState(0);
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
   return (
     <WriteTokenProvider>
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="bg-slate-900 px-6 py-4 shadow">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <header className="relative bg-slate-900 px-6 py-4 shadow">
         <h1 className="text-2xl font-bold text-white text-center">
           DarkAIFactory - AI Team workflow
         </h1>
+        <div className="mt-2 flex justify-center sm:absolute sm:right-6 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2">
+          <ThemeToggle theme={theme} onChange={setTheme} />
+        </div>
       </header>
       <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
-        <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} />
+        <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} resolvedTheme={resolvedTheme} />
         <div className="space-y-6">
           <AgentSlots />
           <TaskEditor />

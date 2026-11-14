@@ -45,7 +45,7 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
   }
 
   return (
-    <div className="mb-4 rounded border border-slate-200 p-3" data-testid="ai-labels-editor">
+    <div className="mb-4 rounded border border-slate-200 dark:border-slate-700 p-3" data-testid="ai-labels-editor">
       <label className="mb-1 block text-sm font-semibold" htmlFor="ai-labels-input">
         AI labels (comma-separated)
       </label>
@@ -54,13 +54,13 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
         value={text}
         disabled={!loaded || busy}
         onChange={(e) => setText(e.target.value)}
-        className="w-full rounded border border-slate-300 p-1 text-sm"
+        className="w-full rounded border border-slate-300 dark:border-slate-600 p-1 text-sm"
       />
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
         An empty list uses the workflow pickup/analyzed labels. These labels also drive the Top 3 AI tasks panel.
       </p>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       )}
@@ -70,11 +70,11 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
           type="button"
           onClick={save}
           disabled={!token || !loaded || busy}
-          className="rounded border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
+          className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm disabled:opacity-50"
         >
           Save
         </button>
-        <button type="button" onClick={onCancel} className="rounded border border-slate-300 px-2 py-1 text-sm">
+        <button type="button" onClick={onCancel} className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm">
           Cancel
         </button>
       </div>
