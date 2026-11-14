@@ -129,6 +129,14 @@ public sealed class ReviewCapabilityTests
     {
         public List<string> Resolved { get; } = [];
         public bool Fail { get; set; }
+        public bool FailReply { get; set; }
+        public List<(string ThreadId, string Body)> Replies { get; } = [];
+        public Task ReplyToThreadAsync(StoredAgentPullRequest pullRequest, string threadId, string body, CancellationToken ct)
+        {
+            if (FailReply) throw new HttpRequestException("Forbidden");
+            Replies.Add((threadId, body));
+            return Task.CompletedTask;
+        }
         public Task ResolveThreadAsync(StoredAgentPullRequest pullRequest, string threadId, CancellationToken ct)
         {
             if (Fail) throw new HttpRequestException("Resource not accessible by integration");
@@ -144,7 +152,7 @@ public sealed class ReviewCapabilityTests
         new(id, 5, 7, path, 3, "Rename this", "reviewer", Sha, thread);
 
     private static ReviewFixFlow Flow(
-        FakeRunner runner, FakeGit git, FakeStore store, FakeCommands commands, int max = 2, FakeResolver? resolver = null) =>
+        FakeRunner runner, FakeGit git, FakeStore store, IProjectCommandRunner commands, int max = 2, FakeResolver? resolver = null) =>
         new(1, runner, new ReviewGit(git), commands, store, resolver ?? new FakeResolver(), max, "dotnet build", "dotnet test");
 
     /// <summary>Runner that edits the file of the single comment in the prompt, except the skipped paths.</summary>
@@ -319,6 +327,76 @@ public sealed class ReviewCapabilityTests
         Assert.Null(store.Errors[10]);
         Assert.Empty(resolver.Resolved);
         Assert.DoesNotContain(git.Calls, c => c[0] == "push");
+        var reply = Assert.Single(resolver.Replies);
+        Assert.Equal("T1", reply.ThreadId);
+        Assert.Equal(ReviewFixFlow.NoFixReplyText, reply.Body);
+    }
+
+    [Fact]
+    public async Task NoChangesAfterBuildAndTestAlsoReplies()
+    {
+        var git = new FakeGit(["src/a.cs"]);
+        var runner = new FakeRunner();
+        var resolver = new FakeResolver();
+        var store = new FakeStore();
+        // Changes are reverted by the build/test step.
+        var commands = new RevertingCommands(git);
+
+        var result = await Flow(runner, git, store, commands, resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10, thread: "T1")], "/w/checkout", CancellationToken.None);
+
+        Assert.Equal(FixOutcome.NoChanges, result.Outcome);
+        Assert.Single(resolver.Replies);
+    }
+
+    private sealed class RevertingCommands(FakeGit git) : IProjectCommandRunner
+    {
+        public Task<string?> RunAsync(string command, string workspacePath, CancellationToken ct)
+        {
+            git.Changed = [];
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    [Fact]
+    public async Task PushedFixAndFailedFixDoNotReply()
+    {
+        var git = new FakeGit([]);
+        var resolver = new FakeResolver();
+        await Flow(EditingRunner(git), git, new FakeStore(), new FakeCommands(), resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10, thread: "T1")], "/w/checkout", CancellationToken.None);
+
+        var failGit = new FakeGit(["src/a.cs", "src/other.cs"]);
+        await Flow(new FakeRunner(), failGit, new FakeStore(), new FakeCommands(), resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(11, thread: "T2")], "/w/checkout", CancellationToken.None);
+
+        Assert.Empty(resolver.Replies);
+    }
+
+    [Fact]
+    public async Task ReplyFailureOnlyWarnsAndLaterCommentsContinue()
+    {
+        var git = new FakeGit([]);
+        var store = new FakeStore();
+        var resolver = new FakeResolver { FailReply = true };
+
+        var result = await Flow(new FakeRunner(), git, store, new FakeCommands(), resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10, thread: "T1"), Comment(11, thread: "T2")], "/w/checkout", CancellationToken.None);
+
+        Assert.Equal(FixOutcome.NoChanges, result.Outcome);
+        Assert.Equal("Resolved", store.Statuses[10]);
+        Assert.Equal("Resolved", store.Statuses[11]);
+    }
+
+    [Fact]
+    public async Task NoChangesWithoutThreadIdDoesNotReply()
+    {
+        var resolver = new FakeResolver();
+        var result = await Flow(new FakeRunner(), new FakeGit([]), new FakeStore(), new FakeCommands(), resolver: resolver)
+            .RunAsync(Pr(), "aiagent/x", [Comment(10)], "/w/checkout", CancellationToken.None);
+
+        Assert.Equal(FixOutcome.NoChanges, result.Outcome);
+        Assert.Empty(resolver.Replies);
     }
 
     [Fact]
