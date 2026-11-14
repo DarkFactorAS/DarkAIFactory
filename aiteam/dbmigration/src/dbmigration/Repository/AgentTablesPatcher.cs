@@ -165,6 +165,45 @@ public static class AgentTablesPatcher
                 CONSTRAINT `fk_agent_status_agent` FOREIGN KEY (`agent_id`)
                     REFERENCES `agent_definitions` (`id`)
             )
+            """,
+            // Dashboard: AI labels (comma-separated Jira label names) that mark an issue as handled by AI.
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'Claude.AnthropicApiKey', 'Claude.AgentModel', 'Dashboard.AiLabels'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                    OR
+                    (`client` = 'aidashboard' AND `name` = 'Dashboard.AiLabels')
+                    OR
+                    (`client` = 'aiclaudeworker' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                    OR
+                    (`client` = 'aiagent' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
+                )
+            """,
+            // Seeded from the existing workflow_labels rows so renamed labels survive an upgrade. The literal
+            // list is only a fallback when no matching rows exist. An explicitly configured value is kept.
+            """
+            INSERT INTO `settings` (`client`, `name`, `value`) VALUES
+                ('aidashboard', 'Dashboard.AiLabels', COALESCE(
+                    (SELECT GROUP_CONCAT(DISTINCT `label_name`
+                            ORDER BY FIELD(`agent_name`, 'aimanager', 'aiworker', 'aiclaudeworker', 'aiagent'),
+                                FIELD(`code_key`, 'PickupLabel', 'AnalyzedLabel', 'PlannedLabel')
+                            SEPARATOR ',')
+                        FROM `workflow_labels`
+                        WHERE (`agent_name` = 'aimanager' AND `code_key` IN ('PickupLabel', 'AnalyzedLabel'))
+                            OR (`agent_name` IN ('aiworker', 'aiclaudeworker') AND `code_key` = 'PickupLabel')
+                            OR (`agent_name` = 'aiagent'
+                                AND `code_key` IN ('PickupLabel', 'AnalyzedLabel', 'PlannedLabel'))),
+                    'ai-manager-planned,ai-analyzed,ai-agent-picked,aiagent-picked,aiagent-analyzed,aiagent-planned'))
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """
         ];
 

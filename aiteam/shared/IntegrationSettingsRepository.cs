@@ -67,6 +67,13 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                     ? agentModel
                     : string.Empty
             },
+            Dashboard = new DashboardSettings
+            {
+                AiLabels = ReadClientOptional("Dashboard.AiLabels")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray()
+            },
             Claude = new ClaudeSettings
             {
                 AnthropicApiKey = ReadClientOptional("Claude.AnthropicApiKey"),

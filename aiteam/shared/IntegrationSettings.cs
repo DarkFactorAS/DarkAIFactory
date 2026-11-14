@@ -5,6 +5,7 @@ public sealed class IntegrationSettings
     public JiraSettings Jira { get; set; } = new();
     public GitHubSettings GitHub { get; set; } = new();
     public ClaudeSettings Claude { get; set; } = new();
+    public DashboardSettings Dashboard { get; set; } = new();
     public int PollIntervalSeconds { get; set; } = 30;
 }
 
@@ -39,4 +40,10 @@ public sealed class ClaudeSettings
     // Anthropic API key (sk-ant-api...) or Claude Code OAuth token (sk-ant-oat...); aiclaudeworker only.
     public string AnthropicApiKey { get; set; } = string.Empty;
     public string AgentModel { get; set; } = string.Empty;
+}
+
+public sealed class DashboardSettings
+{
+    // Jira labels that mark an issue as handled by AI. Empty means: fall back to the workflow labels.
+    public IReadOnlyList<string> AiLabels { get; set; } = [];
 }

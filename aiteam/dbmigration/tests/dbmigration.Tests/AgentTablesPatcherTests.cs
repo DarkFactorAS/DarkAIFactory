@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(11, patcher.Sql.Count);
+        Assert.Equal(13, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -64,12 +64,25 @@ public sealed class AgentTablesPatcherTests
     }
 
     [Fact]
-    public void Patcher_AddsAgentStatusAsLastPatchWithoutCascade()
+    public void Patcher_SeedsDashboardAiLabels()
     {
         var patcher = new RecordingPatcher(0);
         Assert.True(AgentTablesPatcher.Run(patcher));
 
-        Assert.Equal(11, patcher.Numbers[^1]);
+        Assert.Contains("'Dashboard.AiLabels'", patcher.Sql[11]);
+        Assert.Contains("`client` = 'aidashboard' AND `name` = 'Dashboard.AiLabels'", patcher.Sql[11]);
+        Assert.Contains("('aidashboard', 'Dashboard.AiLabels',", patcher.Sql[12]);
+        Assert.Contains("aiagent-picked", patcher.Sql[12]);
+    }
+
+    [Fact]
+    public void Patcher_AddsAgentStatusWithoutCascade()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(AgentTablesPatcher.Run(patcher));
+
+        Assert.Equal(11, patcher.Numbers[10]);
+        Assert.Equal(13, patcher.Numbers[^1]);
         var sql = patcher.Sql[10];
         Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
         Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);

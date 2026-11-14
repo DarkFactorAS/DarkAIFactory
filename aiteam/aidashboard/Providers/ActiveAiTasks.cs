@@ -56,10 +56,12 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
 
     public async Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken)
     {
-        var aiLabels = AiLabelKeys
-            .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var aiLabels = _settings.Dashboard.AiLabels.Count > 0
+            ? _settings.Dashboard.AiLabels.ToArray()
+            : AiLabelKeys
+                .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
         var doneStatus = _settings.Jira.JiraDoneStatus;
         var jql = BuildJql(aiLabels, _settings.Jira.JiraProjectKey, doneStatus);
 
