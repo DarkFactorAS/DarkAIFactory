@@ -39,9 +39,15 @@ jobs:
           NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
           NUGET_TOKEN: ${{ secrets.NUGET_TOKEN }}
         run: |
-          for p in aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj \
-                   aiteam/dbmigration/tests/dbmigration.Tests/dbmigration.Tests.csproj \
-                   aiteam/aidashboard/aidashboard.csproj; do
+          # Restore every .NET project so --all-projects can analyze
+          # each project's NuGet dependency graph (obj/project.assets.json).
+          set -euo pipefail
+          mapfile -t projects < <(find . -name '*.csproj' -not -path '*/node_modules/*' | sort)
+          if [ "${#projects[@]}" -eq 0 ]; then
+            echo "::error::No .NET projects found to restore."
+            exit 1
+          fi
+          for p in "${projects[@]}"; do
             dotnet restore "$p"
           done
 
