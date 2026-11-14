@@ -28,6 +28,7 @@ builder.Services.AddSingleton(services =>
     return scope.ServiceProvider.GetRequiredService<IntegrationSettingsRepository>().Load("aidashboard");
 });
 
+builder.Services.AddScoped<IAiLabelsStore, AiLabelsStore>();
 builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<IAgentTaskRepository, AgentTaskRepository>();
 builder.Services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository>();
@@ -97,6 +98,7 @@ app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 AgentTaskEndpoints.Map(app);
 AgentEndpoints.Map(app);
 JiraCommentEndpoint.Map(app);
+DashboardSettingsEndpoints.Map(app);
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

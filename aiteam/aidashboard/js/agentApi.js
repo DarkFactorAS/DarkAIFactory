@@ -80,3 +80,8 @@ export function activeCapability(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   const wanted = String(status.currentCapability).toLowerCase();
   return CAPABILITIES.find((c) => c.toLowerCase() === wanted) ?? null;
 }
+
+export const getAiLabels = () => request("/api/settings/ai-labels");
+
+export const saveAiLabels = (token, labels) =>
+  request("/api/settings/ai-labels", { method: "PUT", headers: authHeaders(token), body: JSON.stringify({ labels }) });

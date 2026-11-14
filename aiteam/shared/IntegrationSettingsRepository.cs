@@ -69,10 +69,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             },
             Dashboard = new DashboardSettings
             {
-                AiLabels = ReadClientOptional("Dashboard.AiLabels")
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray()
+                AiLabels = ParseAiLabels(ReadClientOptional("Dashboard.AiLabels"))
             },
             Claude = new ClaudeSettings
             {
@@ -80,6 +77,36 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 AgentModel = ReadClientOptional("Claude.AgentModel")
             }
         };
+    }
+
+    // Shared by the startup loader and the dashboard editor: split, trim, drop empties and duplicates.
+    public static IReadOnlyList<string> ParseAiLabels(string value) =>
+        NormalizeAiLabels(value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    public static IReadOnlyList<string> NormalizeAiLabels(IEnumerable<string> labels) =>
+        labels.Select(label => label.Trim())
+            .Where(label => label.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    // Writes only settings[aidashboard, Dashboard.AiLabels]; no generic settings write is exposed.
+    public void SaveDashboardAiLabels(IReadOnlyList<string> labels)
+    {
+        var value = string.Join(",", NormalizeAiLabels(labels));
+        using (var update = connectionFactory.CreateCommand(
+            "UPDATE `settings` SET `value` = @value WHERE `client` = 'aidashboard' AND `name` = 'Dashboard.AiLabels'"))
+        {
+            update.AddParameter("@value", value);
+            if (update.ExecuteNonQuery() > 0)
+            {
+                return;
+            }
+        }
+
+        using var insert = connectionFactory.CreateCommand(
+            "INSERT INTO `settings` (`client`, `name`, `value`) VALUES ('aidashboard', 'Dashboard.AiLabels', @value)");
+        insert.AddParameter("@value", value);
+        insert.ExecuteNonQuery();
     }
 
     private static void ValidateClient(string client)
