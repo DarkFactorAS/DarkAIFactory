@@ -241,6 +241,15 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   useEffect(() => {
     let cancelled = false;
     let inFlight = false;
+    // Advance the server-derived clock by local elapsed time on every tick,
+    // independent of request completion, so cached Running status expires
+    // even when polls stall or fail.
+    const advanceClock = () => {
+      setAgentState((prev) => {
+        const localNow = Date.now();
+        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
+      });
+    };
     const load = () => {
       // Skip a tick while the previous poll is still running so a delayed
       // older response cannot overwrite a newer snapshot.
@@ -251,18 +260,17 @@ function ActiveAiTasksPanel({ labelsVersion }) {
           if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now() });
         })
         .catch(() => {
-          if (cancelled) return;
-          setAgentState((prev) => {
-            const localNow = Date.now();
-            return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
-          });
+          if (!cancelled) advanceClock();
         })
         .finally(() => {
           inFlight = false;
         });
     };
     load();
-    const timer = setInterval(load, POLL_INTERVAL_MS);
+    const timer = setInterval(() => {
+      advanceClock();
+      load();
+    }, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
