@@ -100,6 +100,7 @@ function PieWithLegend({ title, slices, testId, resolvedTheme }) {
 }
 
 function AiShareBarChart({ items, resolvedTheme }) {
+  const [expanded, setExpanded] = useState(false);
   const data = items.map((item) => {
     const aiCount = item.aiCount ?? 0;
     const nonAiCount = item.nonAiCount ?? 0;
@@ -120,29 +121,56 @@ function AiShareBarChart({ items, resolvedTheme }) {
   };
   return (
     <div data-testid="solved-ai-chart" className="mb-4">
-      <h3 className="mb-1 text-sm font-semibold">AI vs non-AI per project</h3>
-      {hasData && (
-        <ul className="mb-2 text-sm">
-          {data.map((row) => (
-            <li key={row.project}>
-              {row.project}: AI ({row.aiCount}, {row.aiPercent}%); non-AI ({row.nonAiCount}, {row.nonAiPercent}%).
-            </li>
-          ))}
-        </ul>
-      )}
-      {!hasData ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No solved tasks.</p>
-      ) : (
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={data}>
-            <XAxis dataKey="project" stroke={CHART_TEXT[resolvedTheme]} />
-            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke={CHART_TEXT[resolvedTheme]} />
-            <Tooltip formatter={tooltipFormatter} {...tooltipStyle(resolvedTheme)} />
-            <Legend wrapperStyle={{ color: CHART_TEXT[resolvedTheme] }} />
-            <Bar dataKey="aiPercent" name="% AI" stackId="share" fill={AI_COLORS.ai} />
-            <Bar dataKey="nonAiPercent" name="% non-AI" stackId="share" fill={AI_COLORS.nonAi} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="mb-1 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-controls="solved-ai-details"
+          aria-label={expanded ? "Collapse AI vs non-AI details" : "Expand AI vs non-AI details"}
+          className="rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+            className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+          >
+            <path d="M5 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <h3 className="text-sm font-semibold">AI vs non-AI per project</h3>
+      </div>
+      {expanded && (
+        <div id="solved-ai-details">
+          {hasData && (
+            <ul className="mb-2 text-sm">
+              {data.map((row) => (
+                <li key={row.project}>
+                  {row.project}: AI ({row.aiCount}, {row.aiPercent}%); non-AI ({row.nonAiCount}, {row.nonAiPercent}%).
+                </li>
+              ))}
+            </ul>
+          )}
+          {!hasData ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No solved tasks.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data}>
+                <XAxis dataKey="project" stroke={CHART_TEXT[resolvedTheme]} />
+                <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke={CHART_TEXT[resolvedTheme]} />
+                <Tooltip formatter={tooltipFormatter} {...tooltipStyle(resolvedTheme)} />
+                <Legend wrapperStyle={{ color: CHART_TEXT[resolvedTheme] }} />
+                <Bar dataKey="aiPercent" name="% AI" stackId="share" fill={AI_COLORS.ai} />
+                <Bar dataKey="nonAiPercent" name="% non-AI" stackId="share" fill={AI_COLORS.nonAi} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       )}
     </div>
   );
