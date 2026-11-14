@@ -42,6 +42,14 @@ public sealed class ActiveAiTaskServiceTests
         ",\"status\":{\"name\":\"" + status + "\"},\"updated\":\"" + updated + "\",\"labels\":[\"" + label + "\"]}}";
 
     [Fact]
+    public void BuildJqlAddsStatusClauseOnlyWhenConfigured()
+    {
+        Assert.DoesNotContain("status in", ActiveAiTaskService.BuildJql(["a"], "DFAI", "Done"));
+        var jql = ActiveAiTaskService.BuildJql(["a"], "DFAI", "Done", ["In Progress", "Q\"x"]);
+        Assert.Contains("AND status in (\"In Progress\", \"Q\\\"x\") ORDER BY", jql);
+    }
+
+    [Fact]
     public void BuildJqlFiltersLabelsAndDoneAndOrdersByUpdatedAndKey()
     {
         var jql = ActiveAiTaskService.BuildJql(["ai-analyzed"], "DFAI", "Done");
@@ -136,5 +144,23 @@ public sealed class ActiveAiTaskServiceTests
         settings.Dashboard.AiLabels = [];
         await service.GetActiveAsync(CancellationToken.None);
         Assert.Contains(Uri.EscapeDataString("\"ai-analyzed\""), handler.RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task FiltersByConfiguredStatusesCaseInsensitively()
+    {
+        var body = "{\"issues\":[" +
+                   Issue("A-1", "In Progress", "2026-01-02T00:00:00.000+0000", "ai-analyzed") + "," +
+                   Issue("A-2", "To Do", "2026-01-01T00:00:00.000+0000", "ai-analyzed") + "]}";
+        var handler = new StubHandler(body);
+        var settings = new IntegrationSettings();
+        settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
+        settings.Dashboard.ActiveStatuses = ["in progress"];
+        var service = new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
+
+        var result = await service.GetActiveAsync(CancellationToken.None);
+
+        Assert.Equal("A-1", Assert.Single(result).Key);
+        Assert.Contains(Uri.EscapeDataString("status in (\"in progress\")"), handler.RequestUri!.Query);
     }
 }

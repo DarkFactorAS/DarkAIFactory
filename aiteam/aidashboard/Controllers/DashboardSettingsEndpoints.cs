@@ -15,6 +15,18 @@ public sealed class AiLabelsStore(IntegrationSettingsRepository repository) : IA
     public void Save(IReadOnlyList<string> labels) => repository.SaveDashboardAiLabels(labels);
 }
 
+public sealed record ActiveStatusesRequest(List<string>? Statuses);
+
+public interface IActiveStatusesStore
+{
+    void Save(IReadOnlyList<string> statuses);
+}
+
+public sealed class ActiveStatusesStore(IntegrationSettingsRepository repository) : IActiveStatusesStore
+{
+    public void Save(IReadOnlyList<string> statuses) => repository.SaveDashboardActiveStatuses(statuses);
+}
+
 // Read/write of the single setting Dashboard.AiLabels (client 'aidashboard').
 public static class DashboardSettingsEndpoints
 {
@@ -28,6 +40,55 @@ public static class DashboardSettingsEndpoints
     {
         app.MapGet("/api/settings/ai-labels", Get);
         app.MapPut("/api/settings/ai-labels", Put).RequireAuthorization();
+        app.MapGet("/api/settings/active-statuses", GetStatuses);
+        app.MapPut("/api/settings/active-statuses", PutStatuses).RequireAuthorization();
+    }
+
+    public const int MaxStatuses = 20;
+    public const int MaxStatusLength = 255;
+
+    public static IResult GetStatuses(IntegrationSettings settings) =>
+        Results.Ok(new { statuses = settings.Dashboard.ActiveStatuses });
+
+    public static IResult PutStatuses(
+        IntegrationSettings settings, IActiveStatusesStore store, ActiveStatusesRequest? request)
+    {
+        if (request?.Statuses is null)
+        {
+            return Results.BadRequest(new { error = "statuses is required." });
+        }
+
+        if (request.Statuses.Any(s => s is not null && (s.Trim().Length > MaxStatusLength || s.Contains(','))))
+        {
+            return Results.BadRequest(new
+            {
+                error = $"Each status must be at most {MaxStatusLength} characters and contain no commas."
+            });
+        }
+
+        var statuses = IntegrationSettingsRepository.NormalizeStatuses(request.Statuses.Select(s => s ?? string.Empty));
+        if (statuses.Count > MaxStatuses)
+        {
+            return Results.BadRequest(new { error = $"At most {MaxStatuses} statuses are allowed." });
+        }
+
+        lock (SaveLock)
+        {
+            try
+            {
+                store.Save(statuses);
+            }
+            catch (Exception ex)
+            {
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Settings", $"Saving active statuses failed ({ex.GetType().Name}).");
+                return Results.Json(new { error = "Unable to save the statuses." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            settings.Dashboard.ActiveStatuses = statuses;
+        }
+
+        return Results.Ok(new { statuses });
     }
 
     public static IResult Get(IntegrationSettings settings) =>

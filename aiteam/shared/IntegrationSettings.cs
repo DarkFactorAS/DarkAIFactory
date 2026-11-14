@@ -53,4 +53,13 @@ public sealed class DashboardSettings
         get => _aiLabels;
         set => _aiLabels = value.ToArray();
     }
+
+    // Jira status names shown in the Top 5 AI tasks panel. Empty means: every non-Done status.
+    private volatile IReadOnlyList<string> _activeStatuses = [];
+
+    public IReadOnlyList<string> ActiveStatuses
+    {
+        get => _activeStatuses;
+        set => _activeStatuses = value.ToArray();
+    }
 }

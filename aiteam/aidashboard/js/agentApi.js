@@ -121,5 +121,14 @@ export function workingIssueKeys(agents, nowMs, pollMs = POLL_INTERVAL_MS) {
 
 export const getAiLabels = () => request("/api/settings/ai-labels");
 
+export const getActiveStatuses = () => request("/api/settings/active-statuses");
+
+export const saveActiveStatuses = (token, statuses) =>
+  request("/api/settings/active-statuses", {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ statuses }),
+  });
+
 export const saveAiLabels = (token, labels) =>
   request("/api/settings/ai-labels", { method: "PUT", headers: authHeaders(token), body: JSON.stringify({ labels }) });
