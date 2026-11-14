@@ -82,6 +82,12 @@ public sealed class AgentLoop(
         foreach (var capability in _capabilities.Where(capability => enabled.Contains(capability.Kind)))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (StopRequested)
+            {
+                // Stop was requested while an earlier capability ran; let that run finish but start no more.
+                break;
+            }
+
             using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var heartbeatTask = RunHeartbeatAsync(heartbeat.Token);
             var failed = false;
