@@ -46,6 +46,16 @@ internal sealed class FakeCapability(AgentCapabilityKind kind, List<AgentCapabil
     }
 }
 
+internal sealed class ScopeNameCapability(List<string?> names) : IAgentCapability
+{
+    public AgentCapabilityKind Kind => AgentCapabilityKind.Jira;
+    public Task RunCycleAsync(AgentContext context, CancellationToken cancellationToken)
+    {
+        names.Add(AgentLog.Current);
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class NoLock : IAgentClaimLock
 {
     public IDisposable? TryAcquire(long agentId, string issueKey) => null;
@@ -53,6 +63,19 @@ internal sealed class NoLock : IAgentClaimLock
 
 public sealed class AgentLoopTests
 {
+    [Fact]
+    public async Task Cycle_RunsCapabilitiesInAgentLogScope()
+    {
+        var names = new List<string?>();
+        var repo = new FakeRepository { Capabilities = [AgentCapabilityKind.Jira] };
+        var loop = new AgentLoop(1, repo, [new ScopeNameCapability(names)], new NoLock(), TimeSpan.FromMilliseconds(10));
+
+        await loop.RunCycleAsync(CancellationToken.None);
+
+        Assert.Equal(["a"], names);
+        Assert.Null(AgentLog.Current);
+    }
+
     private static (AgentLoop Loop, FakeRepository Repo, List<AgentCapabilityKind> Log) Create()
     {
         var log = new List<AgentCapabilityKind>();

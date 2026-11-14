@@ -38,7 +38,7 @@ internal sealed class BlockedIssueUnblocker(JiraCapabilityConfig configuration, 
             {
                 await jira.TransitionToAsync(issue.Key, configuration.SelectedStatus, cancellationToken);
                 moved.Add(issue.Key);
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.INFO, "JiraUnblocker",
                     $"Moved {issue.Key} to {configuration.SelectedStatus}: all blocking issues are {configuration.DoneStatus}.");
             }
@@ -48,7 +48,7 @@ internal sealed class BlockedIssueUnblocker(JiraCapabilityConfig configuration, 
             }
             catch (Exception exception)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, "JiraUnblocker", $"Could not move {issue.Key}: {exception.Message}");
             }
         }

@@ -1,3 +1,4 @@
+using AiAgent.Core;
 using System.Text;
 using AiAgent.Repositories;
 using AiAgent.Runner;
@@ -52,7 +53,7 @@ public sealed class ReviewFixFlow(
         if (!ReviewGit.IsPushableBranch(headBranch))
         {
             var error = $"Refusing to push to branch '{headBranch}'.";
-            DFLogger.LogOutput(DFLogLevel.ERROR, Category, $"PR #{number}: {error}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Category, $"PR #{number}: {error}");
             attempts.Record(agentId, pullRequest.Id, comments.Select(c => c.Id).ToList(), "Failed",
                 countAttempt: false, error);
             return new FixResult(FixOutcome.Failed, error, FailedCount: comments.Count);
@@ -76,7 +77,7 @@ public sealed class ReviewFixFlow(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var comment = eligible[index];
-                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                AgentLog.LogOutput(DFLogLevel.INFO, Category,
                     $"PR #{number}: fixing comment {comment.Id} ({index + 1} of {eligible.Count}) " +
                     $"at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
                 var result = await FixCommentAsync(
@@ -96,7 +97,7 @@ public sealed class ReviewFixFlow(
 
                 if (result.StopRemaining)
                 {
-                    DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                    AgentLog.LogOutput(DFLogLevel.WARNING, Category,
                         $"PR #{number}: stopping; {eligible.Count - index - 1} comment(s) left for the next cycle.");
                     break;
                 }
@@ -215,7 +216,7 @@ public sealed class ReviewFixFlow(
             committed = true;
             await git.PushAsync(workspacePath, headBranch, baselineRevision, cancellationToken);
             attempts.Record(agentId, pullRequest.Id, ids, "Resolved", countAttempt: false, error: null);
-            DFLogger.LogOutput(DFLogLevel.INFO, Category,
+            AgentLog.LogOutput(DFLogLevel.INFO, Category,
                 $"PR #{number}: pushed fix for comment {comment.Id} to '{headBranch}'.");
         }
         catch (RunnerBusyException)
@@ -241,7 +242,7 @@ public sealed class ReviewFixFlow(
     /// <summary>Nothing to fix is not an error: the comment is Resolved (not retried) and its thread stays open.</summary>
     private CommentResult NoChanges(StoredAgentPullRequest pullRequest, ReviewComment comment, string reason)
     {
-        DFLogger.LogOutput(DFLogLevel.INFO, Category,
+        AgentLog.LogOutput(DFLogLevel.INFO, Category,
             $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {comment.Id}: {reason}; nothing to push. " +
             "The review thread is left open for a human.");
         attempts.Record(agentId, pullRequest.Id, [comment.Id], "Resolved", countAttempt: false, error: null);
@@ -296,7 +297,7 @@ public sealed class ReviewFixFlow(
                 .ToList();
             if (unfinished.Count > 0)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                AgentLog.LogOutput(DFLogLevel.INFO, Category,
                     $"PR #{number}: leaving review thread open; comment(s) {string.Join(", ", unfinished)} not fixed yet.");
                 continue;
             }
@@ -307,7 +308,7 @@ public sealed class ReviewFixFlow(
                 .ToList();
             if (retried.Count > 0)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                AgentLog.LogOutput(DFLogLevel.INFO, Category,
                     $"PR #{number}: leaving review thread open for a human; comment(s) " +
                     $"{string.Join(", ", retried)} were retried and earlier siblings may not have been fixed.");
                 continue;
@@ -327,7 +328,7 @@ public sealed class ReviewFixFlow(
         try
         {
             await resolver.ResolveThreadAsync(pullRequest, threadId, cancellationToken);
-            DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{number}: resolved review thread for comment(s) {ids}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, Category, $"PR #{number}: resolved review thread for comment(s) {ids}.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -335,7 +336,7 @@ public sealed class ReviewFixFlow(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category,
                 $"PR #{number}: could not resolve review thread for comment(s) {ids}: {exception.Message}");
         }
     }
@@ -375,7 +376,7 @@ public sealed class ReviewFixFlow(
         StoredAgentPullRequest pullRequest, IReadOnlyCollection<long> ids, int attemptsUsed, string error,
         bool terminal = false, bool stopRemaining = false, bool quarantineWorkspace = false)
     {
-        DFLogger.LogOutput(DFLogLevel.ERROR, Category,
+        AgentLog.LogOutput(DFLogLevel.ERROR, Category,
             $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {string.Join(", ", ids)}: {error}");
         var status = terminal ? "Failed" : FixDecision.StatusAfterUnsuccessfulAttempt(attemptsUsed + 1, maxAttempts);
         attempts.Record(agentId, pullRequest.Id, ids, status, countAttempt: false, error);

@@ -58,7 +58,7 @@ internal sealed class PlanningCapability(
                 }
                 catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    DFLogger.LogOutput(
+                    AgentLog.LogOutput(
                         DFLogLevel.ERROR, "Planning",
                         $"Planning project {project.JiraProjectKey} failed: {exception.Message}. Retrying next cycle.");
                 }
@@ -98,7 +98,7 @@ internal sealed class PlanningCapability(
             }
             catch (RunnerBusyException exception)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, "Planning", $"Planning {issue.Key} deferred: {exception.Message}");
+                AgentLog.LogOutput(DFLogLevel.INFO, "Planning", $"Planning {issue.Key} deferred: {exception.Message}");
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -106,7 +106,7 @@ internal sealed class PlanningCapability(
             }
             catch (Exception exception)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, "Planning",
                     $"Planning {issue.Key} failed: {exception.Message}. Pausing automatic retries with the failure label.");
                 try
@@ -121,7 +121,7 @@ internal sealed class PlanningCapability(
                 }
                 catch (Exception notification) when (!cancellationToken.IsCancellationRequested)
                 {
-                    DFLogger.LogOutput(
+                    AgentLog.LogOutput(
                         DFLogLevel.ERROR, "Planning",
                         $"Could not report planning failure for {issue.Key}: {notification.Message}");
                 }

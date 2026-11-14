@@ -96,7 +96,7 @@ public sealed class JiraCapability(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, "JiraCapability", $"Jira {name} failed: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, "JiraCapability", $"Jira {name} failed: {exception.Message}");
         }
     }
 }

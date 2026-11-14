@@ -31,6 +31,11 @@ Claude Code login for the runner: `./login_claude.sh` (Windows: `login_claude.cm
 Configuration is read from `aiteam/config/appsettings.<Environment>.json` (`PollIntervalSeconds`).
 CI: `.github/workflows/aiagent-ci-*.yml`; deploy: job `aiagent` in `aiteam-deploy.yml`.
 
+## Logging
+
+Log lines written while an agent runs start with `[AgentName] ` (the agent's name in the database), so
+concurrent agents can be told apart. Startup lines, host-wide lines and the `--runner-server` process have no prefix.
+
 ## Jira capability (`Capabilities/Jira`)
 
 Copied from `aijiramanager`, the Jira parts of `aiworker`/`aiclaudeworker` and `PullRequestCloser` in
