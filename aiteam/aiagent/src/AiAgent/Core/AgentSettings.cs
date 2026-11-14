@@ -8,4 +8,7 @@ public sealed class AgentSettings : AppSettings
 
     /// <summary>Maximum concurrent runner jobs (runner reads AIAGENT_RUNNER_MAX_JOBS; default 2).</summary>
     public int MaxConcurrentRunnerJobs { get; set; } = 2;
+
+    /// <summary>Max minutes one Review runner call (LLM run, build and test for one comment) may take.</summary>
+    public int RunnerTimeoutMinutes { get; set; } = 30;
 }

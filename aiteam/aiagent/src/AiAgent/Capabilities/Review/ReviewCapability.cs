@@ -40,8 +40,10 @@ public sealed class ReviewCapability(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var scan = await client.ScanCommentsAsync(pullRequest, cancellationToken);
+            LogScan(pullRequest, scan);
             if (scan.Actionable.Count == 0)
             {
+                await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
                 continue;
             }
 
@@ -54,7 +56,11 @@ public sealed class ReviewCapability(
 
             try
             {
-                await FixPullRequestAsync(context, client, pullRequest, scan.Actionable, cancellationToken);
+                var failedCount = await FixPullRequestAsync(context, client, pullRequest, scan.Actionable, cancellationToken);
+                if (failedCount == 0)
+                {
+                    await LogIfReadyToMergeAsync(client, pullRequest, cancellationToken);
+                }
             }
             catch (RunnerBusyException)
             {
@@ -69,7 +75,47 @@ public sealed class ReviewCapability(
         }
     }
 
-    private async Task FixPullRequestAsync(
+    /// <summary>A pull request is ready to merge when no review thread is unresolved and no fix failed.</summary>
+    internal static bool IsReadyToMerge(int unresolvedThreads, int failedCount) =>
+        unresolvedThreads == 0 && failedCount == 0;
+
+    private async Task LogIfReadyToMergeAsync(
+        ReviewGitHubClient client, StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var unresolved = await client.CountUnresolvedThreadsAsync(pullRequest, cancellationToken);
+        if (unresolved is { } count && IsReadyToMerge(count, 0))
+        {
+            Log($"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey}) is ready to be merged: " +
+                "all review comments are resolved.");
+        }
+    }
+
+    private void LogScan(StoredAgentPullRequest pullRequest, ReviewCommentScan scan)
+    {
+        var prefix = $"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey})";
+        if (scan.OpenComments == 0)
+        {
+            Log($"{prefix} has no unresolved review comments.");
+            return;
+        }
+
+        var reviewer = options.ReviewerLogin;
+        var message = $"{prefix} has {scan.OpenComments} unresolved review comment(s); {scan.Actionable.Count} actionable " +
+            $"from '{reviewer}'" +
+            (scan.HandledComments > 0 ? $", {scan.HandledComments} from '{reviewer}' already handled" : string.Empty) +
+            (scan.FailedComments > 0
+                ? $", {scan.FailedComments} from '{reviewer}' marked failed (terminal failure or attempts exhausted; see agent_review_attempts)"
+                : string.Empty) + ".";
+        DFLogger.LogOutput(scan.FailedComments > 0 ? DFLogLevel.WARNING : DFLogLevel.INFO, Category, message);
+        if (scan.OtherAuthors.Count > 0)
+        {
+            var authors = string.Join(", ", scan.OtherAuthors.Select(author => $"{author.Key} ({author.Value})"));
+            Log($"{prefix}: ignoring comment(s) not from '{reviewer}'. Reviewers found: {authors}.");
+        }
+    }
+
+    /// <summary>Returns the failed count, or null when the run did not complete (head moved or branch mismatch).</summary>
+    private async Task<int?> FixPullRequestAsync(
         AgentContext context,
         ReviewGitHubClient client,
         StoredAgentPullRequest pullRequest,
@@ -81,7 +127,7 @@ public sealed class ReviewCapability(
         if (comments.Any(comment => !string.Equals(comment.HeadSha, headSha, StringComparison.OrdinalIgnoreCase)))
         {
             Log($"PR #{number}: head moved while reading comments; retrying next cycle.");
-            return;
+            return null;
         }
 
         var git = new ReviewGit(gitRunner);
@@ -94,7 +140,7 @@ public sealed class ReviewCapability(
             if (!string.Equals(revision, headSha, StringComparison.OrdinalIgnoreCase))
             {
                 Log($"PR #{number}: branch is at {revision}, expected {headSha}; retrying next cycle.");
-                return;
+                return null;
             }
 
             var runner = new RunnerFixRunner(runnerClient, context.Agent, options);
@@ -103,13 +149,16 @@ public sealed class ReviewCapability(
             // are sent with the runner request and a non-zero runner exit status fails the attempt. Local command
             // execution is only used when a command runner is explicitly injected (e.g. by tests).
             var flow = new ReviewFixFlow(
-                context.AgentId, runner, git, commands ?? NoLocalCommands.Instance, attempts,
+                context.AgentId, runner, git, commands ?? NoLocalCommands.Instance, attempts, client,
                 options.MaxAttempts,
                 commands is null ? null : options.BuildCommand,
                 commands is null ? null : options.TestCommand);
+            Log($"PR #{number}: fixing {comments.Count} comment(s) one at a time.");
             var result = await flow.RunAsync(pullRequest, branch, comments, workspace, cancellationToken);
-            Log($"PR #{number}: fix attempt finished with {result.Outcome}" +
-                (result.Error is null ? "." : $": {result.Error}"));
+            Log($"PR #{number}: fix run finished with {result.Outcome}; " +
+                $"{result.PushedCount} pushed, {result.FailedCount} failed" +
+                (result.Error is null ? "." : $". Last error: {result.Error}"));
+            return result.FailedCount;
         }
         finally
         {
@@ -151,12 +200,25 @@ public sealed class ReviewCapability(
         public async Task RunAsync(string workspacePath, string prompt, CancellationToken cancellationToken)
         {
             var provider = agent.LlmProvider.Trim().ToLowerInvariant() is "copilot" or "github" ? "copilot" : "claude";
-            var response = await client.RunAsync(
-                new RunnerRequest(
-                    provider, agent.LlmModel ?? string.Empty, RunnerModes.Review, workspacePath,
-                    PromptComposer.Compose(agent, prompt), options.BuildCommand, options.TestCommand,
-                    provider == "copilot" ? options.CopilotToken : null),
-                cancellationToken);
+            // Closing the request on timeout makes the runner cancel the job (it observes request abortion).
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(options.RunnerTimeout);
+            RunnerResponse response;
+            try
+            {
+                response = await client.RunAsync(
+                    new RunnerRequest(
+                        provider, agent.LlmModel ?? string.Empty, RunnerModes.Review, workspacePath,
+                        PromptComposer.Compose(agent, prompt), options.BuildCommand, options.TestCommand,
+                        provider == "copilot" ? options.CopilotToken : null),
+                    timeout.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"The runner did not finish within {options.RunnerTimeout.TotalMinutes:0} minute(s).");
+            }
+
             if (response.ExitCode != 0)
             {
                 throw new InvalidOperationException($"The runner exited with code {response.ExitCode}: {response.Output}");

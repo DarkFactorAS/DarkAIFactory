@@ -1,3 +1,4 @@
+using System.Text;
 using AiAgent.Repositories;
 using AiAgent.Runner;
 using DFCommonLib.Logger;
@@ -21,8 +22,10 @@ public static class FixDecision
 }
 
 /// <summary>
-/// Runs one fix attempt for a pull request: prompt, the runner, bounds check, build/test, commit, push.
-/// Pushes only to the PR head branch, never forced, and never when nothing changed.
+/// Fixes a pull request's review comments one at a time. For each comment: prompt with only that comment, the
+/// runner, bounds check (only the comment's file), build/test, then a separate commit and push whose message
+/// says what was fixed and where. Pushes only to the PR head branch, never forced, and never when nothing changed.
+/// After the run, review threads whose comments were all pushed are resolved on GitHub.
 /// </summary>
 public sealed class ReviewFixFlow(
     long agentId,
@@ -30,6 +33,7 @@ public sealed class ReviewFixFlow(
     ReviewGit git,
     IProjectCommandRunner commands,
     IReviewAttemptStore attempts,
+    IReviewThreadResolver resolver,
     int maxAttempts,
     string? buildCommand,
     string? testCommand)
@@ -43,10 +47,14 @@ public sealed class ReviewFixFlow(
         string workspacePath,
         CancellationToken cancellationToken)
     {
+        var number = pullRequest.PullRequest.PullRequestNumber;
         if (!ReviewGit.IsPushableBranch(headBranch))
         {
-            return await FailAsync(pullRequest, comments.Select(c => c.Id).ToList(), new Dictionary<long, int>(),
-                $"Refusing to push to branch '{headBranch}'.", terminal: true);
+            var error = $"Refusing to push to branch '{headBranch}'.";
+            DFLogger.LogOutput(DFLogLevel.ERROR, Category, $"PR #{number}: {error}");
+            attempts.Record(agentId, pullRequest.Id, comments.Select(c => c.Id).ToList(), "Failed",
+                countAttempt: false, error);
+            return new FixResult(FixOutcome.Failed, error, FailedCount: comments.Count);
         }
 
         var used = attempts.GetAttempts(pullRequest.Id, comments.Select(c => c.Id).ToList());
@@ -56,22 +64,79 @@ public sealed class ReviewFixFlow(
             return new FixResult(FixOutcome.Skipped);
         }
 
-        // At most one comment per path, so a change to that path can retire exactly that comment.
-        // Further comments on the same path are handled in later cycles.
-        eligible = eligible.GroupBy(c => c.Path, StringComparer.Ordinal).Select(group => group.First()).ToList();
-        var promptBatch = ReviewPromptBuilder.BuildBatch(eligible);
-        eligible = promptBatch.Comments.ToList();
-        var ids = eligible.Select(c => c.Id).ToList();
+        var pushed = 0;
+        var failed = 0;
+        string? lastError = null;
+        var pushedIds = new HashSet<long>();
+        try
+        {
+            for (var index = 0; index < eligible.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var comment = eligible[index];
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{number}: fixing comment {comment.Id} ({index + 1} of {eligible.Count}) " +
+                    $"at {comment.Path}:{comment.Line?.ToString() ?? "-"}.");
+                var result = await FixCommentAsync(
+                    pullRequest, headBranch, comment, used.GetValueOrDefault(comment.Id), workspacePath, cancellationToken);
+                switch (result.Outcome)
+                {
+                    case FixOutcome.Pushed:
+                        pushed++;
+                        pushedIds.Add(comment.Id);
+                        break;
+                    case FixOutcome.Failed:
+                        failed++;
+                        lastError = result.Error;
+                        break;
+                }
+
+                if (result.StopRemaining)
+                {
+                    DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                        $"PR #{number}: stopping; {eligible.Count - index - 1} comment(s) left for the next cycle.");
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                await ResolveCompletedThreadsAsync(pullRequest, comments, pushedIds, used, cancellationToken);
+            }
+        }
+
+        var outcome = pushed > 0 ? FixOutcome.Pushed : failed > 0 ? FixOutcome.Failed : FixOutcome.NoChanges;
+        return new FixResult(outcome, lastError, pushed, failed);
+    }
+
+    private async Task<CommentResult> FixCommentAsync(
+        StoredAgentPullRequest pullRequest,
+        string headBranch,
+        ReviewComment comment,
+        int attemptsUsed,
+        string workspacePath,
+        CancellationToken cancellationToken)
+    {
+        var number = pullRequest.PullRequest.PullRequestNumber;
+        long[] ids = [comment.Id];
+        var prompt = ReviewPromptBuilder.Build([comment]);
+        if (Encoding.UTF8.GetByteCount(prompt) > ReviewPromptBuilder.MaxPromptLengthBytes)
+        {
+            return Fail(pullRequest, ids, attemptsUsed, "The review comment exceeds the maximum prompt size.", terminal: true);
+        }
+
         var baselineRevision = await git.GetRevisionAsync(workspacePath, cancellationToken);
-        // Mark the comments in progress; the attempt is counted only once the runner has accepted the job,
+        // Mark the comment in progress; the attempt is counted only once the runner has accepted the job,
         // so capacity rejections (RunnerBusyException) never use up a comment's attempt limit.
         attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: false, error: null);
-
+        var committed = false;
         try
         {
             try
             {
-                await runner.RunAsync(workspacePath, promptBatch.Prompt, cancellationToken);
+                await runner.RunAsync(workspacePath, prompt, cancellationToken);
             }
             catch (RunnerBusyException)
             {
@@ -81,26 +146,25 @@ public sealed class ReviewFixFlow(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                // Includes TimeoutException from the runner: a slow run is a real, counted attempt.
                 attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
                 throw;
             }
 
             attempts.Record(agentId, pullRequest.Id, ids, "InProgress", countAttempt: true, error: null);
 
+            var cited = ReviewPromptBuilder.CitedPaths([comment]);
             var changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: the runner made no changes; nothing to push.");
-                RecordUnsuccessfulAttempts(pullRequest, ids, used, "the runner made no changes.");
-                return new FixResult(FixOutcome.NoChanges);
+                return NoChanges(pullRequest, comment, "the runner made no changes");
             }
 
-            var outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
+            var outOfBounds = FixDecision.OutOfBounds(changed, cited);
             if (outOfBounds.Count > 0)
             {
-                await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
-                return await FailAsync(pullRequest, ids, used,
-                    $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
+                return await DiscardAndFailAsync(pullRequest, ids, attemptsUsed, workspacePath, baselineRevision,
+                    $"Changes outside the cited file were discarded: {string.Join(", ", outOfBounds)}.", cancellationToken);
             }
 
             foreach (var command in new[] { buildCommand, testCommand })
@@ -113,95 +177,175 @@ public sealed class ReviewFixFlow(
                 var failure = await commands.RunAsync(command, workspacePath, cancellationToken);
                 if (failure is not null)
                 {
-                    await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
-                    return await FailAsync(pullRequest, ids, used, $"'{command}' failed: {failure}");
+                    return await DiscardAndFailAsync(pullRequest, ids, attemptsUsed, workspacePath, baselineRevision,
+                        $"'{command}' failed: {failure}", cancellationToken);
                 }
             }
 
             changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: no changes remained after validation; nothing to push.");
-                RecordUnsuccessfulAttempts(pullRequest, ids, used, "no changes remained after build and test.");
-                return new FixResult(FixOutcome.NoChanges);
+                return NoChanges(pullRequest, comment, "no changes remained after build and test");
             }
 
-            outOfBounds = FixDecision.OutOfBounds(changed, ReviewPromptBuilder.CitedPaths(eligible));
+            outOfBounds = FixDecision.OutOfBounds(changed, cited);
             if (outOfBounds.Count > 0)
             {
-                await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
-                return await FailAsync(pullRequest, ids, used,
-                    $"Changes outside the cited files were discarded: {string.Join(", ", outOfBounds)}.");
+                return await DiscardAndFailAsync(pullRequest, ids, attemptsUsed, workspacePath, baselineRevision,
+                    $"Changes outside the cited file were discarded: {string.Join(", ", outOfBounds)}.", cancellationToken);
             }
 
             await git.CommitAsync(workspacePath,
-                $"{pullRequest.PullRequest.JiraKey}: Address review comments ({ids.Count})", cancellationToken);
+                ReviewCommitMessage.Build(pullRequest.PullRequest.JiraKey, comment), cancellationToken);
+            committed = true;
             await git.PushAsync(workspacePath, headBranch, baselineRevision, cancellationToken);
-            var changedPaths = new HashSet<string>(changed, StringComparer.Ordinal);
-            var commentsPerPath = eligible.GroupBy(comment => comment.Path, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-            var resolvedIds = eligible
-                .Where(comment => changedPaths.Contains(comment.Path) && commentsPerPath[comment.Path] == 1)
-                .Select(comment => comment.Id)
-                .ToList();
-            var resolvedSet = new HashSet<long>(resolvedIds);
-            var pendingIds = eligible.Where(comment => !resolvedSet.Contains(comment.Id)).Select(comment => comment.Id).ToList();
-            if (resolvedIds.Count > 0)
-            {
-                attempts.Record(agentId, pullRequest.Id, resolvedIds, "Resolved", countAttempt: false, error: null);
-            }
-
-            if (pendingIds.Count > 0)
-            {
-                attempts.Record(agentId, pullRequest.Id, pendingIds, "Pending", countAttempt: false,
-                    "No changes were made to the cited files.");
-            }
-
-            DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: pushed fixes to '{headBranch}'.");
-            return new FixResult(FixOutcome.Pushed);
+            attempts.Record(agentId, pullRequest.Id, ids, "Resolved", countAttempt: false, error: null);
+            DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                $"PR #{number}: pushed fix for comment {comment.Id} to '{headBranch}'.");
         }
         catch (RunnerBusyException)
         {
             throw;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            attempts.Record(agentId, pullRequest.Id, ids, "Pending", countAttempt: false, error: "Cancelled.");
+            // Agent shutdown: the attempt was not counted, or only once the runner had finished; leave it pending.
+            attempts.Record(agentId, pullRequest.Id, ids, "Pending", countAttempt: false, error: "Cancelled by agent shutdown.");
             throw;
         }
         catch (Exception exception)
         {
-            return await FailAsync(pullRequest, ids, used, exception.Message);
+            // A failed push leaves a local commit; stop so later comments do not push it.
+            return await DiscardAndFailAsync(pullRequest, ids, attemptsUsed, workspacePath, baselineRevision,
+                exception.Message, cancellationToken, stopRemaining: committed);
         }
+
+        return new CommentResult(FixOutcome.Pushed);
     }
 
-    private Task<FixResult> FailAsync(
-        StoredAgentPullRequest pullRequest, IReadOnlyCollection<long> ids, IReadOnlyDictionary<long, int> attemptsUsed, string error,
-        bool terminal = false)
+    /// <summary>Nothing to fix is not an error: the comment is Resolved (not retried) and its thread stays open.</summary>
+    private CommentResult NoChanges(StoredAgentPullRequest pullRequest, ReviewComment comment, string reason)
     {
-        DFLogger.LogOutput(DFLogLevel.ERROR, Category, $"PR #{pullRequest.PullRequest.PullRequestNumber}: {error}");
-        if (terminal)
-        {
-            attempts.Record(agentId, pullRequest.Id, ids, "Failed", countAttempt: false, error);
-        }
-        else
-        {
-            RecordUnsuccessfulAttempts(pullRequest, ids, attemptsUsed, error);
-        }
-
-        return Task.FromResult(new FixResult(FixOutcome.Failed, error));
+        DFLogger.LogOutput(DFLogLevel.INFO, Category,
+            $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {comment.Id}: {reason}; nothing to push. " +
+            "The review thread is left open for a human.");
+        attempts.Record(agentId, pullRequest.Id, [comment.Id], "Resolved", countAttempt: false, error: null);
+        return new CommentResult(FixOutcome.NoChanges);
     }
 
-    private void RecordUnsuccessfulAttempts(
+    /// <summary>
+    /// Resolves each review thread whose outstanding comments were all pushed in this run. A thread with any
+    /// sibling comment that failed, made no changes, was skipped for exhausted attempts, or was not reached
+    /// stays open. A comment that made no changes is marked Resolved in the database (it is not retried), but
+    /// its thread is deliberately left open on GitHub for a human.
+    /// A thread containing a retried comment also stays open: an earlier cycle may have handled a sibling (for
+    /// example one that made no changes) that later polls no longer return, so this run cannot see it.
+    /// </summary>
+    private async Task ResolveCompletedThreadsAsync(
+        StoredAgentPullRequest pullRequest,
+        IReadOnlyList<ReviewComment> comments,
+        IReadOnlySet<long> pushedIds,
+        IReadOnlyDictionary<long, int> priorAttempts,
+        CancellationToken cancellationToken)
+    {
+        if (pushedIds.Count == 0)
+        {
+            return;
+        }
+
+        var number = pullRequest.PullRequest.PullRequestNumber;
+        var threads = comments
+            .Where(c => !string.IsNullOrEmpty(c.ThreadId))
+            .GroupBy(c => c.ThreadId, StringComparer.Ordinal);
+        foreach (var thread in threads)
+        {
+            if (!thread.Any(c => pushedIds.Contains(c.Id)))
+            {
+                continue;
+            }
+
+            var unfinished = thread.Where(c => !pushedIds.Contains(c.Id)).Select(c => c.Id).ToList();
+            if (unfinished.Count > 0)
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{number}: leaving review thread open; comment(s) {string.Join(", ", unfinished)} not fixed yet.");
+                continue;
+            }
+
+            var retried = thread.Where(c => priorAttempts.GetValueOrDefault(c.Id) > 0).Select(c => c.Id).ToList();
+            if (retried.Count > 0)
+            {
+                DFLogger.LogOutput(DFLogLevel.INFO, Category,
+                    $"PR #{number}: leaving review thread open for a human; comment(s) " +
+                    $"{string.Join(", ", retried)} were retried and earlier siblings may not have been fixed.");
+                continue;
+            }
+
+            // A failure to resolve must not turn a pushed fix into a failure.
+            await ResolveThreadAsync(pullRequest, thread.Key, thread.Select(c => c.Id).ToList(), cancellationToken);
+        }
+    }
+
+    private async Task ResolveThreadAsync(
+        StoredAgentPullRequest pullRequest, string threadId, IReadOnlyList<long> commentIds, CancellationToken cancellationToken)
+    {
+        var number = pullRequest.PullRequest.PullRequestNumber;
+        var ids = string.Join(", ", commentIds);
+        try
+        {
+            await resolver.ResolveThreadAsync(pullRequest, threadId, cancellationToken);
+            DFLogger.LogOutput(DFLogLevel.INFO, Category, $"PR #{number}: resolved review thread for comment(s) {ids}.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                $"PR #{number}: could not resolve review thread for comment(s) {ids}: {exception.Message}");
+        }
+    }
+
+    private async Task<CommentResult> DiscardAndFailAsync(
         StoredAgentPullRequest pullRequest,
         IReadOnlyCollection<long> ids,
-        IReadOnlyDictionary<long, int> attemptsUsed,
-        string error)
+        int attemptsUsed,
+        string workspacePath,
+        string baselineRevision,
+        string error,
+        CancellationToken cancellationToken,
+        bool stopRemaining = false)
     {
-        foreach (var group in ids.GroupBy(id =>
-                     FixDecision.StatusAfterUnsuccessfulAttempt(attemptsUsed.GetValueOrDefault(id) + 1, maxAttempts)))
+        try
         {
-            attempts.Record(agentId, pullRequest.Id, group.ToList(), group.Key, countAttempt: false, error);
+            await git.DiscardChangesAsync(workspacePath, baselineRevision, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            attempts.Record(agentId, pullRequest.Id, ids, "Pending", countAttempt: false, error: "Cancelled by agent shutdown.");
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // The checkout is in an unknown state; do not build later fixes on it.
+            error = $"{error} Could not reset the checkout: {exception.Message}";
+            stopRemaining = true;
+        }
+
+        return Fail(pullRequest, ids, attemptsUsed, error, stopRemaining: stopRemaining);
     }
+
+    private CommentResult Fail(
+        StoredAgentPullRequest pullRequest, IReadOnlyCollection<long> ids, int attemptsUsed, string error,
+        bool terminal = false, bool stopRemaining = false)
+    {
+        DFLogger.LogOutput(DFLogLevel.ERROR, Category,
+            $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {string.Join(", ", ids)}: {error}");
+        var status = terminal ? "Failed" : FixDecision.StatusAfterUnsuccessfulAttempt(attemptsUsed + 1, maxAttempts);
+        attempts.Record(agentId, pullRequest.Id, ids, status, countAttempt: false, error);
+        return new CommentResult(FixOutcome.Failed, error, stopRemaining);
+    }
+
+    private sealed record CommentResult(FixOutcome Outcome, string? Error = null, bool StopRemaining = false);
 }

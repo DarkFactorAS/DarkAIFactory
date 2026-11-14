@@ -109,7 +109,10 @@ else
             BuildCommand: Env("AIAGENT_BUILD_COMMAND") ?? "dotnet build",
             TestCommand: Env("AIAGENT_TEST_COMMAND") ?? "dotnet test",
             CopilotToken: reviewSettings.GitHub.AgentGitHubToken,
-            WorkspaceRoot: RunnerPolicy.WorkspaceRoot),
+            WorkspaceRoot: RunnerPolicy.WorkspaceRoot)
+        {
+            RunnerTimeout = TimeSpan.FromMinutes(Math.Max(1, appSettings.RunnerTimeoutMinutes))
+        },
         new AgentPullRequestRepository(connectionFactory),
         new AgentReviewAttemptRepository(connectionFactory),
         new GitRunner(repositoryToken),

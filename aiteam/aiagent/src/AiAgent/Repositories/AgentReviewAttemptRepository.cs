@@ -44,19 +44,22 @@ public sealed class AgentReviewAttemptRepository(IDbConnectionFactory connection
         command.ExecuteNonQuery();
     }
 
-    /// <summary>Comment ids that are finished (Resolved/Failed) or have used up their attempts.</summary>
-    public IReadOnlySet<long> GetHandledCommentIds(long pullRequestId, int maxAttempts)
+    /// <summary>
+    /// Comments that are finished (Resolved/Failed) or have used up their attempts, with their status
+    /// (comment id to status).
+    /// </summary>
+    public IReadOnlyDictionary<long, string> GetHandledComments(long pullRequestId, int maxAttempts)
     {
         using var command = connectionFactory.CreateCommand(
-            "SELECT `github_comment_id` FROM `agent_review_attempts` WHERE `pull_request_id` = @pr_id " +
+            "SELECT `github_comment_id`, `status` FROM `agent_review_attempts` WHERE `pull_request_id` = @pr_id " +
             "AND (`status` IN ('Resolved', 'Failed') OR `attempts` >= @max_attempts)");
         command.AddParameter("@pr_id", pullRequestId);
         command.AddParameter("@max_attempts", maxAttempts);
         using var reader = command.ExecuteReader();
-        var result = new HashSet<long>();
+        var result = new Dictionary<long, string>();
         while (reader.Read())
         {
-            result.Add(reader.GetInt64(0));
+            result[reader.GetInt64(0)] = reader.GetString(1);
         }
 
         return result;
