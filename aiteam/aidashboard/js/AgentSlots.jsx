@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import { POLL_INTERVAL_MS, activeCapability, deleteAgent, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, deleteAgent, isWorking, listAgents, setAgentEnabled, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
@@ -9,6 +9,7 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   const [busy, setBusy] = useState(false);
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
+  const working = isWorking(agent, nowMs);
   const chips = agent.capabilities.filter((c) => c.enabled).map((c) => c.capability);
   if (active && !chips.some((c) => c.toLowerCase() === active.toLowerCase())) chips.push(active);
 
@@ -29,7 +30,15 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   }
 
   return (
-    <li data-testid="agent-card" className="rounded border border-slate-200 p-3 text-sm">
+    <li
+      data-testid="agent-card"
+      data-working={working ? "true" : "false"}
+      aria-busy={working}
+      className={
+        "rounded border-2 p-3 text-sm " +
+        (working ? "border-blue-600 ring-2 ring-blue-300" : "border-slate-200")
+      }
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold">{agent.name}</span>
         <span className="rounded bg-slate-100 px-2 py-0.5 text-xs" data-testid="agent-status">
