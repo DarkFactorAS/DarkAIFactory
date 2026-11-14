@@ -7,6 +7,21 @@ export const CAPABILITIES = ["Jira", "Planning", "Builder", "Review"];
 export const PROVIDERS = ["Claude", "Copilot"];
 export const CONTAINERS = ["aiagent-1", "aiagent-2", "aiagent-3"];
 
+// Orders agents by assigned container (CONTAINERS order); agents with no or an
+// unknown container go last. Ties are broken by name, then id (stable across polls).
+function containerRank(agent) {
+  const index = CONTAINERS.indexOf(String(agent?.container ?? "").trim().toLowerCase());
+  return index === -1 ? CONTAINERS.length : index;
+}
+
+export function compareByContainer(a, b) {
+  return (
+    containerRank(a) - containerRank(b) ||
+    String(a?.name ?? "").localeCompare(String(b?.name ?? "")) ||
+    (a?.id > b?.id ? 1 : a?.id < b?.id ? -1 : 0)
+  );
+}
+
 function authHeaders(token) {
   if (!token) throw new Error("The dashboard write token is required.");
   return { "Content-Type": "application/json", Authorization: "Bearer " + token };
