@@ -45,5 +45,12 @@ public sealed class ClaudeSettings
 public sealed class DashboardSettings
 {
     // Jira labels that mark an issue as handled by AI. Empty means: fall back to the workflow labels.
-    public IReadOnlyList<string> AiLabels { get; set; } = [];
+    // Replaceable at runtime (dashboard editor); readers get an immutable snapshot per access.
+    private volatile IReadOnlyList<string> _aiLabels = [];
+
+    public IReadOnlyList<string> AiLabels
+    {
+        get => _aiLabels;
+        set => _aiLabels = value.ToArray();
+    }
 }

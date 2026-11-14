@@ -115,4 +115,21 @@ public sealed class ActiveAiTaskServiceTests
             $"https://example.com/inline{Environment.NewLine}https://example.com/block{Environment.NewLine}https://example.com/embed",
             Assert.Single(result).Description);
     }
+
+    [Fact]
+    public async Task UsesLabelsReplacedAtRuntimeAndFallsBackWhenEmpty()
+    {
+        var handler = new StubHandler("{\"issues\":[]}");
+        var settings = new IntegrationSettings();
+        settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
+        var service = new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
+
+        settings.Dashboard.AiLabels = ["runtime-label"];
+        await service.GetActiveAsync(CancellationToken.None);
+        Assert.Contains(Uri.EscapeDataString("\"runtime-label\""), handler.RequestUri!.Query);
+
+        settings.Dashboard.AiLabels = [];
+        await service.GetActiveAsync(CancellationToken.None);
+        Assert.Contains(Uri.EscapeDataString("\"ai-analyzed\""), handler.RequestUri!.Query);
+    }
 }

@@ -72,3 +72,8 @@ export function statusLabel(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   }
   return status.state;
 }
+
+export const getAiLabels = () => request("/api/settings/ai-labels");
+
+export const saveAiLabels = (token, labels) =>
+  request("/api/settings/ai-labels", { method: "PUT", headers: authHeaders(token), body: JSON.stringify({ labels }) });

@@ -111,4 +111,22 @@ public class SolvedByProjectTests
         var json = System.Text.Json.JsonSerializer.Serialize(ok.Value, options);
         Assert.Equal("""[{"project":"DFAI","solvedCount":1,"aiCount":1,"nonAiCount":0}]""", json);
     }
+
+    [Fact]
+    public async Task Solved_client_uses_labels_replaced_at_runtime_and_falls_back_when_empty()
+    {
+        var handler = new StubHandler(_ => Json(
+            """{"issues":[{"fields":{"project":{"key":"A"},"labels":["runtime"]}},{"fields":{"project":{"key":"A"},"labels":["custom-analyzed"]}}]}"""));
+        var settings = new IntegrationSettings
+        {
+            Jira = new JiraSettings { JiraBaseUrl = "https://example.atlassian.net", JiraEmail = "a@b.c", JiraApiToken = "x" }
+        };
+        using var client = new JiraSolvedClient(settings, LoadLabels, handler);
+
+        settings.Dashboard.AiLabels = ["runtime"];
+        Assert.Equal([true, false], (await client.GetSolvedIssuesAsync(CancellationToken.None)).Select(i => i.IsAi));
+
+        settings.Dashboard.AiLabels = [];
+        Assert.Equal([false, true], (await client.GetSolvedIssuesAsync(CancellationToken.None)).Select(i => i.IsAi));
+    }
 }

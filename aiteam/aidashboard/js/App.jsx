@@ -1,17 +1,34 @@
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
+import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
 import { POLL_INTERVAL_MS } from "./agentApi.js";
 
-function Panel({ title, state, emptyText, children }) {
+// Reloads the given query whenever refreshKey changes (skipping the initial render).
+function useReloadOn(refreshKey, reload) {
+  const lastKey = useRef(refreshKey);
+  useEffect(() => {
+    if (lastKey.current === refreshKey) {
+      return;
+    }
+    lastKey.current = refreshKey;
+    reload();
+  }, [refreshKey, reload]);
+}
+
+function Panel({ title, state, emptyText, children, actions, extra }) {
   const { data, loading, error } = state;
   return (
     <section className="rounded-lg bg-white p-4 shadow">
-      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {actions}
+      </div>
+      {extra}
       {loading && <p role="status" className="text-slate-500">Loading...</p>}
       {error && (
         <p role="alert" className="text-red-600">
@@ -118,10 +135,38 @@ function AiShareBarChart({ items }) {
   );
 }
 
-function SolvedByProjectPanel() {
+function SolvedByProjectPanel({ labelsVersion, onLabelsSaved }) {
   const state = useApiData("/api/stats/solved-by-project");
+  useReloadOn(labelsVersion, state.reload);
+  const [editing, setEditing] = useState(false);
   return (
-    <Panel title="Tasks solved per project" state={state} emptyText="No solved tasks yet.">
+    <Panel
+      title="Tasks solved per project"
+      state={state}
+      emptyText="No solved tasks yet."
+      extra={
+        editing && (
+          <AiLabelsEditor
+            onCancel={() => setEditing(false)}
+            onSaved={() => {
+              setEditing(false);
+              onLabelsSaved();
+            }}
+          />
+        )
+      }
+      actions={
+        !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded border border-slate-300 px-2 py-1 text-sm"
+          >
+            Edit AI labels
+          </button>
+        )
+      }
+    >
       {(items) => (
         <div>
           <PieWithLegend
@@ -140,7 +185,7 @@ function SolvedByProjectPanel() {
   );
 }
 
-function ActiveAiTasksPanel() {
+function ActiveAiTasksPanel({ labelsVersion }) {
   const [openKey, setOpenKey] = useState(null);
   const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
   useEffect(() => {
@@ -148,6 +193,7 @@ function ActiveAiTasksPanel() {
       setOpenKey(null);
     }
   }, [state.data, openKey]);
+  useReloadOn(labelsVersion, state.reload);
   return (
     <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
       {(items) => (
@@ -181,6 +227,8 @@ function ActiveAiTasksPanel() {
 }
 
 export default function App() {
+  const [labelsVersion, setLabelsVersion] = useState(0);
+  const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
   return (
     <WriteTokenProvider>
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -190,12 +238,12 @@ export default function App() {
         </h1>
       </header>
       <main className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
-        <SolvedByProjectPanel />
+        <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} />
         <div className="space-y-6">
           <AgentSlots />
           <TaskEditor />
         </div>
-        <ActiveAiTasksPanel />
+        <ActiveAiTasksPanel labelsVersion={labelsVersion} />
       </main>
     </div>
     </WriteTokenProvider>

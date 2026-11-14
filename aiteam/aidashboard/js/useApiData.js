@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Fetches JSON from the API and exposes loading/error state.
 // With options.pollMs the data is re-fetched at that interval; background
 // refreshes keep the existing data, and a failed poll keeps the last good data.
 export default function useApiData(url, { pollMs } = {}) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -44,7 +46,7 @@ export default function useApiData(url, { pollMs } = {}) {
       if (timer) clearInterval(timer);
       controller.abort();
     };
-  }, [url, pollMs]);
+  }, [url, pollMs, version]);
 
-  return state;
+  return { ...state, reload };
 }
