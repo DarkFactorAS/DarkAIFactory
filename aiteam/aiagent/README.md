@@ -120,7 +120,9 @@ comments until the next cycle.
   `RunnerTimeoutMinutes` (appsettings, default `30`) counts as a failed attempt; an agent shutdown or a busy
   runner does not.
 - If the runner makes no changes for a comment, that is not an error: the comment is recorded as `Resolved` and
-  its GitHub thread is left open for a human.
+  its GitHub thread is left open for a human. The agent posts one reply in that thread (GraphQL
+  `addPullRequestReviewThreadReply`) saying it did not find any fix; if the reply fails only a warning is logged.
+  The reply is by another author than the reviewer, so it is never picked up as an actionable comment.
 - After a fix is pushed the review thread is resolved (GraphQL `resolveReviewThread`) once all of its comments
   were pushed in that run; threads with a failed, unchanged or retried comment stay open. If resolving fails
   (for example missing permission) only a warning is logged. The token therefore needs Contents: write and
