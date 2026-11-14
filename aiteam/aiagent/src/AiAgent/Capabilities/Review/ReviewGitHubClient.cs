@@ -14,6 +14,9 @@ namespace AiAgent.Capabilities.Review;
 public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
 {
     public const int PageSize = 100;
+
+    /// <summary>GitHub's pull-request files endpoint returns at most this many files.</summary>
+    public const int MaxListedFiles = 3000;
     private const string PullRequestQuery =
         """
         query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -279,6 +282,17 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         var path = RestPath(pullRequest);
         var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
             ?? throw new InvalidDataException($"Pull request {pullRequest.PullRequest.PullRequestUrl} not found.");
+
+        // The files endpoint lists at most MaxListedFiles files, so a larger pull request cannot be fully
+        // checked; fail closed instead of evaluating a truncated file list.
+        var changedFiles = node["changed_files"]?.GetValue<int>()
+            ?? throw new InvalidDataException($"Pull request {pullRequest.PullRequest.PullRequestUrl} does not report changed_files.");
+        if (changedFiles > MaxListedFiles)
+        {
+            throw new InvalidDataException(
+                $"Pull request {pullRequest.PullRequest.PullRequestUrl} changes {changedFiles} files; GitHub lists at most {MaxListedFiles}, so not every changed file can be checked.");
+        }
+
         var files = new List<string>();
         for (var page = 1; ; page++)
         {
