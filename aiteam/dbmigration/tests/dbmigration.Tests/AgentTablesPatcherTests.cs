@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(10, patcher.Sql.Count);
+        Assert.Equal(11, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -64,6 +64,24 @@ public sealed class AgentTablesPatcherTests
     }
 
     [Fact]
+    public void Patcher_AddsAgentStatusAsLastPatchWithoutCascade()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(AgentTablesPatcher.Run(patcher));
+
+        Assert.Equal(11, patcher.Numbers[^1]);
+        var sql = patcher.Sql[10];
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
+        Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);
+        Assert.Contains("`current_issue_key` VARCHAR(255) NULL", sql);
+        Assert.Contains("`current_capability` ENUM('Jira', 'Planning', 'Builder', 'Review') NULL", sql);
+        Assert.Contains("`heartbeat_at` DATETIME NULL", sql);
+        Assert.Contains("PRIMARY KEY (`agent_id`)", sql);
+        Assert.Contains("REFERENCES `agent_definitions` (`id`)", sql);
+        Assert.DoesNotContain("ON DELETE CASCADE", sql);
+    }
+
+    [Fact]
     public void WorkflowLabelPatcher_SeedsAiAgentLabels()
     {
         var patcher = new RecordingPatcher(0);
@@ -81,6 +99,7 @@ public sealed class AgentTablesPatcherTests
     [InlineData(1)]
     [InlineData(6)]
     [InlineData(10)]
+    [InlineData(11)]
     public void Patcher_StopsAtFailingPatch(int failingPatch)
     {
         var patcher = new RecordingPatcher(failingPatch);
@@ -93,11 +112,13 @@ public sealed class AgentTablesPatcherTests
         private bool _successful = true;
         public string System { get; private set; } = "";
         public List<string> Sql { get; } = [];
+        public List<int> Numbers { get; } = [];
         public bool IsConnected() => true;
         public void Init(string system) => System = system;
         public bool Patch(string system, int patchId, string sql)
         {
             Sql.Add(sql);
+            Numbers.Add(patchId);
             _successful = patchId != failingPatch;
             return _successful;
         }

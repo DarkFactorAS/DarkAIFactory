@@ -109,7 +109,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 7),
             ("AgentTables", 8),
             ("AgentTables", 9),
-            ("AgentTables", 10)]);
+            ("AgentTables", 10),
+            ("AgentTables", 11)]);
 
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);
@@ -233,7 +234,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 7),
             ("AgentTables", 8),
             ("AgentTables", 9),
-            ("AgentTables", 10)], patcher.Executed);
+            ("AgentTables", 10),
+            ("AgentTables", 11)], patcher.Executed);
 
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
@@ -268,7 +270,8 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 7),
             ("AgentTables", 8),
             ("AgentTables", 9),
-            ("AgentTables", 10)], patcher.Executed);
+            ("AgentTables", 10),
+            ("AgentTables", 11)], patcher.Executed);
         patcher.Executed.Clear();
         Assert.True(new AiDatabasePatcher(patcher).RunPatcher());
         Assert.Empty(patcher.Executed);

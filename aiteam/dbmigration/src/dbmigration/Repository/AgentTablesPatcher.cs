@@ -3,7 +3,7 @@ using DFCommonLib.DataAccess;
 namespace dbmigration.Repository;
 
 /// <summary>
-/// Tables and seed data for the configurable aiAgent (Stage 1). Only adds new agent_* tables, one
+/// Tables and seed data for the configurable aiAgent (Stage 1 and 2). Only adds new agent_* tables, one
 /// settings constraint clause and seed rows; the old agents' tables are untouched.
 /// Every patch is idempotent so it can recover from a failed history write.
 /// </summary>
@@ -152,6 +152,19 @@ public static class AgentTablesPatcher
                 ('aiagent', 'GitHub.GitHubRepositoryToken', ''),
                 ('aiagent', 'Claude.AnthropicApiKey', '')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
+            """,
+            // Stage 2: live status written by aiAgent. No ON DELETE CASCADE because agents are soft deleted.
+            """
+            CREATE TABLE IF NOT EXISTS `agent_status` (
+                `agent_id` BIGINT NOT NULL,
+                `state` ENUM('Idle', 'Running', 'Error', 'Disabled') NOT NULL DEFAULT 'Idle',
+                `current_issue_key` VARCHAR(255) NULL,
+                `current_capability` ENUM('Jira', 'Planning', 'Builder', 'Review') NULL,
+                `heartbeat_at` DATETIME NULL,
+                PRIMARY KEY (`agent_id`),
+                CONSTRAINT `fk_agent_status_agent` FOREIGN KEY (`agent_id`)
+                    REFERENCES `agent_definitions` (`id`)
+            )
             """
         ];
 
