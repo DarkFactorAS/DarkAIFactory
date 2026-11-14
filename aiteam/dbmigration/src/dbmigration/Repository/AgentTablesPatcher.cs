@@ -165,6 +165,34 @@ public static class AgentTablesPatcher
                 CONSTRAINT `fk_agent_status_agent` FOREIGN KEY (`agent_id`)
                     REFERENCES `agent_definitions` (`id`)
             )
+            """,
+            // Dashboard: AI labels (comma-separated Jira label names) that mark an issue as handled by AI.
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'Claude.AnthropicApiKey', 'Claude.AgentModel', 'Dashboard.AiLabels'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                    OR
+                    (`client` = 'aidashboard' AND `name` = 'Dashboard.AiLabels')
+                    OR
+                    (`client` = 'aiclaudeworker' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                    OR
+                    (`client` = 'aiagent' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
+                )
+            """,
+            """
+            INSERT INTO `settings` (`client`, `name`, `value`) VALUES
+                ('aidashboard', 'Dashboard.AiLabels',
+                 'ai-manager-planned,ai-analyzed,ai-agent-picked,aiagent-picked,aiagent-analyzed,aiagent-planned')
+            ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """
         ];
 
