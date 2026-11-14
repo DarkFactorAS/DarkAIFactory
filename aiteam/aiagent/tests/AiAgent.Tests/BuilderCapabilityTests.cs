@@ -245,4 +245,15 @@ public sealed class BuilderCapabilityTests : IDisposable
         await capability.RunCycleAsync(context, default);
         Assert.Empty(jira.Calls);
     }
+
+    [Fact]
+    public void ImplementationPromptDoesNotRunTheRetiredAgentsTestProjects()
+    {
+        var prompt = PromptBuilder.BuildImplementationPrompt(new BuilderIssue("DFAI-1", "Title", "Description"), "Plan");
+
+        Assert.Contains("aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj", prompt);
+        Assert.DoesNotContain("CodingAgent.Tests.csproj", prompt);
+        Assert.DoesNotContain("ManagerAgent.Tests.csproj", prompt);
+        Assert.DoesNotContain("ALL test projects", prompt);
+    }
 }
