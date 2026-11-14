@@ -6,7 +6,7 @@ namespace AiAgent.Runner;
 internal static class RunnerPolicy
 {
     public const string DefaultWorkspaceRoot = "/workspaces";
-    public const int DefaultMaxConcurrentJobs = 2;
+    public const int DefaultMaxConcurrentJobs = 3;
 
     private static readonly string[] ReadOnlyTools = ["Read", "Glob", "Grep"];
     private static readonly string[] MutatingTools = ["Bash", "Edit", "MultiEdit", "Write", "NotebookEdit"];

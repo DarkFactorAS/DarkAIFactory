@@ -69,6 +69,8 @@ services:
       HOME: /tmp
       CLAUDE_CONFIG_DIR: /claude-config
       AIAGENT_WORKSPACE_ROOT: /workspaces
+      # One slot per agent so 3 agents can run at the same time (default 3).
+      AIAGENT_RUNNER_MAX_JOBS: ${AIAGENT_RUNNER_MAX_JOBS:-3}
       NUGET_USERNAME: ${NUGET_USERNAME}
       NUGET_TOKEN: ${NUGET_TOKEN}
     healthcheck:
