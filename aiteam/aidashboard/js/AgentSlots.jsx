@@ -3,6 +3,12 @@ import AgentEditor from "./AgentEditor.jsx";
 import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgents, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
+function statusBadgeColors(label) {
+  if (label === "Disabled") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+  if (label === "Offline") return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+  return "bg-slate-100 dark:bg-slate-700";
+}
+
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
   const { token, setToken } = useWriteToken();
   const [busy, setBusy] = useState(false);
@@ -38,7 +44,7 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold">{agent.name}</span>
-        <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs" data-testid="agent-status">
+        <span className={"rounded px-2 py-0.5 text-xs " + statusBadgeColors(label)} data-testid="agent-status">
           {label}
         </span>
       </div>
