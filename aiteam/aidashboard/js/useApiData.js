@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // Fetches JSON from the API and exposes loading/error state.
 export default function useApiData(url) {
   const [state, setState] = useState({ data: null, loading: true, error: null });
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -21,7 +23,7 @@ export default function useApiData(url) {
         }
       });
     return () => controller.abort();
-  }, [url]);
+  }, [url, version]);
 
-  return state;
+  return { ...state, reload };
 }
