@@ -128,6 +128,11 @@ skipped when `main` has no commits in the last 24 hours. To run it manually, ope
 Actions → Snyk → Run workflow; manual runs always scan. It requires the
 repository secret `SNYK_TOKEN`; the run fails with a clear error if it is missing.
 
+A CodeQL workflow (`codeql.yml`) scans C# and the workflow files on pull
+requests, pushes to `main` and weekly. Results appear under Security > Code
+scanning. Pull requests from forks have no NuGet secrets, so the C# restore may
+fail there.
+
 ### Docker Compose
 
 `aiteam/docker-compose.yml` runs `dbmigration`, `aiagent` with `aiagent-runner`,
