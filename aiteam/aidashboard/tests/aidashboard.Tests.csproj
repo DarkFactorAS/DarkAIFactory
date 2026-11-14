@@ -11,6 +11,7 @@
     <Compile Include="ActiveAiTaskServiceTests.cs" />
     <Compile Include="SolvedByProjectTests.cs" />
     <Compile Include="AgentTaskEndpointsTests.cs" />
+    <Compile Include="AgentEndpointsTests.cs" />
     <Compile Include="JiraCommentEndpointTests.cs" />
     <Compile Include="DashboardWriteAuthenticationTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
