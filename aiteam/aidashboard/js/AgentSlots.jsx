@@ -175,7 +175,10 @@ export default function AgentSlots() {
             load();
           }}
           onDeleted={() => {
-            setEditor(null);
+            // Only close the editor if it is still the selection that started
+            // the delete; the user may have opened another draft meanwhile.
+            const deletingEditor = editor;
+            setEditor((current) => (current === deletingEditor ? null : current));
             load();
           }}
         />
