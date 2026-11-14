@@ -185,7 +185,7 @@ internal sealed class AgentPlanner(
                 !string.Equals(latest.StatusName, issue.StatusName, StringComparison.Ordinal) ||
                 ManagerPlan.Fingerprint(latest.Summary, latest.Description, configuration.GitHubRepositoryUrl) != requirementsHash)
             {
-                DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Discarding plan for {issue.Key}: the issue changed or was claimed during planning.");
+                AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Discarding plan for {issue.Key}: the issue changed or was claimed during planning.");
                 return;
             }
 
@@ -272,7 +272,7 @@ internal sealed class AgentPlanner(
 
         if ((approvalRequired || hasApprovalLabel) && !hasApprovedLabel)
         {
-            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} is awaiting human approval.");
+            AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} is awaiting human approval.");
             return;
         }
 
@@ -282,7 +282,7 @@ internal sealed class AgentPlanner(
             !string.Equals(beforeHandoff.StatusName, issue.StatusName, StringComparison.Ordinal) ||
             !storedPlan.IsCurrent(beforeHandoff.Summary, beforeHandoff.Description, configuration.GitHubRepositoryUrl))
         {
-            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Deferring handoff for {issue.Key}: the issue changed or was claimed.");
+            AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Deferring handoff for {issue.Key}: the issue changed or was claimed.");
             return;
         }
         // Blocked tasks are still analyzed (and approved), but never handed to the builder while a blocker is open.
@@ -310,7 +310,7 @@ internal sealed class AgentPlanner(
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovalLabel, cancellationToken);
             await jira.RemoveLabelAsync(issue.Key, configuration.ApprovedLabel, cancellationToken);
         }
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} stored in Jira and agent_plans.");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Plan for {issue.Key} stored in Jira and agent_plans.");
     }
 
     public async Task ReportExcludedIssuesAsync(string jiraProjectKey, CancellationToken cancellationToken)
@@ -345,7 +345,7 @@ internal sealed class AgentPlanner(
             cancellationToken);
         plans.MarkPostedToJira(issue.Key, requirementsHash);
         await jira.AddLabelAsync(issue.Key, configuration.ClarificationLabel, cancellationToken);
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Requested clarification for {issue.Key}.");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Requested clarification for {issue.Key}.");
     }
 
     private async Task ApplyAnalysisOnlyAsync(
@@ -359,7 +359,7 @@ internal sealed class AgentPlanner(
         }
         plans.MarkPostedToJira(issue.Key, requirementsHash);
         await jira.TransitionToAsync(issue.Key, configuration.AnalysisOnlyStatus, cancellationToken);
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Analysis for {issue.Key} posted; moved to {configuration.AnalysisOnlyStatus}.");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Analysis for {issue.Key} posted; moved to {configuration.AnalysisOnlyStatus}.");
     }
 
     private async Task ApplyCreateTasksAsync(
@@ -418,7 +418,7 @@ internal sealed class AgentPlanner(
                 issueKey,
                 requirementsHash,
                 ManagerPlanMarker(TriageDecision.CreateTasks, JsonSerializer.Serialize(state with { Tasks = tasks })));
-            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Created task {key} \"{task.Title}\" from {issueKey}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Created task {key} \"{task.Title}\" from {issueKey}.");
         }
 
         foreach (var task in tasks.Where(task => task.DependsOn.Length > 0))
@@ -462,7 +462,7 @@ internal sealed class AgentPlanner(
             await jira.TransitionToAsync(issueKey, configuration.DoneStatus, cancellationToken);
         }
 
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Created {tasks.Length} task(s) from {issueKey}; moved it to {configuration.DoneStatus}.");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Created {tasks.Length} task(s) from {issueKey}; moved it to {configuration.DoneStatus}.");
     }
 
     private static string NormalizeTitle(string title) => title.Trim().ToLowerInvariant();
@@ -516,7 +516,7 @@ internal sealed class AgentPlanner(
                 }
                 catch (HttpRequestException exception)
                 {
-                    DFLogger.LogOutput(DFLogLevel.ERROR, "Planner", $"Could not link {dependency} as blocking {key}: {exception.Message}");
+                    AgentLog.LogOutput(DFLogLevel.ERROR, "Planner", $"Could not link {dependency} as blocking {key}: {exception.Message}");
                 }
             }
         }
@@ -534,7 +534,7 @@ internal sealed class AgentPlanner(
         }
         await CompleteSplitAsync(
             issue.Key, ManagerPlanMarker(TriageDecision.Split, JsonSerializer.Serialize(state)), requirementsHash, cancellationToken);
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Split {issue.Key} into {keys.Length} sub-tasks.");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Split {issue.Key} into {keys.Length} sub-tasks.");
     }
 
     private async Task ProposeSplitAsync(
@@ -633,7 +633,7 @@ internal sealed class AgentPlanner(
 
     internal Task ReportIgnoredAsync(string issueKey, string reason, CancellationToken cancellationToken)
     {
-        DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Ignoring {issueKey}: {reason}");
+        AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Ignoring {issueKey}: {reason}");
         return IgnoredTaskNotifier.NotifyAsync(
             "aiAgent",
             issueKey,
@@ -641,7 +641,7 @@ internal sealed class AgentPlanner(
             jira.GetCommentsAsync,
             jira.AddCommentAsync,
             jira.AddLabelAsync,
-            message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
+            message => AgentLog.LogOutput(DFLogLevel.WARNING, "Planner", message),
             cancellationToken);
     }
 
@@ -650,7 +650,7 @@ internal sealed class AgentPlanner(
             issue.Key,
             issue.Labels,
             jira.RemoveLabelAsync,
-            message => DFLogger.LogOutput(DFLogLevel.WARNING, "Planner", message),
+            message => AgentLog.LogOutput(DFLogLevel.WARNING, "Planner", message),
             cancellationToken);
 
     private async Task ReleaseSubtasksAsync(
@@ -730,7 +730,7 @@ internal sealed class AgentPlanner(
                 await jira.AddLabelAsync(subtask.Key, configuration.PickupLabel, cancellationToken);
             }
             await jira.AddLabelAsync(subtask.Key, configuration.AnalyzedLabel, cancellationToken);
-            DFLogger.LogOutput(DFLogLevel.INFO, "Planner", $"Released sub-task {subtask.Key} to the builder.");
+            AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Released sub-task {subtask.Key} to the builder.");
         }
 
         if (!allSubtasksDone)

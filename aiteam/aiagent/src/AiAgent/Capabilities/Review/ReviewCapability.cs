@@ -83,7 +83,7 @@ public sealed class ReviewCapability(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                DFLogger.LogOutput(DFLogLevel.ERROR, Category,
+                AgentLog.LogOutput(DFLogLevel.ERROR, Category,
                     $"PR #{pullRequest.PullRequest.PullRequestNumber}: review cycle failed: {exception.Message}");
             }
         }
@@ -142,7 +142,7 @@ public sealed class ReviewCapability(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
         }
     }
 
@@ -162,7 +162,7 @@ public sealed class ReviewCapability(
             (scan.FailedComments > 0
                 ? $", {scan.FailedComments} from '{reviewer}' marked failed (terminal failure or attempts exhausted; see agent_review_attempts)"
                 : string.Empty) + ".";
-        DFLogger.LogOutput(scan.FailedComments > 0 ? DFLogLevel.WARNING : DFLogLevel.INFO, Category, message);
+        AgentLog.LogOutput(scan.FailedComments > 0 ? DFLogLevel.WARNING : DFLogLevel.INFO, Category, message);
         if (scan.OtherAuthors.Count > 0)
         {
             var authors = string.Join(", ", scan.OtherAuthors.Select(author => $"{author.Key} ({author.Value})"));
@@ -244,11 +244,11 @@ public sealed class ReviewCapability(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, Category, $"Could not delete directory '{path}': {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"Could not delete directory '{path}': {exception.Message}");
         }
     }
 
-    private static void Log(string message) => DFLogger.LogOutput(DFLogLevel.INFO, Category, message);
+    private static void Log(string message) => AgentLog.LogOutput(DFLogLevel.INFO, Category, message);
 
     /// <summary>Refuses local execution; validation belongs to aiagent-runner.</summary>
     private sealed class NoLocalCommands : IProjectCommandRunner

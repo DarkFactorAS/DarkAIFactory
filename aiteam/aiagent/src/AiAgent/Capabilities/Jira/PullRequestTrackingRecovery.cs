@@ -39,7 +39,7 @@ internal sealed class PullRequestTrackingRecovery(
                     .ToArray();
                 if (urls.Length == 0)
                 {
-                    DFLogger.LogOutput(
+                    AgentLog.LogOutput(
                         DFLogLevel.WARNING, "JiraRecovery",
                         $"Could not recover pull-request tracking for {issue.Key}: no tracking URL was found in Jira comments.");
                     continue;
@@ -58,7 +58,7 @@ internal sealed class PullRequestTrackingRecovery(
                 }
 
                 await jira.RemoveLabelAsync(issue.Key, PendingLabel, cancellationToken);
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.INFO, "JiraRecovery",
                     $"Recovered pull-request tracking for {issue.Key} without rerunning implementation.");
             }
@@ -68,7 +68,7 @@ internal sealed class PullRequestTrackingRecovery(
             }
             catch (Exception exception)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, "JiraRecovery",
                     $"Could not recover pull-request tracking for {issue.Key}: {exception.Message}");
             }

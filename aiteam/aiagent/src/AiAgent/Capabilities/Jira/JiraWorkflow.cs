@@ -46,7 +46,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
         var claim = context.ClaimLock.TryAcquire(context.AgentId, candidate.Key);
         if (claim is null)
         {
-            DFLogger.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing {candidate.Key}.");
+            AgentLog.LogOutput(DFLogLevel.INFO, Source, $"Another agent is already processing {candidate.Key}.");
             return null;
         }
 
@@ -66,7 +66,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
             var openBlockers = JiraWorkflowRules.OpenBlockers(issue.Blockers, configuration.DoneStatus);
             if (openBlockers.Count > 0)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.WARNING, Source,
                     $"Skipping {issue.Key}: blocked by {JiraWorkflowRules.DescribeBlockers(openBlockers)}.");
                 claim.Dispose();
@@ -117,7 +117,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
         }
         catch (Exception cleanupException)
         {
-            DFLogger.LogOutput(
+            AgentLog.LogOutput(
                 DFLogLevel.ERROR, Source,
                 $"Could not clean up the interrupted pickup of {pickup.Issue.Key}: {cleanupException.Message}. " +
                 $"Remove the `{configuration.PickupLabel}` label and verify the status manually to allow a retry.");
@@ -159,7 +159,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
             }
             catch (Exception restoreException) when (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, Source,
                     $"Could not restore the status of {issue.Key} to {issue.StatusName}: {restoreException.Message}");
             }
@@ -185,7 +185,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
         }
         catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
         {
-            DFLogger.LogOutput(
+            AgentLog.LogOutput(
                 DFLogLevel.ERROR, Source,
                 $"Could not report the failure for {issue.Key} to Jira: {notificationException.Message}.");
         }
@@ -199,7 +199,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, Source, $"Could not {what} for {issueKey}: {exception.Message}");
+            AgentLog.LogOutput(DFLogLevel.ERROR, Source, $"Could not {what} for {issueKey}: {exception.Message}");
             try
             {
                 await jira.AddCommentAsync(
@@ -207,7 +207,7 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
             }
             catch (Exception notificationException) when (!cancellationToken.IsCancellationRequested)
             {
-                DFLogger.LogOutput(
+                AgentLog.LogOutput(
                     DFLogLevel.ERROR, Source, $"Could not post the warning for {issueKey}: {notificationException.Message}");
             }
         }

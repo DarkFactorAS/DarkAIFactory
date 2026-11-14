@@ -22,6 +22,13 @@ public sealed class AgentHost(
     private readonly Dictionary<long, (AgentLoop Loop, Task Task)> _loops = [];
     private readonly Dictionary<long, IDisposable> _leases = [];
     private readonly HashSet<long> _disabledWritten = [];
+    private readonly Dictionary<long, string> _names = [];
+
+    /// <summary>Logs a line about one agent, prefixed with its name (or "agent {id}" when unknown).</summary>
+    private void LogAgent(DFLogLevel level, long agentId, string message) =>
+        DFLogger.LogOutput(level, "AgentHost", AgentLog.Format(
+            _names.TryGetValue(agentId, out var name) && !string.IsNullOrWhiteSpace(name) ? name : $"agent {agentId}",
+            message));
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -62,6 +69,11 @@ public sealed class AgentHost(
         }
 
         var agents = repository.GetAllAgents();
+        foreach (var agent in agents)
+        {
+            _names[agent.Id] = agent.Name;
+        }
+
         var runnable = agents.Where(agent => agent.Enabled && !agent.Deleted).Select(agent => agent.Id).ToHashSet();
         foreach (var (id, entry) in _loops)
         {
@@ -121,12 +133,12 @@ public sealed class AgentHost(
             }
 
             _leases[agentId] = lease;
-            DFLogger.LogOutput(DFLogLevel.INFO, "AgentHost", $"This instance now runs agent {agentId}.");
+            LogAgent(DFLogLevel.INFO, agentId, $"This instance now runs agent {agentId}.");
             return true;
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, "AgentHost", $"Taking ownership of agent {agentId} failed: {exception.Message}");
+            LogAgent(DFLogLevel.WARNING, agentId, $"Taking ownership of agent {agentId} failed: {exception.Message}");
             return false;
         }
     }
@@ -136,7 +148,7 @@ public sealed class AgentHost(
         if (_leases.Remove(agentId, out var lease))
         {
             lease.Dispose();
-            DFLogger.LogOutput(DFLogLevel.INFO, "AgentHost", $"This instance released agent {agentId}.");
+            LogAgent(DFLogLevel.INFO, agentId, $"This instance released agent {agentId}.");
         }
     }
 
@@ -154,7 +166,7 @@ public sealed class AgentHost(
         }
         catch (Exception exception)
         {
-            DFLogger.LogOutput(DFLogLevel.WARNING, "AgentHost", $"Writing Disabled status for agent {agentId} failed: {exception.Message}");
+            LogAgent(DFLogLevel.WARNING, agentId, $"Writing Disabled status for agent {agentId} failed: {exception.Message}");
             return false;
         }
     }
