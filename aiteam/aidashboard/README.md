@@ -103,8 +103,8 @@ The dashboard editor instead uses `PATCH /api/agent-tasks/{id}` (`title`, `descr
 which atomically edits only tasks still in `New` status, preserves workflow fields,
 and returns 409 if the task has progressed.
 
-Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js/WriteToken.jsx`) sits above the
-task editor in the centre column and uses `/api/agents` (writes need the Bearer write token) plus the read-only
+Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js/WriteToken.jsx`) sits in the left column (stacked vertically, one agent per row) and
+uses `/api/agents` (writes need the Bearer write token) plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / `Running on KEY` / Error. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
@@ -137,3 +137,7 @@ default. The chevron toggle next to the heading expands and collapses them; the 
 The header has a Theme selector (System, Light, Dark). System, the default, follows the OS/browser
 `prefers-color-scheme` and updates live. The choice is stored only in the browser's `localStorage`
 (`aidashboard.theme`) and is never sent to the server.
+
+The "Tasks solved per project" panel is hidden by default. The bar-chart icon at the left of the header opens it as
+an overlay drawer on top of the page (it stays mounted, so its state is kept); close it with the × button, the
+backdrop or Escape.
