@@ -134,7 +134,7 @@ The review worker (`aireviewworker`) also runs Claude Code, using the same share
 its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
 The new agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
 `appsettings.<Environment>.json` (`PollIntervalSeconds`); its runner uses a separate
-Claude Code login in the `aiteam_aiagent_claude_config` volume (`./login_claude.sh --aiagent`, on Windows `login_claude.cmd --aiagent`).
+Claude Code login in the `aiteam_aiagent_claude_config` volume (`./login_claude.sh`, on Windows `login_claude.cmd`).
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),

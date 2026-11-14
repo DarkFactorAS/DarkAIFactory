@@ -1,20 +1,12 @@
 @echo off
-REM Reset the Claude CLI login stored in a Docker volume and log in again.
-REM Usage: login_claude.cmd [--aiagent]   (can be run from any directory)
-REM   (default)   claude_config volume, used by claude-cli
-REM   --aiagent   aiteam_aiagent_claude_config volume, used by aiagent-runner
+REM Reset the Claude CLI login of aiagent-runner (aiteam_aiagent_claude_config volume) and log in again.
+REM Usage: login_claude.cmd [--aiagent]   (can be run from any directory; --aiagent is accepted for compatibility)
 setlocal enabledelayedexpansion
 
-if "%~1"=="" (
-  set "volume_key=claude_config"
-  set "service=claude-cli"
-) else if /i "%~1"=="--aiagent" (
-  if not "%~2"=="" goto usage
-  set "volume_key=aiteam_aiagent_claude_config"
-  set "service=aiagent-runner"
-) else (
-  goto usage
-)
+if not "%~1"=="" if /i not "%~1"=="--aiagent" goto usage
+if not "%~2"=="" goto usage
+set "volume_key=aiteam_aiagent_claude_config"
+set "service=aiagent-runner"
 
 cd /d "%~dp0aiteam" || exit /b 1
 

@@ -19,153 +19,6 @@ services:
     cap_drop:
       - ALL
 
-  coding-agent:
-    build:
-      context: ..
-      dockerfile: aiteam/aiworker/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    depends_on:
-      dbmigration:
-        condition: service_completed_successfully
-    volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: "no"
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-      NUGET_USERNAME: ${NUGET_USERNAME}
-      NUGET_TOKEN: ${NUGET_TOKEN}
-      HOME: /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
-  review-runner:
-    build:
-      context: ..
-      dockerfile: aiteam/aireviewworker/Dockerfile
-      target: runner
-      secrets:
-        - nuget_username
-        - nuget_token
-    command: ["--runner-server"]
-    volumes:
-      # Shares the Claude Code CLI login with claude-cli; never the worker's /app/Config.
-      - claude_config:/claude-config
-      - review_workspaces:/workspaces
-    restart: "no"
-    init: true
-    environment:
-      HOME: /tmp
-      CLAUDE_CONFIG_DIR: /claude-config
-      REVIEW_WORKSPACE_ROOT: /workspaces
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
-  claude-coding-agent:
-    build:
-      context: ..
-      dockerfile: aiteam/aiclaudeworker/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    depends_on:
-      dbmigration:
-        condition: service_completed_successfully
-      claude-cli:
-        condition: service_healthy
-    volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-      - claude_workspaces:/workspaces
-    restart: "no"
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-      HOME: /tmp
-      CLAUDE_WORKSPACE_ROOT: /workspaces
-      CLAUDE_RUNNER_URL: http://claude-cli:8080
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - default
-      - claude-runner
-
-  claude-cli:
-    build:
-      context: ..
-      dockerfile: aiteam/aiclaudeworker/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    command: ["--claude-runner-server"]
-    volumes:
-      # The CLI runner receives only the checkout volume, never the worker's database configuration.
-      - claude_config:/claude-config
-      - claude_workspaces:/workspaces
-    restart: "no"
-    init: true
-    environment:
-      HOME: /tmp
-      CLAUDE_CONFIG_DIR: /claude-config
-      CLAUDE_WORKSPACE_ROOT: /workspaces
-      NUGET_USERNAME: ${NUGET_USERNAME}
-      NUGET_TOKEN: ${NUGET_TOKEN}
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - claude-runner
-
-  review-worker:
-    build:
-      context: ..
-      dockerfile: aiteam/aireviewworker/Dockerfile
-      target: worker
-      secrets:
-        - nuget_username
-        - nuget_token
-    depends_on:
-      dbmigration:
-        condition: service_completed_successfully
-      review-runner:
-        condition: service_healthy
-    volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-      - review_workspaces:/workspaces
-    restart: "no"
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-      NUGET_USERNAME: ${NUGET_USERNAME}
-      NUGET_TOKEN: ${NUGET_TOKEN}
-      HOME: /tmp
-      REVIEW_RUNNER_URL: http://review-runner:8080/
-      REVIEW_WORKSPACE_ROOT: /workspaces
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
   aiagent:
     build:
       context: ..
@@ -231,50 +84,6 @@ services:
     networks:
       - aiagent-runner
 
-  manager-agent:
-    build:
-      context: ..
-      dockerfile: aiteam/aimanager/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    depends_on:
-      dbmigration:
-        condition: service_completed_successfully
-    volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: "no"
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-      HOME: /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
-  jira-manager-agent:
-    build:
-      context: ..
-      dockerfile: aiteam/aijiramanager/Dockerfile
-      secrets:
-        - nuget_username
-        - nuget_token
-    depends_on:
-      dbmigration:
-        condition: service_completed_successfully
-    volumes:
-      - ${AITEAM_CONFIG_PATH:-./config}:/app/Config:ro
-    restart: "no"
-    init: true
-    environment:
-      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
-      HOME: /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
   aidashboard:
     build:
       context: ..
@@ -334,24 +143,11 @@ services:
 
 volumes:
 
-  # docker volume create review_workspaces
-  review_workspaces:
-    name: ${REVIEW_WORKSPACES_VOLUME_NAME:-aiteam_review_workspaces}
-
-  # docker volume create aiteam_claude_config
-  # docker volume rm aiteam_claude_config
-  claude_config:
-    name: ${CLAUDE_CONFIG_VOLUME_NAME:-aiteam_claude_config}
-
-  # docker volume create claude_workspaces
-  claude_workspaces:
-    name: ${CLAUDE_WORKSPACES_VOLUME_NAME:-aiteam_claude_workspaces}
-
   # docker volume create aiagent_workspaces
   aiagent_workspaces:
     name: ${AIAGENT_WORKSPACES_VOLUME_NAME:-aiteam_aiagent_workspaces}
 
-  # Claude Code CLI login for the new agent runner (see login_claude.sh --aiagent)
+  # Claude Code CLI login for the agent runner (see login_claude.sh)
   aiteam_aiagent_claude_config:
     name: ${AIAGENT_CLAUDE_CONFIG_VOLUME_NAME:-aiteam_aiagent_claude_config}
 
@@ -367,5 +163,4 @@ secrets:
     environment: NUGET_TOKEN
 
 networks:
-  claude-runner:
   aiagent-runner:
