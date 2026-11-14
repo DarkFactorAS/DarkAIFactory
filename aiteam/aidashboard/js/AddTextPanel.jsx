@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import { request } from "./TaskEditor.jsx";
+import { useWriteToken, WriteTokenPrompt } from "./WriteToken.jsx";
 
 // Lets the user append text to an AI task; the backend adds it as a Jira comment.
 export default function AddTextPanel({ task, onClose }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
-  const [writeToken, setWriteToken] = useState("");
+  const { token: writeToken, setToken } = useWriteToken();
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
 
@@ -26,6 +27,7 @@ export default function AddTextPanel({ task, onClose }) {
       setText("");
       setStatus("Text added to the task.");
     } catch (e) {
+      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       inFlight.current = false;
@@ -35,15 +37,7 @@ export default function AddTextPanel({ task, onClose }) {
 
   return (
     <form onSubmit={handleSubmit} aria-label={`Add text to ${task.key}`} className="mt-3 space-y-2">
-      <input
-        type="password"
-        aria-label="Dashboard write token"
-        placeholder="Dashboard write token"
-        autoComplete="off"
-        value={writeToken}
-        onChange={(e) => setWriteToken(e.target.value)}
-        required
-      />
+      <WriteTokenPrompt />
       <textarea
         aria-label="Additional text"
         className="w-full rounded border border-slate-300 dark:border-slate-600 p-2 text-sm"
