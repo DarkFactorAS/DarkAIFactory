@@ -33,7 +33,6 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
     <li
       data-testid="agent-card"
       data-working={working ? "true" : "false"}
-      aria-busy={working}
       className={
         "rounded border-2 p-3 text-sm " +
         (working ? "border-blue-600 ring-2 ring-blue-300" : "border-slate-200")
