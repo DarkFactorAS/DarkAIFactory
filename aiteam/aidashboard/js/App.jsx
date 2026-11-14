@@ -240,7 +240,12 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   const [agentState, setAgentState] = useState({ agents: null, nowMs: Date.now(), fetchedAt: Date.now() });
   useEffect(() => {
     let cancelled = false;
-    const load = () =>
+    let inFlight = false;
+    const load = () => {
+      // Skip a tick while the previous poll is still running so a delayed
+      // older response cannot overwrite a newer snapshot.
+      if (inFlight) return;
+      inFlight = true;
       listAgents()
         .then(({ agents, nowMs }) => {
           if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now() });
@@ -251,7 +256,11 @@ function ActiveAiTasksPanel({ labelsVersion }) {
             const localNow = Date.now();
             return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
           });
+        })
+        .finally(() => {
+          inFlight = false;
         });
+    };
     load();
     const timer = setInterval(load, POLL_INTERVAL_MS);
     return () => {
