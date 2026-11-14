@@ -62,6 +62,8 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         """;
     private const string ResolveThreadMutation =
         "mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { id isResolved } } }";
+    private const string ReplyToThreadMutation =
+        "mutation($threadId: ID!, $body: String!) { addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { comment { id } } }";
 
     private readonly HttpClient _httpClient;
     private readonly IReviewAttemptStore _attempts;
@@ -224,6 +226,18 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             ["variables"] = new JsonObject { ["threadId"] = threadId }
         };
         await SendGraphQlAsync(body, pullRequest.PullRequest.PullRequestUrl, cancellationToken);
+    }
+
+    /// <summary>Posts a reply in a review thread (needs Pull requests: write).</summary>
+    public async Task ReplyToThreadAsync(
+        StoredAgentPullRequest pullRequest, string threadId, string body, CancellationToken cancellationToken)
+    {
+        var request = new JsonObject
+        {
+            ["query"] = ReplyToThreadMutation,
+            ["variables"] = new JsonObject { ["threadId"] = threadId, ["body"] = body }
+        };
+        await SendGraphQlAsync(request, pullRequest.PullRequest.PullRequestUrl, cancellationToken);
     }
 
     /// <summary>

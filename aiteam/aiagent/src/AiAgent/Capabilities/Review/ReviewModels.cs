@@ -153,6 +153,9 @@ public interface IReviewThreadResolver
 {
     /// <summary>Resolves the review thread on GitHub.</summary>
     Task ResolveThreadAsync(StoredAgentPullRequest pullRequest, string threadId, CancellationToken cancellationToken);
+
+    /// <summary>Posts a reply in the review thread on GitHub.</summary>
+    Task ReplyToThreadAsync(StoredAgentPullRequest pullRequest, string threadId, string body, CancellationToken cancellationToken);
 }
 
 /// <summary>Persistence of per-comment attempts (agent_review_attempts).</summary>

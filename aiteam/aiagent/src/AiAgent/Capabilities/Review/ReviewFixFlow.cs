@@ -25,7 +25,7 @@ public static class FixDecision
 /// <summary>
 /// Fixes a pull request's review comments one at a time. For each comment: prompt with only that comment, the
 /// runner, bounds check (only the comment's file), build/test, then a separate commit and push whose message
-/// says what was fixed and where. Pushes only to the PR head branch, never forced, and never when nothing changed.
+/// says what was fixed and where. A comment with nothing to fix gets a reply in its thread. Pushes only to the PR head branch, never forced, and never when nothing changed.
 /// After the run, review threads whose comments were all pushed are resolved on GitHub.
 /// </summary>
 public sealed class ReviewFixFlow(
@@ -40,6 +40,11 @@ public sealed class ReviewFixFlow(
     string? testCommand)
 {
     private const string Category = "ReviewFix";
+
+    /// <summary>Reply posted in the review thread when the AI agent finds nothing to change.</summary>
+    public const string NoFixReplyText =
+        "The AI agent reviewed this comment but did not find any fix to make, so no changes were pushed. " +
+        "Leaving this thread open for a human reviewer.";
 
     public async Task<FixResult> RunAsync(
         StoredAgentPullRequest pullRequest,
@@ -59,8 +64,18 @@ public sealed class ReviewFixFlow(
             return new FixResult(FixOutcome.Failed, error, FailedCount: comments.Count);
         }
 
+        // The agent's own no-fix replies can come back as actionable comments when the reviewer login is the
+        // account that posts them. Persist them as handled so later scans skip them and they are never answered.
+        var generatedReplies = comments.Where(IsGeneratedReply).Select(c => c.Id).ToList();
+        if (generatedReplies.Count > 0)
+        {
+            attempts.Record(agentId, pullRequest.Id, generatedReplies, "Resolved", countAttempt: false, error: null);
+        }
+
         var used = attempts.GetAttempts(pullRequest.Id, comments.Select(c => c.Id).ToList());
-        var eligible = comments.Where(c => used.GetValueOrDefault(c.Id) < maxAttempts).ToList();
+        var eligible = comments
+            .Where(c => !IsGeneratedReply(c) && used.GetValueOrDefault(c.Id) < maxAttempts)
+            .ToList();
         if (eligible.Count == 0)
         {
             return new FixResult(FixOutcome.Skipped);
@@ -115,6 +130,10 @@ public sealed class ReviewFixFlow(
         var outcome = pushed > 0 ? FixOutcome.Pushed : failed > 0 ? FixOutcome.Failed : FixOutcome.NoChanges;
         return new FixResult(outcome, lastError, pushed, failed, quarantineWorkspace);
     }
+
+    /// <summary>True when the comment is a no-fix reply this flow posted itself.</summary>
+    public static bool IsGeneratedReply(ReviewComment comment) =>
+        string.Equals(comment.Body?.Trim(), NoFixReplyText, StringComparison.Ordinal);
 
     private async Task<CommentResult> FixCommentAsync(
         StoredAgentPullRequest pullRequest,
@@ -173,7 +192,7 @@ public sealed class ReviewFixFlow(
             var changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
-                return NoChanges(pullRequest, comment, "the runner made no changes");
+                return await NoChangesAsync(pullRequest, comment, "the runner made no changes", cancellationToken);
             }
 
             var outOfBounds = FixDecision.OutOfBounds(changed, cited);
@@ -201,7 +220,7 @@ public sealed class ReviewFixFlow(
             changed = await git.ChangedFilesAsync(workspacePath, baselineRevision, cancellationToken);
             if (changed.Count == 0)
             {
-                return NoChanges(pullRequest, comment, "no changes remained after build and test");
+                return await NoChangesAsync(pullRequest, comment, "no changes remained after build and test", cancellationToken);
             }
 
             outOfBounds = FixDecision.OutOfBounds(changed, cited);
@@ -239,13 +258,36 @@ public sealed class ReviewFixFlow(
         return new CommentResult(FixOutcome.Pushed);
     }
 
-    /// <summary>Nothing to fix is not an error: the comment is Resolved (not retried) and its thread stays open.</summary>
-    private CommentResult NoChanges(StoredAgentPullRequest pullRequest, ReviewComment comment, string reason)
+    /// <summary>
+    /// Nothing to fix is not an error: the comment is Resolved (not retried), a reply in its thread says the AI
+    /// agent found no fix, and the thread stays open for a human.
+    /// </summary>
+    private async Task<CommentResult> NoChangesAsync(
+        StoredAgentPullRequest pullRequest, ReviewComment comment, string reason, CancellationToken cancellationToken)
     {
         AgentLog.LogOutput(DFLogLevel.INFO, Category,
             $"PR #{pullRequest.PullRequest.PullRequestNumber}: comment {comment.Id}: {reason}; nothing to push. " +
             "The review thread is left open for a human.");
         attempts.Record(agentId, pullRequest.Id, [comment.Id], "Resolved", countAttempt: false, error: null);
+        if (!string.IsNullOrEmpty(comment.ThreadId))
+        {
+            // A failed reply must not change the outcome of the comment.
+            try
+            {
+                await resolver.ReplyToThreadAsync(pullRequest, comment.ThreadId, NoFixReplyText, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                DFLogger.LogOutput(DFLogLevel.WARNING, Category,
+                    $"PR #{pullRequest.PullRequest.PullRequestNumber}: could not reply in the review thread " +
+                    $"for comment {comment.Id}: {exception.Message}");
+            }
+        }
+
         return new CommentResult(FixOutcome.NoChanges);
     }
 
@@ -253,7 +295,7 @@ public sealed class ReviewFixFlow(
     /// Resolves each review thread whose outstanding comments were all pushed in this run. A thread with any
     /// sibling comment that failed, made no changes, was skipped for exhausted attempts, or was not reached
     /// stays open. A comment that made no changes is marked Resolved in the database (it is not retried), but
-    /// its thread is deliberately left open on GitHub for a human.
+    /// its thread is deliberately left open on GitHub for a human, with a reply explaining that no fix was found.
     /// A thread containing a retried comment also stays open: an earlier cycle may have handled a sibling (for
     /// example one that made no changes) that later polls no longer return, so this run cannot see it.
     /// </summary>
