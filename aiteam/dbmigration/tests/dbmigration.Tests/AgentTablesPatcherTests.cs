@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(13, patcher.Sql.Count);
+        Assert.Equal(14, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -82,7 +82,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal(11, patcher.Numbers[10]);
-        Assert.Equal(13, patcher.Numbers[^1]);
+        Assert.Equal(14, patcher.Numbers[^1]);
         var sql = patcher.Sql[10];
         Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
         Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);

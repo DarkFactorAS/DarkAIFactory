@@ -60,7 +60,7 @@ public sealed class AgentEndpointsTests
 
         private static AgentView ToView(long id, AgentWrite w) => new(
             id, w.Name, w.Role, w.Behavior, w.LlmProvider, w.LlmModel, w.Enabled, DateTime.UtcNow, DateTime.UtcNow,
-            w.Capabilities, w.Projects, null);
+            w.Capabilities, w.Projects, null, w.Container);
     }
 
     private static int Status(IResult result) => ((IStatusCodeHttpResult)result).StatusCode!.Value;
@@ -104,6 +104,7 @@ public sealed class AgentEndpointsTests
         { Valid() with { LlmProvider = "OpenAI" }, "Claude or Copilot" },
         { Valid() with { LlmProvider = null }, "Claude or Copilot" },
         { Valid() with { LlmModel = new string('x', 256) }, "llmModel" },
+        { Valid() with { Container = "aiagent-9" }, "container" },
         { Valid() with { Capabilities = [new("Deploy", true)] }, "capability must be" },
         { Valid() with { Capabilities = [new("Jira", true), new("jira", false)] }, "more than once" },
         { Valid() with { Projects = ["NOPE"] }, "Unknown project key(s): NOPE" },
