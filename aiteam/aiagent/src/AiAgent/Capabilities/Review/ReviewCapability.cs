@@ -92,6 +92,10 @@ public sealed class ReviewCapability(
     private async Task LogIfReadyToMergeAsync(
         ReviewGitHubClient client, StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
     {
+        // Read the head before counting so the counts can be tied to the commit they were checked against.
+        var checkedHead = options.AutoMergeEnabled
+            ? (await client.GetHeadAsync(pullRequest, cancellationToken)).Sha
+            : null;
         var counts = await client.CountThreadsAsync(pullRequest, cancellationToken);
         if (counts is not { } threads || !IsReadyToMerge(threads.Unresolved, 0))
         {
@@ -108,6 +112,13 @@ public sealed class ReviewCapability(
         try
         {
             var info = await client.GetMergeInfoAsync(pullRequest, cancellationToken);
+            if (string.IsNullOrEmpty(checkedHead)
+                || !string.Equals(checkedHead, info.HeadSha, StringComparison.OrdinalIgnoreCase))
+            {
+                Log($"{prefix}: not merged automatically: the head changed while review threads were checked; retrying in the next cycle.");
+                return;
+            }
+
             var reason = AutoMergePolicy.BlockReason(info, threads.Total, threads.Unresolved, 0, options.AgentCodePaths);
             if (reason is not null)
             {
