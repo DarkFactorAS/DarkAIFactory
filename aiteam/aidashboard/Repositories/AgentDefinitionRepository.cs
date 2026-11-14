@@ -227,7 +227,12 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
     private void InTransaction(Action<IDbConnection, IDbTransaction> work)
     {
         using var connection = connectionFactory.CreateConnection();
-        connection.Open();
+        // DFCommonLib's MySQL connection is already open when created; opening it again throws.
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
+
         using var transaction = connection.BeginTransaction();
         try
         {

@@ -195,7 +195,7 @@ public static class AgentEndpoints
         }
         catch (Exception ex)
         {
-            DFLogger.LogOutput(DFLogLevel.ERROR, "Agents", $"Agent request failed ({ex.GetType().Name}).");
+            DFLogger.LogOutput(DFLogLevel.ERROR, "Agents", $"Agent request failed ({ex.GetType().Name}): {ex.Message}");
             return Results.Json(new { error = "Unable to process the agent request." },
                 statusCode: StatusCodes.Status500InternalServerError);
         }
