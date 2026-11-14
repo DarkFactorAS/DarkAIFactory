@@ -11,6 +11,9 @@ public interface IAgentPlanRepository
 {
     AgentPlan? Get(long agentId, string jiraKey);
 
+    /// <summary>Most recent posted, non-empty plan for the issue and requirements hash, made by any agent.</summary>
+    AgentPlan? FindPostedForIssue(string jiraKey, string requirementsHash);
+
     /// <summary>Inserts or replaces the plan; a (re)saved plan is not posted to Jira yet.</summary>
     void Save(AgentPlan plan);
 
@@ -33,13 +36,28 @@ public sealed class AgentPlanRepository(IDbConnectionFactory connectionFactory) 
         command.AddParameter("@agent_id", agentId);
         command.AddParameter("@jira_key", jiraKey);
         using var reader = command.ExecuteReader();
-        return reader.Read()
-            ? new AgentPlan(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
-                reader.GetBoolean(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6))
-            : null;
+        return reader.Read() ? Map(reader) : null;
     }
+
+    public AgentPlan? FindPostedForIssue(string jiraKey, string requirementsHash)
+    {
+        using var command = connectionFactory.CreateCommand(
+            "SELECT `agent_id`, `manager_project_id`, `jira_key`, `plan`, `posted_to_jira`, " +
+            "`requirements_hash`, `source_updated` " +
+            "FROM `agent_plans` WHERE `jira_key` = @jira_key AND `posted_to_jira` = 1 " +
+            "AND `requirements_hash` = @requirements_hash AND `plan` <> '' " +
+            "ORDER BY `created` DESC, `id` DESC LIMIT 1");
+        command.AddParameter("@jira_key", jiraKey);
+        command.AddParameter("@requirements_hash", requirementsHash);
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? Map(reader) : null;
+    }
+
+    private static AgentPlan Map(System.Data.IDataRecord reader) =>
+        new(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
+            reader.GetBoolean(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6));
 
     public void Save(AgentPlan plan)
     {

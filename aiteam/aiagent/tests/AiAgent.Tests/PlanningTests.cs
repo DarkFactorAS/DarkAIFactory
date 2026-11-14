@@ -9,6 +9,8 @@ internal sealed class FakePlanRepository : IAgentPlanRepository
 {
     public Dictionary<string, AgentPlan> Plans { get; } = [];
     public AgentPlan? Get(long agentId, string jiraKey) => Plans.GetValueOrDefault(jiraKey);
+    public AgentPlan? FindPostedForIssue(string jiraKey, string requirementsHash) =>
+        Plans.GetValueOrDefault(jiraKey) is { PostedToJira: true } p && p.RequirementsHash == requirementsHash && p.Plan != "" ? p : null;
     public void Save(AgentPlan plan) => Plans[plan.JiraKey] = plan;
     public void MarkPostedToJira(long agentId, string jiraKey, string requirementsHash) =>
         Plans[jiraKey] = Plans[jiraKey] with { PostedToJira = true };
