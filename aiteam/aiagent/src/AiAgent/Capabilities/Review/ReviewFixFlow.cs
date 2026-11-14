@@ -63,8 +63,18 @@ public sealed class ReviewFixFlow(
             return new FixResult(FixOutcome.Failed, error, FailedCount: comments.Count);
         }
 
+        // The agent's own no-fix replies can come back as actionable comments when the reviewer login is the
+        // account that posts them. Persist them as handled so later scans skip them and they are never answered.
+        var generatedReplies = comments.Where(IsGeneratedReply).Select(c => c.Id).ToList();
+        if (generatedReplies.Count > 0)
+        {
+            attempts.Record(agentId, pullRequest.Id, generatedReplies, "Resolved", countAttempt: false, error: null);
+        }
+
         var used = attempts.GetAttempts(pullRequest.Id, comments.Select(c => c.Id).ToList());
-        var eligible = comments.Where(c => used.GetValueOrDefault(c.Id) < maxAttempts).ToList();
+        var eligible = comments
+            .Where(c => !IsGeneratedReply(c) && used.GetValueOrDefault(c.Id) < maxAttempts)
+            .ToList();
         if (eligible.Count == 0)
         {
             return new FixResult(FixOutcome.Skipped);
@@ -119,6 +129,10 @@ public sealed class ReviewFixFlow(
         var outcome = pushed > 0 ? FixOutcome.Pushed : failed > 0 ? FixOutcome.Failed : FixOutcome.NoChanges;
         return new FixResult(outcome, lastError, pushed, failed, quarantineWorkspace);
     }
+
+    /// <summary>True when the comment is a no-fix reply this flow posted itself.</summary>
+    public static bool IsGeneratedReply(ReviewComment comment) =>
+        string.Equals(comment.Body?.Trim(), NoFixReplyText, StringComparison.Ordinal);
 
     private async Task<CommentResult> FixCommentAsync(
         StoredAgentPullRequest pullRequest,
