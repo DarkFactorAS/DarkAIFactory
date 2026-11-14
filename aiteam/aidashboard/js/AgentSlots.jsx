@@ -39,6 +39,7 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
       <p className="text-slate-600">{agent.role}</p>
       <p className="text-xs text-slate-500">
         {agent.llmProvider} / {agent.llmModel || "default"}
+        {agent.container ? ` / ${agent.container}` : ""}
       </p>
       <div className="mt-1 flex flex-wrap gap-1">
         {chips.map((c) =>

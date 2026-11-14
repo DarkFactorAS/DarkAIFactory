@@ -5,6 +5,7 @@ export const POLL_INTERVAL_MS = 30000;
 export const STALE_AFTER_POLLS = 3;
 export const CAPABILITIES = ["Jira", "Planning", "Builder", "Review"];
 export const PROVIDERS = ["Claude", "Copilot"];
+export const CONTAINERS = ["aiagent-1", "aiagent-2", "aiagent-3"];
 
 function authHeaders(token) {
   if (!token) throw new Error("The dashboard write token is required.");

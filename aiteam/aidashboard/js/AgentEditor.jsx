@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CAPABILITIES, PROVIDERS, createAgent, listProjects, updateAgent } from "./agentApi.js";
+import { CAPABILITIES, CONTAINERS, PROVIDERS, createAgent, listProjects, updateAgent } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 // Create/edit form for an agent definition. `agent` is null in create mode.
@@ -10,6 +10,7 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
   const [behavior, setBehavior] = useState(agent?.behavior ?? "");
   const [provider, setProvider] = useState(agent?.llmProvider ?? PROVIDERS[0]);
   const [model, setModel] = useState(agent?.llmModel ?? "");
+  const [container, setContainer] = useState(agent?.container ?? "");
   const [capabilities, setCapabilities] = useState(
     () => new Set((agent?.capabilities ?? []).filter((c) => c.enabled).map((c) => c.capability)),
   );
@@ -44,6 +45,7 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
       behavior,
       llmProvider: provider,
       llmModel: model.trim() || null,
+      container: container || null,
       capabilities: CAPABILITIES.map((c) => ({ capability: c, enabled: capabilities.has(c) })),
       projects: [...projects],
     };
@@ -104,6 +106,15 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
           <input className={field} value={model} maxLength={255} onChange={(e) => setModel(e.target.value)} />
         </label>
       </div>
+      <label className={label}>
+        Container
+        <select className={field} value={container} onChange={(e) => setContainer(e.target.value)}>
+          <option value="">(none)</option>
+          {CONTAINERS.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </label>
       <fieldset>
         <legend className={label}>Capabilities</legend>
         <div className="flex flex-wrap gap-3 text-sm">
