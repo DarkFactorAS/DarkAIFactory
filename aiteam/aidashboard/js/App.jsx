@@ -6,7 +6,7 @@ import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
-import { POLL_INTERVAL_MS } from "./agentApi.js";
+import { POLL_INTERVAL_MS, listAgents, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
@@ -236,12 +236,63 @@ function ActiveAiTasksPanel({ labelsVersion }) {
     }
   }, [state.data, openKey]);
   useReloadOn(labelsVersion, state.reload);
+  // Agent state only drives the highlight; a failed poll keeps the last known state.
+  const [agentState, setAgentState] = useState({ agents: null, nowMs: Date.now(), fetchedAt: Date.now() });
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+    // Advance the server-derived clock by local elapsed time on every tick,
+    // independent of request completion, so cached Running status expires
+    // even when polls stall or fail.
+    const advanceClock = () => {
+      setAgentState((prev) => {
+        const localNow = Date.now();
+        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
+      });
+    };
+    const load = () => {
+      // Skip a tick while the previous poll is still running so a delayed
+      // older response cannot overwrite a newer snapshot.
+      if (inFlight) return;
+      inFlight = true;
+      listAgents()
+        .then(({ agents, nowMs }) => {
+          if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now() });
+        })
+        .catch(() => {
+          if (!cancelled) advanceClock();
+        })
+        .finally(() => {
+          inFlight = false;
+        });
+    };
+    load();
+    const timer = setInterval(() => {
+      advanceClock();
+      load();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+  const workingKeys = workingIssueKeys(agentState.agents, agentState.nowMs);
   return (
     <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
       {(items) => (
         <ul className="space-y-3">
-          {items.map((task) => (
-            <li key={task.key} className="rounded border border-slate-200 dark:border-slate-700 p-3">
+          {items.map((task) => {
+            const working = workingKeys.has(String(task.key).toLowerCase());
+            return (
+            <li
+              key={task.key}
+              data-testid="ai-task-card"
+              data-working={working ? "true" : "false"}
+              className={
+                "rounded border-2 p-3 " +
+                (working ? "border-blue-600 ring-2 ring-blue-300" : "border-slate-200 dark:border-slate-700")
+              }
+            >
               <button
                 type="button"
                 aria-expanded={openKey === task.key}
@@ -249,7 +300,10 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 className="block w-full text-left"
               >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{task.key}</span>
+                <span className="font-semibold">
+                  {task.key}
+                  {working && <span className="sr-only"> (being worked on)</span>}
+                </span>
                 <span className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs">{task.status}</span>
               </div>
               <p className="mt-1 text-sm">{task.summary}</p>
@@ -261,7 +315,8 @@ function ActiveAiTasksPanel({ labelsVersion }) {
               </button>
               {openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </Panel>

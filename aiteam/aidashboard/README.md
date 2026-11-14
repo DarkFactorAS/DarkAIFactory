@@ -112,6 +112,10 @@ writer must store UTC); "now" comes from the response `Date` header. The write t
 remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
 
+Top 3 AI tasks cards get a highlighted blue border (same as working agent cards) while an
+enabled agent with a fresh heartbeat is Running on that issue in the Planning, Builder or Review
+capability (agents are polled every 30 seconds).
+
 Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale
 heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it; the Network tab shows no write without a token, and a bad token gives 401 and asks again.
