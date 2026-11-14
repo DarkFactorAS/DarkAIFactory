@@ -49,7 +49,6 @@ export default function AgentEditor({ agent, onSaved, onCancel }) {
     };
     try {
       if (agent) {
-        body.enabled = agent.enabled;
         await updateAgent(token, agent.id, body);
       } else {
         await createAgent(token, body);
