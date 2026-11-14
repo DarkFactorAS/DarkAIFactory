@@ -27,7 +27,7 @@ services:
       secrets:
         - nuget_username
         - nuget_token
-    # One container per agent: each instance takes one enabled agent from agent_definitions (a database lock per
+    # Each instance runs up to AIAGENT_AGENTS_PER_INSTANCE (1-3) agents from agent_definitions (a database lock per
     # agent keeps two instances off the same agent). Instances without a free agent wait until one is enabled.
     deploy:
       replicas: ${AIAGENT_INSTANCES:-3}
@@ -46,6 +46,8 @@ services:
       HOME: /tmp
       AIAGENT_WORKSPACE_ROOT: /workspaces
       AIAGENT_RUNNER_URL: http://aiagent-runner:8080/
+      # Agents per container (1-3); separate from AIAGENT_INSTANCES (number of containers).
+      AIAGENT_AGENTS_PER_INSTANCE: ${AIAGENT_AGENTS_PER_INSTANCE:-1}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -73,7 +75,7 @@ services:
       HOME: /tmp
       CLAUDE_CONFIG_DIR: /claude-config
       AIAGENT_WORKSPACE_ROOT: /workspaces
-      # One slot per agent so 3 agents can run at the same time (default 3).
+      # Slots should be >= AIAGENT_INSTANCES x AIAGENT_AGENTS_PER_INSTANCE so all agents can run at the same time.
       AIAGENT_RUNNER_MAX_JOBS: ${AIAGENT_RUNNER_MAX_JOBS:-3}
       NUGET_USERNAME: ${NUGET_USERNAME}
       NUGET_TOKEN: ${NUGET_TOKEN}

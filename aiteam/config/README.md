@@ -133,7 +133,8 @@ volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitH
 The review worker (`aireviewworker`) also runs Claude Code, using the same shared CLI login;
 its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
 The new agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
-`appsettings.<Environment>.json` (`PollIntervalSeconds`); its runner uses a separate
+`appsettings.<Environment>.json` (`PollIntervalSeconds`, `AgentsPerInstance` 1-3 agents per container, default 1,
+overridden by the env var `AIAGENT_AGENTS_PER_INSTANCE`); its runner uses a separate
 Claude Code login in the `aiteam_aiagent_claude_config` volume (`./login_claude.sh`, on Windows `login_claude.cmd`).
 
 Optional AITechLead triage settings (shared, default used when the row is absent):
