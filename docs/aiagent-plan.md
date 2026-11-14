@@ -502,7 +502,7 @@ This plan, and the decisions in section 2.
 | The behavior text is used to weaken the agent | It's only added after the built-in prompt. Permission flags and credential stripping stay in code. Dashboard writes need the write token. |
 | Copilot CLI reports no usage | Those fields are nullable and shown as N/A. |
 | The runner image gets large (two CLIs and three toolchains) | A multi-stage build, and a shared base layer with the orchestrator. |
-| Parallel agent loops overload the runner | A configurable maximum number of concurrent runner jobs (default 2). Extra jobs wait for the next cycle. |
+| Parallel agent loops overload the runner | A configurable maximum number of concurrent runner jobs (default 3, one per agent). Extra jobs wait for the next cycle. |
 
 ---
 
