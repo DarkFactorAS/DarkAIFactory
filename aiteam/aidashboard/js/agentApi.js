@@ -88,6 +88,22 @@ export function activeCapability(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   return CAPABILITIES.find((c) => c.toLowerCase() === wanted) ?? null;
 }
 
+const WORK_CAPABILITIES = ["planning", "builder", "review"];
+
+// Lower-cased issue keys an agent is actively planning, building or reviewing.
+// An empty capability still counts as working; Jira-capability work does not.
+export function workingIssueKeys(agents, nowMs, pollMs = POLL_INTERVAL_MS) {
+  const keys = new Set();
+  for (const agent of agents ?? []) {
+    if (!isWorking(agent, nowMs, pollMs)) continue;
+    const { currentIssueKey, currentCapability } = agent.status;
+    if (!currentIssueKey) continue;
+    if (currentCapability && !WORK_CAPABILITIES.includes(String(currentCapability).toLowerCase())) continue;
+    keys.add(String(currentIssueKey).toLowerCase());
+  }
+  return keys;
+}
+
 export const getAiLabels = () => request("/api/settings/ai-labels");
 
 export const saveAiLabels = (token, labels) =>
