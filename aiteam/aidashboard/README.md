@@ -126,9 +126,12 @@ enabled agent with a fresh heartbeat is Running on that issue in the Planning, B
 capability (agents are polled every 30 seconds).
 
 Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each Jira label
-`ai-approved` and `aiagent-needs-clarification` on the issue (exact match, `data-testid="ai-task-label-badge"`).
+`ai-approved`, `aiagent-needs-clarification`, and `aiagent-ready-to-merge` on the issue (exact match,
+`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label while all
+review threads are resolved, and removes it when unresolved or failed review work remains.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
-30-second poll and disappears when removed; repeat with `aiagent-needs-clarification`; check light and dark themes.
+30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
+`aiagent-ready-to-merge`; check light and dark themes.
 
 Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale

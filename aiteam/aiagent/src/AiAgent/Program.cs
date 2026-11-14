@@ -119,7 +119,8 @@ else
         new AgentPullRequestRepository(connectionFactory),
         new AgentReviewAttemptRepository(connectionFactory),
         new GitRunner(repositoryToken),
-        runnerClient));
+        runnerClient,
+        createJiraClient: () => new JiraClient(LoadJiraConfig())));
 }
 var agentsPerInstance = AgentsPerInstancePolicy.Resolve(
     appSettings.AgentsPerInstance, Environment.GetEnvironmentVariable("AIAGENT_AGENTS_PER_INSTANCE"), out var agentsPerInstanceWarning);

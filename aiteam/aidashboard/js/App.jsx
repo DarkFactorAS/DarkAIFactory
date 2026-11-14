@@ -228,7 +228,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   );
 }
 
-const CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification"];
+const CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
 function ActiveAiTasksPanel({ labelsVersion }) {
   const [openKey, setOpenKey] = useState(null);
