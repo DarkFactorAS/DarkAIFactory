@@ -333,7 +333,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             BaseBranch = baseBranch,
             BehindBy = behindBy,
             ChecksProblem = await GetChecksProblemAsync(repoPath, headSha, cancellationToken),
-            ReviewerApproved = await HasReviewerApprovalAsync(path, approvalPhrase, cancellationToken)
+            ReviewerApproved = await HasReviewerApprovalAsync(path, headSha, approvalPhrase, cancellationToken)
         };
     }
 
@@ -385,10 +385,13 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
     /// <summary>
     /// True when a review body or conversation comment by the reviewer contains the approval phrase and is not
     /// older than the latest non-merge commit (commits that only merge the base branch do not invalidate it).
+    /// Fails closed (false) when the retrieved commit history does not end at <paramref name="headSha"/>, for
+    /// example because GitHub caps the pull request commit list at 250 entries.
     /// </summary>
-    private async Task<bool> HasReviewerApprovalAsync(string pullPath, string phrase, CancellationToken cancellationToken)
+    private async Task<bool> HasReviewerApprovalAsync(
+        string pullPath, string headSha, string phrase, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(phrase))
+        if (string.IsNullOrWhiteSpace(phrase) || string.IsNullOrWhiteSpace(headSha))
         {
             return false;
         }
@@ -403,6 +406,12 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             {
                 break;
             }
+        }
+
+        if (commits.Count == 0
+            || !string.Equals(commits[^1]["sha"]?.GetValue<string>(), headSha, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
 
         var lastIndex = commits.FindLastIndex(commit => (commit["parents"]?.AsArray().Count ?? 1) <= 1);
