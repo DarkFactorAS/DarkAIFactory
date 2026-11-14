@@ -1,10 +1,11 @@
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import { WriteTokenProvider } from "./WriteToken.jsx";
+import { POLL_INTERVAL_MS } from "./agentApi.js";
 
 function Panel({ title, state, emptyText, children }) {
   const { data, loading, error } = state;
@@ -141,7 +142,12 @@ function SolvedByProjectPanel() {
 
 function ActiveAiTasksPanel() {
   const [openKey, setOpenKey] = useState(null);
-  const state = useApiData("/api/tasks/active-ai");
+  const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
+  useEffect(() => {
+    if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
+      setOpenKey(null);
+    }
+  }, [state.data, openKey]);
   return (
     <Panel title="Top 3 AI tasks" state={state} emptyText="No active AI tasks.">
       {(items) => (
