@@ -204,6 +204,11 @@ public static class AgentTablesPatcher
                                 AND `code_key` IN ('PickupLabel', 'AnalyzedLabel', 'PlannedLabel'))),
                     'ai-manager-planned,ai-analyzed,ai-agent-picked,aiagent-picked,aiagent-analyzed,aiagent-planned'))
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
+            """,
+            // DFAI-194: docker container (aiagent-1..3) an agent belongs to. NULL = not assigned.
+            """
+            ALTER TABLE `agent_definitions`
+                ADD COLUMN IF NOT EXISTS `container` VARCHAR(64) NULL
             """
         ];
 

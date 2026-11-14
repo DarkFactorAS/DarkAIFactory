@@ -11,11 +11,11 @@ public sealed record AgentStatusView(
 public sealed record AgentView(
     long Id, string Name, string Role, string Behavior, string LlmProvider, string? LlmModel, bool Enabled,
     DateTime CreatedAt, DateTime UpdatedAt, IReadOnlyList<AgentCapabilityView> Capabilities,
-    IReadOnlyList<string> Projects, AgentStatusView? Status);
+    IReadOnlyList<string> Projects, AgentStatusView? Status, string? Container = null);
 
 public sealed record AgentWrite(
     string Name, string Role, string Behavior, string LlmProvider, string? LlmModel, bool Enabled,
-    IReadOnlyList<AgentCapabilityView> Capabilities, IReadOnlyList<string> Projects);
+    IReadOnlyList<AgentCapabilityView> Capabilities, IReadOnlyList<string> Projects, string? Container = null);
 
 public interface IAgentDefinitionRepository
 {
@@ -33,7 +33,7 @@ public interface IAgentDefinitionRepository
 public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFactory) : IAgentDefinitionRepository
 {
     private const string AgentColumns =
-        "id, name, role, behavior, llm_provider, llm_model, enabled, created_at, updated_at";
+        "id, name, role, behavior, llm_provider, llm_model, enabled, created_at, updated_at, container";
 
     public IReadOnlyList<AgentView> List() => Load(null);
 
@@ -43,7 +43,7 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
     private List<AgentView> Load(long? id)
     {
         var agents = new List<(long Id, string Name, string Role, string Behavior, string Provider, string? Model,
-            bool Enabled, DateTime Created, DateTime Updated)>();
+            bool Enabled, DateTime Created, DateTime Updated, string? Container)>();
         using (var command = connectionFactory.CreateCommand(
             $"SELECT {AgentColumns} FROM agent_definitions WHERE deleted_at IS NULL " +
             "AND (@id = 0 OR id = @id) ORDER BY name, id"))
@@ -54,7 +54,8 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
             {
                 agents.Add((reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
                     reader.GetString(4), reader.IsDBNull(5) ? null : reader.GetString(5),
-                    Convert.ToInt64(reader.GetValue(6)) != 0, reader.GetDateTime(7), reader.GetDateTime(8)));
+                    Convert.ToInt64(reader.GetValue(6)) != 0, reader.GetDateTime(7), reader.GetDateTime(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9)));
             }
         }
 
@@ -109,7 +110,8 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
             a.Id, a.Name, a.Role, a.Behavior, a.Provider, a.Model, a.Enabled, a.Created, a.Updated,
             capabilities.GetValueOrDefault(a.Id) ?? [],
             projects.GetValueOrDefault(a.Id) ?? [],
-            statuses.GetValueOrDefault(a.Id))).ToList();
+            statuses.GetValueOrDefault(a.Id),
+            a.Container)).ToList();
     }
 
     private static void Add<T>(Dictionary<long, List<T>> map, long key, T value)
@@ -178,8 +180,8 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
         InTransaction((connection, transaction) =>
         {
             Execute(connection, transaction,
-                "INSERT INTO agent_definitions (name, role, behavior, llm_provider, llm_model, enabled) " +
-                "VALUES (@name, @role, @behavior, @provider, @model, @enabled)", agent);
+                "INSERT INTO agent_definitions (name, role, behavior, llm_provider, llm_model, enabled, container) " +
+                "VALUES (@name, @role, @behavior, @provider, @model, @enabled, @container)", agent);
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "SELECT LAST_INSERT_ID()";
@@ -196,7 +198,7 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
         {
             updated = Execute(connection, transaction,
                 "UPDATE agent_definitions SET name = @name, role = @role, behavior = @behavior, " +
-                "llm_provider = @provider, llm_model = @model, enabled = @enabled " +
+                "llm_provider = @provider, llm_model = @model, enabled = @enabled, container = @container " +
                 "WHERE id = @id AND deleted_at IS NULL", agent, id) > 0;
             if (updated)
             {
@@ -253,6 +255,7 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
         Bind(command, "@provider", agent.LlmProvider);
         Bind(command, "@model", agent.LlmModel);
         Bind(command, "@enabled", agent.Enabled ? 1 : 0);
+        Bind(command, "@container", agent.Container);
         if (id is not null)
         {
             Bind(command, "@id", id.Value);
