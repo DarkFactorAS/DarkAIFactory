@@ -11,6 +11,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
   const [provider, setProvider] = useState(agent?.llmProvider ?? PROVIDERS[0]);
   const [model, setModel] = useState(agent?.llmModel ?? "");
   const [container, setContainer] = useState(agent?.container ?? "");
+  const [enabled, setEnabled] = useState(agent?.enabled ?? false);
   const [capabilities, setCapabilities] = useState(
     () => new Set((agent?.capabilities ?? []).filter((c) => c.enabled).map((c) => c.capability)),
   );
@@ -47,6 +48,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
       llmProvider: provider,
       llmModel: model.trim() || null,
       container: container || null,
+      enabled,
       capabilities: CAPABILITIES.map((c) => ({ capability: c, enabled: capabilities.has(c) })),
       projects: [...projects],
     };
@@ -132,6 +134,10 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
             <option key={c}>{c}</option>
           ))}
         </select>
+      </label>
+      <label className="flex items-center gap-1 text-sm font-medium">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        Enabled
       </label>
       <fieldset>
         <legend className={label}>Capabilities</legend>
