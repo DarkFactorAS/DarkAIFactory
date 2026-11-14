@@ -387,6 +387,18 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
     }
 
     /// <summary>
+    /// REST endpoints report GitHub App logins with a "[bot]" suffix (for example
+    /// "copilot-pull-request-reviewer[bot]") while GraphQL omits it, so strip the suffix before comparing.
+    /// </summary>
+    private static string? NormalizeBotLogin(string? login)
+    {
+        const string botSuffix = "[bot]";
+        return login is not null && login.EndsWith(botSuffix, StringComparison.OrdinalIgnoreCase)
+            ? login[..^botSuffix.Length]
+            : login;
+    }
+
+    /// <summary>
     /// True when a submitted review by the reviewer contains the approval phrase and was made on the latest commit
     /// that is not a verified base-only merge, or on a later commit. Conversation comments never count: GitHub does
     /// not bind them to a head commit, and commit timestamps are author-controlled, so a commit created before the
@@ -435,7 +447,10 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         var shas = commits.Select(commit => commit["sha"]?.GetValue<string>() ?? string.Empty).ToList();
 
         bool IsReviewer(JsonNode? item) =>
-            string.Equals(item?["user"]?["login"]?.GetValue<string>(), _reviewerLogin, StringComparison.OrdinalIgnoreCase)
+            string.Equals(
+                NormalizeBotLogin(item?["user"]?["login"]?.GetValue<string>()),
+                NormalizeBotLogin(_reviewerLogin),
+                StringComparison.OrdinalIgnoreCase)
             && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
 
         var reviews = (await SendRestAsync(HttpMethod.Get, $"{pullPath}/reviews?per_page={PageSize}", null, cancellationToken))
