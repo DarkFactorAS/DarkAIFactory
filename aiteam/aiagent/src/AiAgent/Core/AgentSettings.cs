@@ -13,8 +13,12 @@ public sealed class AgentSettings : AppSettings
     public int RunnerTimeoutMinutes { get; set; } = 30;
 
     /// <summary>
-    /// Agents one aiagent container runs at a time (default 1: one agent per container). Containers share the
-    /// enabled agents through a database lock per agent, so scale the service to run more agents.
+    /// Agents one aiagent container runs at a time (range 1-3, default 1). Separate from the container count
+    /// (<c>AIAGENT_INSTANCES</c>). Overridden by the environment variable <c>AIAGENT_AGENTS_PER_INSTANCE</c>.
+    /// Containers share the enabled agents through a database lock per agent.
     /// </summary>
     public int AgentsPerInstance { get; set; } = 1;
+
+    /// <summary>Hard maximum for <see cref="AgentsPerInstance"/>.</summary>
+    public const int MaxAgentsPerInstance = 3;
 }
