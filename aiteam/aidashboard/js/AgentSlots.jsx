@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import { POLL_INTERVAL_MS, activeCapability, isWorking, listAgents, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgents, statusLabel } from "./agentApi.js";
 import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
@@ -134,7 +134,7 @@ export default function AgentSlots() {
       )}
       {agents && (
         <ul className="flex flex-col gap-3">
-          {agents.map((agent) => (
+          {[...agents].sort(compareByContainer).map((agent) => (
             <AgentCard
               key={agent.id}
               agent={agent}
