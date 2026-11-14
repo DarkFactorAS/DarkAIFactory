@@ -29,6 +29,7 @@ builder.Services.AddSingleton(services =>
 });
 
 builder.Services.AddScoped<IAiLabelsStore, AiLabelsStore>();
+builder.Services.AddScoped<IActiveStatusesStore, ActiveStatusesStore>();
 builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<IAgentTaskRepository, AgentTaskRepository>();
 builder.Services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository>();

@@ -46,11 +46,16 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-AiDashboard/1.0");
     }
 
-    public static string BuildJql(IEnumerable<string> aiLabels, string projectKey, string doneStatus)
+    public static string BuildJql(IEnumerable<string> aiLabels, string projectKey, string doneStatus,
+        IEnumerable<string>? statuses = null)
     {
+        var statusList = (statuses ?? []).ToArray();
+        var statusClause = statusList.Length > 0
+            ? $"AND status in ({string.Join(", ", statusList.Select(s => $"\"{JiraQuery.EscapeJql(s)}\""))}) "
+            : string.Empty;
         var labels = string.Join(", ", aiLabels.Select(label => $"\"{JiraQuery.EscapeJql(label)}\""));
         return $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND labels in ({labels}) " +
-               $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done " +
+               $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done " + statusClause +
                "ORDER BY updated DESC, key ASC";
     }
 
@@ -64,7 +69,8 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
         var doneStatus = _settings.Jira.JiraDoneStatus;
-        var jql = BuildJql(aiLabels, _settings.Jira.JiraProjectKey, doneStatus);
+        var statuses = _settings.Dashboard.ActiveStatuses;
+        var jql = BuildJql(aiLabels, _settings.Jira.JiraProjectKey, doneStatus, statuses);
 
         using var response = await _httpClient.GetAsync(
             $"/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +
@@ -86,7 +92,8 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
                 ? labelsElement.EnumerateArray().Select(label => label.GetString() ?? string.Empty).ToArray()
                 : [];
             if (string.Equals(status, doneStatus, StringComparison.OrdinalIgnoreCase) ||
-                !labels.Intersect(aiLabels, StringComparer.Ordinal).Any())
+                !labels.Intersect(aiLabels, StringComparer.Ordinal).Any() ||
+                (statuses.Count > 0 && !statuses.Contains(status, StringComparer.OrdinalIgnoreCase)))
             {
                 continue;
             }
