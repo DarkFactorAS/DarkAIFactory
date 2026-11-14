@@ -36,7 +36,8 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
 
     public IReadOnlyList<AgentView> List() => Load(null);
 
-    public AgentView? Find(long id) => Load(id).FirstOrDefault();
+    // 0 is the "all agents" sentinel in Load, so nonpositive IDs must never reach it.
+    public AgentView? Find(long id) => id > 0 ? Load(id).FirstOrDefault() : null;
 
     private List<AgentView> Load(long? id)
     {
