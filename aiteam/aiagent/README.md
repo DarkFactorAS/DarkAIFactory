@@ -1,6 +1,6 @@
 # AiAgent (aiagent)
 
-Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchanged.
+Scaffold for the new agent (DFAI-154, stage 1). It replaces the removed legacy agents.
 
 ## Layout
 
@@ -40,8 +40,7 @@ concurrent agents can be told apart. Startup lines, host-wide lines and the `--r
 
 ## Jira capability (`Capabilities/Jira`)
 
-Copied from `aijiramanager`, the Jira parts of `aiworker`/`aiclaudeworker` and `PullRequestCloser` in
-`aimanager` (nothing is shared). Runs only for agents whose `Jira` capability is enabled. Per cycle, scoped
+Runs only for agents whose `Jira` capability is enabled. Per cycle, scoped
 to the agent's projects:
 
 1. Intake: `agent_tasks` rows in `New` become Jira issues (setting `Jira.JiraIntakeEnabled`, default `true`).
@@ -55,8 +54,7 @@ to the agent's projects:
 
 ## Planning capability
 
-`src/AiAgent/Capabilities/Planning` is copied from aimanager (`ManagerPlanner`, `TriageResult`, prompts);
-aimanager itself is unchanged. For every Selected-for-Development issue of the agent's projects it runs the
+`src/AiAgent/Capabilities/Planning` holds the planner (`AgentPlanner`, `TriageResult`, prompts). For every Selected-for-Development issue of the agent's projects it runs the
 runner in `plan` mode and applies one of the six triage decisions: `clarify` (questions as Jira comment and
 the clarification label), `analysis_only` (analysis comment, transition to the analysis status), `small`,
 `needs_approval` (approval label until a human adds the approved label), `split` (full plan proposed on the
@@ -79,13 +77,9 @@ parent, sub-tasks created with dependency links after approval, at most 10) and 
 - `ClarificationLabel`, `ApprovalLabel` and `ApprovedLabel` are read from workflow_labels for `aiagent` when
   present and default to `aiagent-needs-clarification`, `aiagent-awaiting-approval` and `aiagent-approved`.
 
-> **Warning:** Planning must not share projects with a running manager-agent. aimanager plans every
-> Selected-for-Development issue of its mapped projects regardless of the `aiagent-*` labels, so both would plan
-> the same issues. Either set the manager `Jira.JiraJql` to exclude the aiAgent projects, or stop manager-agent.
-
 ## Builder capability (`Capabilities/Builder`)
 
-Copied from `aiclaudeworker` (Program.cs flow, PromptBuilder). For each assigned project key it picks
+For each assigned project key it picks
 planned issues (`aiagent-analyzed`, not `aiagent-picked`), requires a posted stored plan in `agent_plans`
 whose `requirements_hash` matches the current issue (the Builder prefers its own plan, but accepts a posted
 plan with a matching hash made by any agent), claims the issue, branches (sub-tasks branch off and
@@ -113,7 +107,7 @@ A failing build or test makes the runner return a non-zero exit code, and the ru
 
 ## Review capability (`Capabilities/Review`)
 
-Copied from `aireviewworker`. Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
+Registered only when `GitHub.GitHubRepositoryToken` is set. For each open pull
 request in `agent_pull_requests` in the agent's projects, whichever agent opened it (so a Review-only agent fixes
 the pull requests of a Builder agent), it collects unresolved, current inline comments by `AIAGENT_REVIEWER_LOGIN`
 (default `copilot-pull-request-reviewer`) that are not handled yet, clones the head branch and fixes the comments

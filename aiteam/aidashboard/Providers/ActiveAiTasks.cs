@@ -18,9 +18,9 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
     public const int MaxTasks = 5;
     private static readonly (string Agent, string CodeKey)[] AiLabelKeys =
     [
-        ("aimanager", "PickupLabel"),
-        ("aimanager", "AnalyzedLabel"),
-        ("aiworker", "PickupLabel")
+        ("aiagent", "PickupLabel"),
+        ("aiagent", "AnalyzedLabel"),
+        ("aiagent", "PlannedLabel")
     ];
 
     private readonly IntegrationSettings _settings;

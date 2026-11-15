@@ -9,9 +9,8 @@ counting Jira issues in the Done status category per project (limited to the pro
 credentials are never logged).
 
 `GET /api/tasks/active-ai` returns at most 5 Jira issues (`key`, `summary`,
-`status`, `description`, `labels`) that carry an AI workflow label (the `PickupLabel` and
-`AnalyzedLabel` of aimanager and the `PickupLabel` of aiworker from
-`workflow_labels`) and are not in the Done status. Ordering is most recently
+`status`, `description`, `labels`) that carry an AI workflow label (the `PickupLabel`, `AnalyzedLabel` and
+`PlannedLabel` of aiagent from `workflow_labels`) and are not in the Done status. Ordering is most recently
 updated first, ties broken by key (default; confirm with the requester).
 The dashboard's "Top 5 AI tasks" panel polls this endpoint every 30 seconds
 (background refreshes keep the current list; a failed poll keeps the last list

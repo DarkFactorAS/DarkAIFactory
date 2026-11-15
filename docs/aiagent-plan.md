@@ -3,6 +3,9 @@
 Status: **Draft for review** (2026-11-12). No Jira issues have been created yet.
 Source: the original requirements (section 0) plus the decisions recorded in section 2.
 
+
+> **Historical document (DFAI-215).** The old agents named below (`aiworker`, `aiclaudeworker`, `aireviewworker`, `aimanager`, `aijiramanager`) and their database tables (`manager_plans`, `pull_requests`, `review_comment_attempts`) have been removed. This plan is kept as the design record of aiAgent; statements about the old agents describe the situation when it was written.
+
 ---
 
 ## 0. Original requirements

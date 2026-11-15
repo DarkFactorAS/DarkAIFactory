@@ -1,7 +1,7 @@
 # dbmigration
 
 Standalone .NET 10 executable that creates/upgrades the database used by
-aimanager, aiworker, aiclaudeworker and aidashboard. Clients only read/write data; none creates
+aiagent and aidashboard. Clients only read/write data; none creates
 tables or applies migrations.
 
 ## Configuration and local execution
@@ -38,22 +38,39 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `StartupDatabasePatcher` | 2 | `manager_projects` |
 | `StartupDatabasePatcher` | 3 | `manager_plans` |
 | `StartupDatabasePatcher` | 4 | Nullable plan fingerprint (`requirements_hash`) and Jira source timestamp (`source_updated`) |
-| `StartupDatabasePatcher` | 5 | `pull_requests` (Jira key, repository, PR number, unique PR URL), written by aiworker and read by AITechLead |
+| `StartupDatabasePatcher` | 5 | `pull_requests` (Jira key, repository, PR number, unique PR URL), written by the retired aiworker; dropped by `LegacyAgentCleanup` 2 |
 | `IntegrationSettings` | 1 | `settings` with shared/client scope constraint |
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
 | `IntegrationSettings` | 10 | Scope constraint allows the `aiclaudeworker` client (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`, `Claude.AgentModel`) |
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
-| `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; `pull_request_id` FK to `pull_requests` with cascade delete, `github_comment_id`, unique per pull request, `attempts`, `status` Pending/InProgress/Resolved/Failed, created/updated, nullable `last_error`) |
+| `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; used by the retired review worker; dropped by `LegacyAgentCleanup` 1) |
+| `LegacyAgentCleanup` | 1-3 | `DROP TABLE IF EXISTS` for `review_comment_attempts`, `pull_requests` and `manager_plans` (tables used only by the retired agents) |
+| `LegacyAgentCleanup` | 4 | Deletes `workflow_labels` rows of `aimanager`, `aiworker` and `aiclaudeworker` |
+| `LegacyAgentCleanup` | 5-6 | Deletes `settings` rows of the clients `aimanager`, `aiworker`, `aiclaudeworker`, `aibuildpage` and the unused `aidashboard` rows `Jira.JiraPickupLabel`, `Jira.JiraAnalyzedLabel`, `GitHub.GitHubRepositoryToken`, `GitHub.AgentModel` |
+| `LegacyAgentCleanup` | 7 | Replaces `ck_settings_scope`: `shared` (non client-scoped names), `aidashboard` (`Dashboard.AiLabels`, `Dashboard.ActiveStatuses`), `aiagent` (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`) |
+| `LegacyAgentCleanup` | 8 | Removes the legacy labels `ai-manager-planned`, `ai-analyzed`, `ai-agent-picked` from `Dashboard.AiLabels`; if nothing is left, uses the `aiagent` labels from `workflow_labels` |
 
 Existing databases reuse their migration history. Already applied patches are
 skipped; configured values, mappings and plans are preserved. Back up the database
 before upgrades. Patch 4 uses `ADD COLUMN IF NOT EXISTS` so it can recover from a
 failed history write without losing plans. Existing rows have null freshness
-metadata; the manager replans eligible unclaimed issues once, and the worker
-waits instead of implementing unversioned plans. Stop both agents, run migration,
-then deploy/restart both updated agents together.
+metadata.
+
+### Removing the legacy agents (DFAI-215)
+
+`LegacyAgentCleanup` permanently deletes the history of the retired agents
+(`manager_plans`, `pull_requests`, `review_comment_attempts`, and their labels and settings
+rows). `manager_projects`, `agent_tasks`, all `agent_*` tables and `logtable` are kept.
+Existing patches are never edited because fresh databases replay them in order; the cleanup
+is a forward-only system whose patches are all idempotent. Rollout:
+
+1. Stop any old agent that is still running.
+2. Back up the database.
+3. Deploy the aidashboard and aiagent versions that no longer read the legacy labels
+   and clients.
+4. Run dbmigration.
 Before applying patches, dbmigration upgrades the library's
 `version` table primary key from `patchId` alone to (`system`, `patchId`), retaining
 existing rows and allowing both migration systems to use their original IDs.

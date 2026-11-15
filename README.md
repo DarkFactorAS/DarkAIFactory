@@ -1,21 +1,10 @@
 # DarkAIFactory
 
 DarkAIFactory is DarkFactor's AI automation project. This repository currently
-contains a Jira-driven coding agent and a small ASP.NET Core web application.
+contains the Jira-driven AiAgent, a dashboard and the database migration tool.
 
 ## Projects
 
-- **Jira Coding Agent** — a Dockerized worker that picks up Jira tasks, uses
-  GitHub Copilot CLI to implement them in a target repository, and opens pull
-  requests. See [the AI worker README](aiteam/aiworker/README.md) for setup,
-  configuration, and tests.
-- **Jira Claude Coding Agent** — the same worker using the Claude Code CLI
-  instead of Copilot (`aiteam/aiclaudeworker`). See
-  [the AI Claude worker README](aiteam/aiclaudeworker/README.md).
-- **Review Worker** — a polling scaffold that loads and validates configuration
-  (`aiteam/aireviewworker`). Review fetching, Claude Code fixes, pushes and attempt
-  persistence shown below are planned, not active service behavior. See
-  [the review worker README](aiteam/aireviewworker/README.md).
 - **AiAgent** — scaffold of the new agent (`aiteam/aiagent`): an orchestrator
   (`aiagent`) and a sandbox runner (`aiagent-runner`, `--runner-server`). Stage 1
   has no workflow yet. See [the AiAgent README](aiteam/aiagent/README.md).
@@ -31,72 +20,34 @@ flowchart LR
     subgraph EXT["External systems"]
         Jira[("Jira")]
         GH[("GitHub<br/>repository + PR")]
-        CLI[["GitHub Copilot CLI"]]
         CCLI[["Claude Code CLI"]]
-        DB[("MariaDB<br/>agent_tasks, settings, manager_projects,<br/>manager_plans, pull_requests")]
+        DB[("MariaDB<br/>agent_tasks, agent_* tables,<br/>settings, manager_projects")]
     end
 
     subgraph SYS["DarkAIFactory services"]
         MIG["dbmigration<br/>(one-shot)"]
         DASH["aidashboard"]
-        JM["AIJiraManager<br/>(aijiramanager)"]
-        TL["AITechLead<br/>(aiteam/aimanager)"]
-        W["AIWorker<br/>(aiworker)"]
-        CW["AIClaudeWorker<br/>(aiclaudeworker)"]
-        RW["AIReviewWorker<br/>(aireviewworker)"]
+        AG["aiagent<br/>(aiteam/aiagent)"]
+        RUN["aiagent-runner<br/>(sandbox)"]
     end
 
-    MIG -->|"1. create/upgrade schema (migrations)"| DB
-    DB -->|"Jira connection, credentials, status, issue type (settings)"| JM
-    DB -->|"credentials, labels, project mappings"| TL
-    DB -->|"credentials, labels, project mappings"| W
-    DB -->|"credentials, labels, project mappings"| CW
-
+    MIG -->|"create/upgrade schema (migrations)"| DB
     DASH <-->|"read: agent_tasks, settings, workflow labels / write: create/update agent_tasks"| DB
     DASH <-->|"read: issue stats and active AI tasks / write: user comments"| Jira
-
-    JM -->|"poll agent_tasks with status New"| DB
-    JM -->|"create issue, move to Selected for Development"| Jira
-    JM -->|"Jira key, status Created/Failed"| DB
-
-    Jira -->|"issues, requirements, status"| TL
-    TL -->|"repo clone + prompt (read-only)"| CLI
-    CLI -->|"triage result / plan"| TL
-    TL -->|"plan comments, labels, status changes"| Jira
-    TL -->|"save plan, requirements hash"| DB
-    GH -->|"read-only clone"| TL
-
-    Jira -->|"analyzed issues, requirements"| W
-    DB -->|"stored plan (manager_plans)"| W
-    GH -->|"clone repo + submodules"| W
-    W -->|"repo + plan + prompt"| CLI
-    CLI -->|"code changes"| W
-    W -->|"push branch, create PR"| GH
-    Jira -->|"analyzed issues, requirements"| CW
-    DB -->|"stored plan (manager_plans)"| CW
-    CW -->|"repo + plan + prompt"| CCLI
-    CCLI -->|"code changes"| CW
-    CW -->|"push branch, create PR"| GH
-    DB -->|"credentials, settings, review_comment_attempts"| RW
-    GH -->|"read review comments, clone PR branch"| RW
-    RW -->|"repo + review comments + prompt"| CLI
-    CLI -->|"code fixes"| RW
-    RW -->|"push fixes to PR branch"| GH
-    RW -->|"record attempts (review_comment_attempts)"| DB
-    W -->|"PR link/result comment, status"| Jira
-    W -->|"record PR (pull_requests)"| DB
+    DB -->|"credentials, settings, agent definitions, plans"| AG
+    AG <-->|"intake, plans, labels, comments, status changes"| Jira
+    AG -->|"clone, push branch, create PR, read review comments"| GH
+    AG -->|"run plan / implement / review"| RUN
+    RUN -->|"repo + prompt"| CCLI
+    CCLI -->|"plan / code changes"| RUN
 ```
 
 Notes:
 
-- The AITechLead *is* the `aimanager` project; its folder, DB client key and
-  file names still say `aimanager`.
-- Jira, GitHub, Copilot CLI and MariaDB are external; the other nodes are
+- Jira, GitHub, Claude Code CLI and MariaDB are external; the other nodes are
   services in this repository.
 - Arrows show the direction of the data; the label is its content. Run
   dbmigration before starting any other service.
-- The triage result reaches the worker through MariaDB (`manager_plans`) and
-  Jira labels, not through a direct call.
 
 ## Agent skills
 
@@ -136,9 +87,7 @@ fail there.
 ### Docker Compose
 
 `aiteam/docker-compose.yml` runs `dbmigration`, `aiagent` with `aiagent-runner`,
-`aidashboard`, `adminer` and the MariaDB database. The older agents (aiworker,
-aiclaudeworker, aireviewworker, aimanager, aijiramanager) are no longer part of
-Compose; aiagent replaces them. Export `NUGET_USERNAME` and `NUGET_TOKEN` (see
+`aidashboard`, `adminer` and the MariaDB database. Export `NUGET_USERNAME` and `NUGET_TOKEN` (see
 `aiteam/.env.example`) and start everything with
 `docker compose -f aiteam/docker-compose.yml up -d --build --remove-orphans`.
 Log the runner in to Claude Code with `./login_claude.sh` (Windows: `login_claude.cmd`).

@@ -25,7 +25,8 @@ public sealed class ActiveAiTaskServiceTests
         agent,
         new Dictionary<string, string>
         {
-            ["PickupLabel"] = agent == "aimanager" ? "ai-manager-planned" : "ai-agent-picked",
+            ["PickupLabel"] = "ai-agent-picked",
+            ["PlannedLabel"] = "ai-manager-planned",
             ["AnalyzedLabel"] = "ai-analyzed"
         });
 

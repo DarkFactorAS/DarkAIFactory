@@ -37,12 +37,12 @@
       "group": "test"
     },
     {
-      "label": "build aiworker",
+      "label": "build aiagent",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/aiteam/aiworker/src/CodingAgent/CodingAgent.csproj",
+        "${workspaceFolder}/aiteam/aiagent/src/AiAgent/AiAgent.csproj",
         "--configuration",
         "Debug"
       ],
@@ -53,47 +53,12 @@
       }
     },
     {
-      "label": "test aiworker",
+      "label": "test aiagent",
       "type": "process",
       "command": "dotnet",
       "args": [
         "test",
-        "${workspaceFolder}/aiteam/aiworker/CodingAgent.Tests.csproj"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": "test"
-    },
-    {
-      "label": "build aiclaudeworker",
-      "type": "process",
-      "command": "dotnet",
-      "args": [
-        "build",
-        "${workspaceFolder}/aiteam/aiclaudeworker/src/ClaudeCodingAgent/ClaudeCodingAgent.csproj",
-        "--configuration",
-        "Debug"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": "build"
-    },
-    {
-      "label": "test aiclaudeworker",
-      "type": "process",
-      "command": "dotnet",
-      "args": [
-        "test",
-        "${workspaceFolder}/aiteam/aiclaudeworker/ClaudeCodingAgent.Tests.csproj"
-      ],
-      "problemMatcher": "$msCompile",
-      "group": "test"
-    },
-    {
-      "label": "test aitechlead",
-      "type": "process",
-      "command": "dotnet",
-      "args": [
-        "test",
-        "${workspaceFolder}/aiteam/aimanager/src/ManagerAgentTests/ManagerAgent.Tests.csproj"
+        "${workspaceFolder}/aiteam/aiagent/tests/AiAgent.Tests/AiAgent.Tests.csproj"
       ],
       "problemMatcher": "$msCompile",
       "group": "test"
