@@ -25,11 +25,14 @@ public static class LegacyAgentCleanupPatcher
             "DROP TABLE IF EXISTS `manager_plans`",
             "DELETE FROM `workflow_labels` WHERE `agent_name` IN ('aimanager', 'aiworker', 'aiclaudeworker')",
             "DELETE FROM `settings` WHERE `client` IN ('aimanager', 'aiworker', 'aiclaudeworker', 'aibuildpage')",
-            // The dashboard no longer reads these rows (see IntegrationSettingsRepository in shared).
+            // The dashboard no longer reads these rows (see IntegrationSettingsRepository in shared). Earlier
+            // constraints also allowed GitHub.AgentModel under shared; only the retired agents read it, and the
+            // new constraint below rejects it, so that row is removed here too.
             """
             DELETE FROM `settings`
-            WHERE `client` = 'aidashboard' AND `name` IN
-                ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken', 'GitHub.AgentModel')
+            WHERE (`client` = 'aidashboard' AND `name` IN
+                    ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken', 'GitHub.AgentModel'))
+                OR (`client` = 'shared' AND `name` = 'GitHub.AgentModel')
             """,
             // Existing rows are already valid (the deletes above ran first), so the new constraint can be added.
             """
