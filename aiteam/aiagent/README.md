@@ -21,6 +21,10 @@ Scaffold for the new agent (DFAI-154, stage 1). The existing agents are unchange
   count, by holding a MariaDB named lock `aiagent-agent-<id>`, so two containers never run the same
   agent. The lock is released when the agent is disabled or the container stops, and a waiting container takes the
   agent over on its next cycle. Containers without a free agent idle.
+  While a capability (Planning, Builder, Review, Jira intake) works on a Jira issue or agent task, it holds the
+  per-issue named lock `aiagent-issue-<hash>`; other agents log "Another worker is already processing ..." and skip
+  it. Each named lock uses its own database connection, and releasing it runs `RELEASE_LOCK` on that connection and
+  then closes it, so the next agent can claim the issue on its next cycle.
   `aiagent-runner` stays a single container with `AIAGENT_RUNNER_MAX_JOBS` slots (default 3); set it to at least
   `AIAGENT_INSTANCES` × `AIAGENT_AGENTS_PER_INSTANCE`.
 - `aiagent-runner` – runs `--runner-server` (`/health` on 8080); mounts `aiagent_workspaces` and
