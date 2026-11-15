@@ -26,7 +26,7 @@ public sealed class ActiveAiTaskServiceTests
         handler = new StubHandler(body);
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
-        return new ActiveAiTaskService(settings, new HttpClient(handler));
+        return new ActiveAiTaskService(settings, new HttpClient(handler), () => ["DFAI"]);
     }
 
     private static string Issue(string key, string status, string updated, string label, string description = "\"d\"") =>
@@ -36,15 +36,33 @@ public sealed class ActiveAiTaskServiceTests
     [Fact]
     public void BuildJqlAddsStatusClauseOnlyWhenConfigured()
     {
-        Assert.DoesNotContain("status in", ActiveAiTaskService.BuildJql("DFAI", "Done"));
-        var jql = ActiveAiTaskService.BuildJql("DFAI", "Done", ["In Progress", "Q\"x"]);
+        Assert.DoesNotContain("status in", ActiveAiTaskService.BuildJql(["DFAI"], "Done"));
+        var jql = ActiveAiTaskService.BuildJql(["DFAI"], "Done", ["In Progress", "Q\"x"]);
         Assert.Contains("AND status in (\"In Progress\", \"Q\\\"x\") ORDER BY", jql);
+    }
+
+    [Fact]
+    public void BuildJqlCoversAllProjects()
+    {
+        Assert.StartsWith("project in (\"DFAI\", \"OTH\") ", ActiveAiTaskService.BuildJql(["DFAI", "OTH"], "Done"));
+    }
+
+    [Fact]
+    public async Task NoProjectsReturnsEmptyWithoutCallingJira()
+    {
+        var handler = new StubHandler("{\"issues\":[]}");
+        var settings = new IntegrationSettings();
+        settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
+        using var service = new ActiveAiTaskService(settings, new HttpClient(handler), () => []);
+
+        Assert.Empty(await service.GetActiveAsync(CancellationToken.None));
+        Assert.Null(handler.RequestUri);
     }
 
     [Fact]
     public void BuildJqlHasNoLabelFilterAndFiltersDoneAndOrdersByUpdatedAndKey()
     {
-        var jql = ActiveAiTaskService.BuildJql("DFAI", "Done");
+        var jql = ActiveAiTaskService.BuildJql(["DFAI"], "Done");
 
         Assert.DoesNotContain("labels", jql);
         Assert.Contains("status != \"Done\"", jql);
@@ -143,7 +161,7 @@ public sealed class ActiveAiTaskServiceTests
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
         settings.Dashboard.AiLabels = ["runtime-label"];
-        using var service = new ActiveAiTaskService(settings, new HttpClient(handler));
+        using var service = new ActiveAiTaskService(settings, new HttpClient(handler), () => ["DFAI"]);
 
         await service.GetActiveAsync(CancellationToken.None);
 
@@ -175,7 +193,7 @@ public sealed class ActiveAiTaskServiceTests
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
         settings.Dashboard.ActiveStatuses = ["in progress"];
-        var service = new ActiveAiTaskService(settings, new HttpClient(handler));
+        var service = new ActiveAiTaskService(settings, new HttpClient(handler), () => ["DFAI"]);
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 

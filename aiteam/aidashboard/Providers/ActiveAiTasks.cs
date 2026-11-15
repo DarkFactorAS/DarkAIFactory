@@ -11,7 +11,7 @@ public interface IActiveAiTaskService
     Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken);
 }
 
-// Returns at most 5 issues of the configured project, regardless of labels, filtered only by
+// Returns at most 5 issues of the manager_projects Jira projects, regardless of labels, filtered only by
 // status (Dashboard.ActiveStatuses; empty = every non-Done status), ordered by most recently
 // updated first (ties broken by issue key ascending).
 public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
@@ -20,10 +20,13 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
 
     private readonly IntegrationSettings _settings;
     private readonly HttpClient _httpClient;
+    private readonly Func<IReadOnlyList<string>> _projectKeys;
 
-    public ActiveAiTaskService(IntegrationSettings settings, HttpClient httpClient)
+    public ActiveAiTaskService(
+        IntegrationSettings settings, HttpClient httpClient, Func<IReadOnlyList<string>> projectKeys)
     {
         _settings = settings;
+        _projectKeys = projectKeys;
         _httpClient = httpClient;
         if (Uri.TryCreate(settings.Jira.JiraBaseUrl, UriKind.Absolute, out var baseUrl))
         {
@@ -37,13 +40,14 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-AiDashboard/1.0");
     }
 
-    public static string BuildJql(string projectKey, string doneStatus, IEnumerable<string>? statuses = null)
+    public static string BuildJql(IEnumerable<string> projectKeys, string doneStatus, IEnumerable<string>? statuses = null)
     {
         var statusList = (statuses ?? []).ToArray();
         var statusClause = statusList.Length > 0
             ? $"AND status in ({string.Join(", ", statusList.Select(s => $"\"{JiraQuery.EscapeJql(s)}\""))}) "
             : string.Empty;
-        return $"project = \"{JiraQuery.EscapeJql(projectKey)}\" " +
+        var projects = string.Join(", ", projectKeys.Select(key => $"\"{JiraQuery.EscapeJql(key)}\""));
+        return $"project in ({projects}) " +
                $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done " + statusClause +
                "ORDER BY updated DESC, key ASC";
     }
@@ -52,7 +56,13 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
     {
         var doneStatus = _settings.Jira.JiraDoneStatus;
         var statuses = _settings.Dashboard.ActiveStatuses;
-        var jql = BuildJql(_settings.Jira.JiraProjectKey, doneStatus, statuses);
+        var projectKeys = _projectKeys();
+        if (projectKeys.Count == 0)
+        {
+            return [];
+        }
+
+        var jql = BuildJql(projectKeys, doneStatus, statuses);
 
         using var response = await _httpClient.GetAsync(
             $"/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +

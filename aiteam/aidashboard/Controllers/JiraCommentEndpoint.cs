@@ -82,7 +82,7 @@ public static partial class JiraCommentEndpoint
     }
 
     public static async Task<IResult> HandleAsync(
-        IJiraCommentClient client, IActiveAiTaskService activeTasks, IntegrationSettings settings,
+        IJiraCommentClient client, IActiveAiTaskService activeTasks,
         string key, JiraCommentRequest? request, CancellationToken cancellationToken)
     {
         var error = Validate(key, request);
@@ -93,8 +93,8 @@ public static partial class JiraCommentEndpoint
 
         try
         {
-            if (!key.StartsWith(settings.Jira.JiraProjectKey + "-", StringComparison.OrdinalIgnoreCase) ||
-                !(await activeTasks.GetActiveAsync(cancellationToken))
+            // Active tasks are limited to the manager_projects Jira projects.
+            if (!(await activeTasks.GetActiveAsync(cancellationToken))
                     .Any(task => string.Equals(task.Key, key, StringComparison.OrdinalIgnoreCase)))
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);

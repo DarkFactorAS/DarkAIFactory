@@ -38,7 +38,7 @@ public sealed class JiraCommentEndpointTests
     {
         var client = new FakeClient();
         var result = await JiraCommentEndpoint.HandleAsync(
-            client, new ActiveTasks(), new IntegrationSettings(),
+            client, new ActiveTasks(),
             "DFAI-1", new JiraCommentRequest(" more "), CancellationToken.None);
 
         Assert.Equal(201, Status(result));
@@ -54,7 +54,7 @@ public sealed class JiraCommentEndpointTests
     {
         var client = new FakeClient();
         var result = await JiraCommentEndpoint.HandleAsync(
-            client, new ActiveTasks(), new IntegrationSettings(),
+            client, new ActiveTasks(),
             key, new JiraCommentRequest(text), CancellationToken.None);
 
         Assert.Equal(400, Status(result));
@@ -65,7 +65,7 @@ public sealed class JiraCommentEndpointTests
     public async Task JiraFailureReturns502()
     {
         var result = await JiraCommentEndpoint.HandleAsync(
-            new FakeClient(fail: true), new ActiveTasks(), new IntegrationSettings(),
+            new FakeClient(fail: true), new ActiveTasks(),
             "DFAI-1", new JiraCommentRequest("x"), CancellationToken.None);
 
         Assert.Equal(502, Status(result));
@@ -75,7 +75,7 @@ public sealed class JiraCommentEndpointTests
     public async Task JiraTimeoutReturns502()
     {
         var result = await JiraCommentEndpoint.HandleAsync(
-            new FakeClient(error: new TaskCanceledException()), new ActiveTasks(), new IntegrationSettings(),
+            new FakeClient(error: new TaskCanceledException()), new ActiveTasks(),
             "DFAI-1", new JiraCommentRequest("x"), CancellationToken.None);
         Assert.Equal(502, Status(result));
     }
@@ -85,7 +85,7 @@ public sealed class JiraCommentEndpointTests
     {
         var client = new FakeClient();
         var result = await JiraCommentEndpoint.HandleAsync(
-            client, new ActiveTasks(error: new OperationCanceledException()), new IntegrationSettings(),
+            client, new ActiveTasks(error: new OperationCanceledException()),
             "DFAI-1", new JiraCommentRequest("x"), CancellationToken.None);
         Assert.Equal(502, Status(result));
         Assert.Empty(client.Calls);
@@ -98,31 +98,27 @@ public sealed class JiraCommentEndpointTests
         cancellation.Cancel();
         await Assert.ThrowsAsync<OperationCanceledException>(() => JiraCommentEndpoint.HandleAsync(
             new FakeClient(error: new OperationCanceledException(cancellation.Token)),
-            new ActiveTasks(), new IntegrationSettings(),
+            new ActiveTasks(),
             "DFAI-1", new JiraCommentRequest("x"), cancellation.Token));
     }
 
-    [Theory]
-    [InlineData("DFAI-2", "DFAI")]
-    [InlineData("OTHER-1", "DFAI")]
-    public async Task RejectsIssuesOutsideDisplayedTasksOrConfiguredProject(string key, string project)
+    [Fact]
+    public async Task RejectsIssuesOutsideDisplayedTasks()
     {
         var client = new FakeClient();
         var result = await JiraCommentEndpoint.HandleAsync(
-            client, new ActiveTasks(key == "DFAI-2" ? "DFAI-1" : key),
-            new IntegrationSettings { Jira = new JiraSettings { JiraProjectKey = project } },
-            key, new JiraCommentRequest("x"), CancellationToken.None);
+            client, new ActiveTasks("DFAI-1"),
+            "DFAI-2", new JiraCommentRequest("x"), CancellationToken.None);
         Assert.Equal(403, Status(result));
         Assert.Empty(client.Calls);
     }
 
     [Fact]
-    public async Task AllowsDisplayedTaskInNonDefaultProject()
+    public async Task AllowsDisplayedTaskInAnyActiveProject()
     {
         var client = new FakeClient();
         var result = await JiraCommentEndpoint.HandleAsync(
             client, new ActiveTasks("OTHER-1"),
-            new IntegrationSettings { Jira = new JiraSettings { JiraProjectKey = "OTHER" } },
             "OTHER-1", new JiraCommentRequest("x"), CancellationToken.None);
         Assert.Equal(201, Status(result));
         Assert.Single(client.Calls);
