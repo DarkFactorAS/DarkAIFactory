@@ -649,6 +649,27 @@ public sealed class ReviewCapabilityTests
         Assert.Contains(gitHub.Requests, request => request.Contains("\"number\":7") || request.Contains("number: 7"));
         Assert.DoesNotContain(gitHub.Requests, request => request.Contains("\"number\":8") || request.Contains("number: 8"));
     }
+
+    [Fact]
+    public async Task ReviewReleasesTheIssueClaimWhenDone()
+    {
+        var repo = new PrRepo();
+        repo.All.Clear();
+        repo.All.Add(new StoredAgentPullRequest(
+            5, new AgentPullRequestRecord(3, "DFAI-1", "https://github.com/o/r", 7, "https://github.com/o/r/pull/7")));
+        var store = new FakeStore { Attempts = { [10] = 3, [11] = 3, [12] = 3 } };
+        var capability = new ReviewCapability(
+            new ReviewOptions("t", "reviewer", 3), repo, store, new FakeGit([]),
+            new RunnerClient(new Uri("http://runner.invalid"), new GraphQlStub()), new GraphQlStub());
+        var claims = new TrackingClaimLock();
+        var context = new AgentContext(
+            new AgentDefinition(2, "Roger Review", "r", "b", "Claude", null, true, false), ["DFAI"], claims);
+
+        await capability.RunCycleAsync(context, CancellationToken.None);
+
+        Assert.Equal(["DFAI-1"], claims.Acquired);
+        claims.AssertAllReleased();
+    }
 }
 
 public class AutoMergePolicyTests
