@@ -130,7 +130,9 @@ Optional planning settings (shared, default used when the row is absent):
 aiagent uses `manager_projects` for project/repository selection, reloading
 mappings each polling cycle. The dashboard also uses the `manager_projects` keys for its
 active tasks and comment checks. The former `Jira.JiraProjectKey` setting is no longer read
-(existing rows are ignored); `GitHub.TargetRepositoryUrl` is only a fallback when that table is empty.
+(existing rows are ignored and can be removed with
+`DELETE FROM settings WHERE client = 'shared' AND name = 'Jira.JiraProjectKey';`);
+`GitHub.TargetRepositoryUrl` is only a fallback when `manager_projects` is empty.
 No fallback occurs for invalid mappings or database read failures. The agent's
 repository token must have Contents and Pull requests read/write permission
 for every mapped repository.
