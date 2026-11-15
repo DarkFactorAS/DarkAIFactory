@@ -29,10 +29,16 @@ internal static class MySqlNamedLock
 
             acquire = connectionFactory.CreateCommand("SELECT GET_LOCK(@lock_name, 0)", connection);
             acquire.AddParameter("@lock_name", lockName);
-            if (ToInt(acquire.ExecuteScalar()) == 1)
+            var acquired = ToInt(acquire.ExecuteScalar());
+            if (acquired == 1)
             {
                 // The acquire command stays alive until release, in case disposing it would close the connection.
                 return new Handle(connectionFactory, connection, acquire, lockName);
+            }
+
+            if (acquired is null)
+            {
+                throw new InvalidOperationException($"GET_LOCK for {lockName} returned NULL.");
             }
         }
         catch
