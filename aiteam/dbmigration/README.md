@@ -64,12 +64,22 @@ metadata.
 (`manager_plans`, `pull_requests`, `review_comment_attempts`, and their labels and settings
 rows). `manager_projects`, `agent_tasks`, all `agent_*` tables and `logtable` are kept.
 Existing patches are never edited because fresh databases replay them in order; the cleanup
-is a forward-only system whose patches are all idempotent. Rollout:
+is a forward-only system whose patches are all idempotent.
+
+> **Production deployment is blocked** until `.github/workflows/aiteam-deploy.yml`
+> no longer deploys `aimanager`, `aiworker`, `aiclaudeworker`, `aireviewworker` and
+> `aijiramanager`. Their project directories are removed, so the current workflow
+> fails before it reaches `aiagent`. Update the workflow to deploy only the remaining
+> services (and make `aiagent` stop depending on `aireviewworker`) as part of this
+> rollout, before step 3.
+
+Rollout:
 
 1. Stop any old agent that is still running.
 2. Back up the database.
 3. Deploy the aidashboard and aiagent versions that no longer read the legacy labels
-   and clients.
+   and clients, using a deployment workflow from which the retired agents have been
+   removed (see the note above).
 4. Run dbmigration.
 Before applying patches, dbmigration upgrades the library's
 `version` table primary key from `patchId` alone to (`system`, `patchId`), retaining
