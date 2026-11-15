@@ -13,7 +13,6 @@ public sealed class JiraSettings
     public string JiraBaseUrl { get; set; } = string.Empty;
     public string JiraEmail { get; set; } = string.Empty;
     public string JiraApiToken { get; set; } = string.Empty;
-    public string JiraProjectKey { get; set; } = "DFAI";
     public string JiraStatusName { get; set; } = "Selected for Development";
     public string JiraJql { get; set; } = string.Empty;
     public string JiraInProgressStatus { get; set; } = "In Progress";

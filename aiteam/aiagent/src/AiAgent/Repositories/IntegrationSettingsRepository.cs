@@ -46,7 +46,6 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
                 JiraBaseUrl = Read("shared", "Jira.JiraBaseUrl"),
                 JiraEmail = Read("shared", "Jira.JiraEmail"),
                 JiraApiToken = Read("shared", "Jira.JiraApiToken"),
-                JiraProjectKey = Read("shared", "Jira.JiraProjectKey"),
                 JiraStatusName = Read("shared", "Jira.JiraStatusName"),
                 JiraJql = Read("shared", "Jira.JiraJql"),
                 JiraInProgressStatus = Read("shared", "Jira.JiraInProgressStatus"),

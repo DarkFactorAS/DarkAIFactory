@@ -39,7 +39,8 @@ builder.Services.AddScoped<IActiveAiTaskService>(services =>
     var httpClient = services.GetRequiredService<IHttpClientFactory>().CreateClient();
     return new ActiveAiTaskService(
         services.GetRequiredService<IntegrationSettings>(),
-        httpClient);
+        httpClient,
+        services.GetRequiredService<IAgentDefinitionRepository>().ListProjectKeys);
 });
 
 builder.Services.AddScoped<IJiraCommentClient>(services => new JiraCommentClient(
@@ -74,8 +75,12 @@ DFLogger.LogOutput(
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
-app.MapGet("/api/tasks/config", (IntegrationSettings settings) =>
-    Results.Ok(new { projectKey = settings.Jira.JiraProjectKey }));
+// Valid projects come from the manager_projects table; projectKey is the first one (default for new tasks).
+app.MapGet("/api/tasks/config", (IAgentDefinitionRepository repository) =>
+{
+    var keys = repository.ListProjectKeys();
+    return Results.Ok(new { projectKey = keys.FirstOrDefault(), projectKeys = keys });
+});
 
 app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, CancellationToken cancellationToken) =>
 {
