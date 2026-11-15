@@ -264,6 +264,43 @@ public sealed class JiraCapabilityTests
     }
 
     [Fact]
+    public async Task IntakeReleasesTheTaskClaimWhenDone()
+    {
+        var tasks = new FakeTasks();
+        tasks.Add("DFAI");
+        var claims = new TrackingClaimLock();
+
+        await Capability(new FakeJira(), tasks, new FakePullRequests(), Config()).RunCycleAsync(
+            new AgentContext(Context("DFAI").Agent, ["DFAI"], claims), default);
+
+        claims.AssertAllReleased();
+    }
+
+    [Fact]
+    public async Task PickupReleasesTheClaimWhenSkippedAndWhenThePickupIsDisposed()
+    {
+        var jira = new FakeJira();
+        var issue = Issue("DFAI-1", "Selected for Development");
+        var blocked = Issue("DFAI-2", "Selected for Development", new JiraBlocker("DFAI-9", "In Progress"));
+        var picked = Issue("DFAI-3", "Selected for Development") with { Labels = ["aiagent-picked"] };
+        jira.Issues.AddRange([issue, blocked, picked]);
+        var workflow = new JiraWorkflow(jira, Config());
+        var claims = new TrackingClaimLock();
+        var context = new AgentContext(Context("DFAI").Agent, ["DFAI"], claims);
+
+        Assert.Null(await workflow.TryPickupAsync(context, blocked, default));
+        Assert.Null(await workflow.TryPickupAsync(context, picked, default));
+        var pickup = await workflow.TryPickupAsync(context, issue, default);
+        Assert.NotNull(pickup);
+        Assert.Equal(["DFAI-1"], claims.Held);
+
+        pickup.Dispose();
+
+        Assert.Equal(["DFAI-2", "DFAI-3", "DFAI-1"], claims.Acquired);
+        claims.AssertAllReleased();
+    }
+
+    [Fact]
     public async Task PickupSkipsBlockedAndAlreadyPickedIssues()
     {
         var jira = new FakeJira();

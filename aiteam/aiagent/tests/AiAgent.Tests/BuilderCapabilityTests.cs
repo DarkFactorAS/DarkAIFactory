@@ -144,6 +144,33 @@ public sealed class BuilderCapabilityTests : IDisposable
     }
 
     [Fact]
+    public async Task BuilderReleasesTheIssueClaimWhenDone()
+    {
+        var issue = Issue();
+        var claims = new TrackingClaimLock();
+        var (capability, _) = Create(new FakeJira(issue), CurrentPlan(issue), new FakeRunner());
+
+        await capability.RunCycleAsync(new AgentContext(Context().Agent, ["DFAI"], claims), default);
+
+        claims.AssertAllReleased();
+    }
+
+    [Fact]
+    public async Task BuilderReleasesTheIssueClaimWhenImplementationFailsOrIsSkipped()
+    {
+        var issue = Issue();
+        var failed = new TrackingClaimLock();
+        var (failing, _) = Create(new FakeJira(issue), CurrentPlan(issue), new FakeRunner(exitCode: 1));
+        await failing.RunCycleAsync(new AgentContext(Context().Agent, ["DFAI"], failed), default);
+        failed.AssertAllReleased();
+
+        var skipped = new TrackingClaimLock();
+        var (noPlan, _) = Create(new FakeJira(issue), null, new FakeRunner());
+        await noPlan.RunCycleAsync(new AgentContext(Context().Agent, ["DFAI"], skipped), default);
+        skipped.AssertAllReleased();
+    }
+
+    [Fact]
     public async Task StaleOrUnpostedPlanBlocksImplementation()
     {
         var issue = Issue();
