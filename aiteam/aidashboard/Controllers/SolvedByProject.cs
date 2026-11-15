@@ -22,9 +22,9 @@ public sealed class JiraSolvedClient : IJiraSolvedClient, IDisposable
     public const string SolvedJql = "statusCategory = Done";
     private static readonly (string Agent, string CodeKey)[] AiWorkLabelKeys =
     [
-        ("aimanager", "PickupLabel"),
-        ("aimanager", "AnalyzedLabel"),
-        ("aiworker", "PickupLabel")
+        ("aiagent", "PickupLabel"),
+        ("aiagent", "AnalyzedLabel"),
+        ("aiagent", "PlannedLabel")
     ];
 
     private readonly Func<string, WorkflowLabels> _loadLabels;

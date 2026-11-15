@@ -6,7 +6,7 @@ using DFCommonLib.Logger;
 namespace AiAgent.Capabilities.Planning;
 
 /// <summary>
-/// Copy of the aimanager ManagerPlanner: triage (six decisions), split and create_tasks handling, plan storage with the
+/// Triage (six decisions), split and create_tasks handling, plan storage with the
 /// requirements fingerprint, labels and Jira comments. Plans are stored in agent_plans through
 /// <see cref="AgentPlanStore"/>.
 /// </summary>

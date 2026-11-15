@@ -15,7 +15,7 @@ internal static partial class JiraWorkflowRules
     /// <summary>
     /// Name of the integration branch of a parent task. Sub-tasks branch off it and their pull requests
     /// target it, so the parent's changes are assembled on one branch and reviewed as a whole.
-    /// Uses the "aiagent/parent/" prefix, not the legacy "ai-agent/" one that aimanager adopts into legacy tracking.
+    /// Uses the "aiagent/parent/" prefix, not the legacy "ai-agent/" prefix.
     /// </summary>
     public static string ParentBranchName(string parentKey) =>
         $"aiagent/parent/{BranchUnsafe().Replace(parentKey.Trim(), "-")}";

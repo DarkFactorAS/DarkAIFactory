@@ -64,7 +64,16 @@ public sealed class AiDatabasePatcherTests
                 "patch:AgentTables:11", "successful",
                 "patch:AgentTables:12", "successful",
                 "patch:AgentTables:13", "successful",
-                "patch:AgentTables:14", "successful", "patch:AgentTables:15", "successful"]);
+                "patch:AgentTables:14", "successful", "patch:AgentTables:15", "successful",
+                "init:LegacyAgentCleanup",
+                "patch:LegacyAgentCleanup:1", "successful",
+                "patch:LegacyAgentCleanup:2", "successful",
+                "patch:LegacyAgentCleanup:3", "successful",
+                "patch:LegacyAgentCleanup:4", "successful",
+                "patch:LegacyAgentCleanup:5", "successful",
+                "patch:LegacyAgentCleanup:6", "successful",
+                "patch:LegacyAgentCleanup:7", "successful",
+                "patch:LegacyAgentCleanup:8", "successful"]);
         }
 
         Assert.Equal(expectedCalls, dbPatcher.Calls);

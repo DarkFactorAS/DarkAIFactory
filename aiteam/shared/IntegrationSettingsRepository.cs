@@ -62,10 +62,9 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             {
                 AgentGitHubToken = Read("shared", "GitHub.AgentGitHubToken"),
                 TargetRepositoryUrl = Read("shared", "GitHub.TargetRepositoryUrl"),
-                GitHubRepositoryToken = Read(client, "GitHub.GitHubRepositoryToken"),
-                AgentModel = values.TryGetValue((client, "GitHub.AgentModel"), out var agentModel)
-                    ? agentModel
-                    : string.Empty
+                // The dashboard performs no GitHub operations, so these per-client rows are optional.
+                GitHubRepositoryToken = ReadClientOptional("GitHub.GitHubRepositoryToken"),
+                AgentModel = ReadClientOptional("GitHub.AgentModel")
             },
             Dashboard = new DashboardSettings
             {
@@ -130,7 +129,7 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
 
     private static void ValidateClient(string client)
     {
-        if (client is not ("aimanager" or "aiworker" or "aiclaudeworker" or "aidashboard"))
+        if (client is not ("aiagent" or "aidashboard"))
         {
             throw new ArgumentException("Unknown settings client.", nameof(client));
         }

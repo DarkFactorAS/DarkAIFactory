@@ -37,7 +37,7 @@ public sealed class GitHubSettings
 
 public sealed class ClaudeSettings
 {
-    // Anthropic API key (sk-ant-api...) or Claude Code OAuth token (sk-ant-oat...); aiclaudeworker only.
+    // Anthropic API key (sk-ant-api...) or Claude Code OAuth token (sk-ant-oat...); read for the aiagent client only.
     public string AnthropicApiKey { get; set; } = string.Empty;
     public string AgentModel { get; set; } = string.Empty;
 }

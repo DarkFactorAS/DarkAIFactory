@@ -80,6 +80,7 @@ public class AiDatabasePatcher : StartupDatabasePatcher
             && WorkflowLabelPatcher.Run(_dbPatcher)
             && AgentTaskPatcher.Run(_dbPatcher)
             && ReviewCommentAttemptsPatcher.Run(_dbPatcher)
-            && AgentTablesPatcher.Run(_dbPatcher);
+            && AgentTablesPatcher.Run(_dbPatcher)
+            && LegacyAgentCleanupPatcher.Run(_dbPatcher);
     }
 }

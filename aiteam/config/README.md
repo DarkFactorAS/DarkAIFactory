@@ -56,35 +56,25 @@ column. Names use the former JSON section/property notation, for example
 
 - `shared`: every Jira/GitHub setting except the exceptions below. All clients read
   these same rows, including `GitHub.AgentGitHubToken`.
-- `aimanager`, `aiworker`, `aidashboard`: exactly `GitHub.GitHubRepositoryToken`
-  (and `GitHub.AgentModel` for `aiworker`).
-- `aiclaudeworker`: exactly `GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`
-  (optional; empty uses the Claude Code CLI login) and `Claude.AgentModel`
-  (seeded as `claude-sonnet-5-5`). `Claude.*` names are never allowed on `shared`.
+- `aiagent`: exactly `GitHub.GitHubRepositoryToken` and `Claude.AnthropicApiKey`
+  (optional; empty uses the Claude Code CLI login). `Claude.*` names are never
+  allowed on `shared`.
+- `aidashboard`: exactly `Dashboard.AiLabels` and `Dashboard.ActiveStatuses`.
   Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
 
 Jira labels are not settings. They live in the `workflow_labels` table
 (`agent_name`, `code_key`, `label_name`, `description`), created by the
-`WorkflowLabels` dbmigration patches with the former hardcoded defaults (code key =
-the name of the former code constant), and the old label rows are deleted from
-`settings`. Only `aimanager`, `aiworker` and `aiclaudeworker` have rows; agents read them once at startup and
+`WorkflowLabels` dbmigration patches (code key = the name of the former code
+constant). Only `aiagent` has rows (the rows of the removed legacy agents were deleted by the
+`LegacyAgentCleanup` migration); agents read them once at startup and
 fail if a row is missing. Edit `label_name` in the table to rename a label.
 
 | Agent | Code key | Default label |
 | --- | --- | --- |
-| `aimanager` | `PickupLabel` | `ai-manager-planned` |
-| `aimanager` | `FailureLabel` | `ai-agent-failed` |
-| `aimanager` | `AnalyzedLabel` | `ai-analyzed` |
-| `aimanager` | `ClarificationLabel` | `ai-needs-clarification` |
-| `aimanager` | `ApprovalLabel` | `ai-awaiting-approval` |
-| `aimanager` | `ApprovedLabel` | `ai-approved` |
-| `aiworker` | `PickupLabel` | `ai-agent-picked` |
-| `aiworker` | `FailureLabel` | `ai-agent-failed` |
-| `aiworker` | `AnalyzedLabel` | `ai-analyzed` |
-| `aiclaudeworker` | `PickupLabel` | `ai-agent-picked` |
-| `aiclaudeworker` | `FailureLabel` | `ai-agent-failed` |
-| `aiclaudeworker` | `AnalyzedLabel` | `ai-analyzed` |
+| `aiagent` | `PickupLabel` | `aiagent-picked` |
+| `aiagent` | `AnalyzedLabel` | `aiagent-analyzed` |
+| `aiagent` | `PlannedLabel` | `aiagent-planned` |
 
 The standalone `dbmigration` executable owns all table creation. It retains
 `StartupDatabasePatcher` IDs 1-3 for logging, manager projects and plans, adds
@@ -93,7 +83,7 @@ ID 4 for plan freshness metadata, and retains
 history remains valid; dbmigration upgrades the `version` primary key to
 (`system`, `patchId`) so IDs from different systems do not collide.
 Defaults are inserted once; subsequent migrations do not
-overwrite configured values. Credentials and the worker repository URL are
+overwrite configured values. Credentials and the target repository URL are
 initially empty and must be populated by an administrator.
 
 ### Migrating existing configuration
@@ -124,40 +114,27 @@ Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraProjectKey` (`DFAI`), `Jira.JiraStatusName` (`Selected for Development`),
 `Jira.JiraJql` (empty for generated JQL), `Jira.JiraInProgressStatus` (`In Progress`),
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (Copilot
-Requests) and `GitHub.TargetRepositoryUrl`. The `aiworker` client also has an
-optional `GitHub.AgentModel` (seeded as `gpt-5-mini`) passed to the Copilot CLI
-as `--model`; blank uses the CLI default. The `aiclaudeworker` client uses
-`Claude.AgentModel` (seeded as `claude-sonnet-5-5`) for the Claude Code CLI instead,
-and runs `claude -p` with the CLI's own login (`claude auth login`, stored in a Docker
-volume); `Claude.AnthropicApiKey` is an optional override. It does not use `GitHub.AgentGitHubToken`.
-The review worker (`aireviewworker`) also runs Claude Code, using the same shared CLI login;
-its model is the optional `ClaudeModel` key in `appsettings.<Environment>.json`.
-The new agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
+Requests) and `GitHub.TargetRepositoryUrl`. `GitHub.TargetRepositoryUrl`. The Claude model is `Claude.AgentModel` (seeded as `claude-sonnet-5-5`);
+the Claude Code CLI runs `claude -p` with its own login (`claude auth login`, stored in a Docker
+volume); `Claude.AnthropicApiKey` is an optional override.
+The agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
 `appsettings.<Environment>.json` (`PollIntervalSeconds`, `AgentsPerInstance` 1-3 agents per container, default 1,
 overridden by the env var `AIAGENT_AGENTS_PER_INSTANCE`); its runner uses a separate
 Claude Code login in the `aiteam_aiagent_claude_config` volume (`./login_claude.sh`, on Windows `login_claude.cmd`).
 
-Optional AITechLead triage settings (shared, default used when the row is absent):
+Optional planning settings (shared, default used when the row is absent):
 `Jira.JiraAnalysisOnlyStatus` (`Code Review`), `Jira.JiraDoneStatus` (`Done`),
-`Jira.JiraSubtaskIssueType` (`Sub-task`), `Jira.JiraTaskIssueType` (`Task`, for
-tasks created by a `create_tasks` triage) and `Jira.JiraAutoApproveSmallChanges`
-(`true`). See the [aimanager README](../aimanager/README.md#triage-behaviour).
+`Jira.JiraSubtaskIssueType` (`Sub-task`), `Jira.JiraTaskIssueType` (`Task`) and
+`Jira.JiraAutoApproveSmallChanges` (`true`).
 
-Both agents use `manager_projects` for project/repository selection, reloading
+aiagent uses `manager_projects` for project/repository selection, reloading
 mappings each polling cycle. Shared `Jira.JiraProjectKey` and
-`GitHub.TargetRepositoryUrl` are only worker fallbacks when that table is empty.
-No fallback occurs for invalid mappings or database read failures. The worker's
+`GitHub.TargetRepositoryUrl` are only fallbacks when that table is empty.
+No fallback occurs for invalid mappings or database read failures. The agent's
 repository token must have Contents and Pull requests read/write permission
 for every mapped repository.
 
-Client pickup defaults are `ai-manager-planned`, `ai-agent-picked` and
-`ai-build-picked`, respectively. All analyzed defaults are `ai-analyzed`.
-The manager needs a read-only repository token (Contents and Pull requests read, to
-check whether pull requests are merged); the worker needs Contents and
-Pull requests read/write. Manager and worker analysis labels must match for
-handoff. The manager also reads the worker pickup label to avoid replanning
-claimed issues. After a failed planning attempt, clear the shared failure label
-only after resolving the error to resume automatic planning.
+The agent's repository token needs Contents and Pull requests read/write permission.
 aidashboard loads the same settings server-side but
 currently performs no Jira/GitHub operations, so its repository token may remain
 empty. Its page never exposes settings or credentials.
@@ -180,7 +157,7 @@ filename before loading app configuration, including when the file is missing.
 After loading configuration, all four apps print the database name, host and
 port before resolving database services and connecting.
 Database credentials are not included in this message.
-VS Code's AI Worker launch selects Development. Configure the JSON file first.
+ Configure the JSON file first.
 
 Projects copy configured JSON files into `Config/` in build and publish output.
 Startup uses the executable directory as its working directory so configuration

@@ -50,7 +50,8 @@ public class SolvedByProjectTests
         agent,
         new Dictionary<string, string>
         {
-            ["PickupLabel"] = agent == "aimanager" ? "custom-manager-planned" : "custom-worker-picked",
+            ["PickupLabel"] = "custom-worker-picked",
+            ["PlannedLabel"] = "custom-manager-planned",
             ["AnalyzedLabel"] = "custom-analyzed"
         });
 

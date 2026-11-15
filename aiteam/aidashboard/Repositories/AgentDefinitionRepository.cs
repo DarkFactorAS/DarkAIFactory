@@ -151,7 +151,7 @@ public sealed class AgentDefinitionRepository(IDbConnectionFactory connectionFac
 
     // Projects builders actually pick up: enabled, non-deleted agents with the Builder capability enabled,
     // limited to keys present in manager_projects. Falls back to all manager_projects when no agent has
-    // been explicitly configured as a builder (legacy workers read manager_projects directly). Definition
+    // been explicitly configured as a builder. Definition
     // counts are not used because migrations seed a disabled 'aiAgent' with every capability off; an agent
     // whose Builder capability is on but which is disabled or has no projects still yields an empty list.
     public IReadOnlyList<string> ListBuilderProjectKeys()
