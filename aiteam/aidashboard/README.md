@@ -9,9 +9,10 @@ counting Jira issues in the Done status category per project (limited to the pro
 credentials are never logged).
 
 `GET /api/tasks/active-ai` returns at most 5 Jira issues (`key`, `summary`,
-`status`, `description`, `labels`) that carry an AI workflow label (the `PickupLabel`, `AnalyzedLabel` and
-`PlannedLabel` of aiagent from `workflow_labels`) and are not in the Done status. Ordering is most recently
-updated first, ties broken by key (default; confirm with the requester).
+`status`, `description`, `labels`) in the configured project. Labels are not used as a filter;
+the only filter is the configured active statuses (`Dashboard.ActiveStatuses`, set through the
+cogwheel; an empty list means every non-Done status). Ordering is most recently
+updated first, ties broken by key.
 The dashboard's "Top 5 AI tasks" panel polls this endpoint every 30 seconds
 (background refreshes keep the current list; a failed poll keeps the last list
 and shows the error).
@@ -91,7 +92,7 @@ AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/setting
 token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
 list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
-panel uses it and redraws the graph; the labels also drive the "Top 5 AI tasks" panel.
+panel uses it and redraws the graph.
 
 Active statuses: `GET /api/settings/active-statuses` returns `{ statuses }`; `PUT /api/settings/active-statuses`
 (`statuses`, Bearer write token required, 401 otherwise) validates (max 20 statuses, 1-255 chars, no commas; spaces

@@ -11,29 +11,19 @@ public interface IActiveAiTaskService
     Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken);
 }
 
-// Returns at most 5 issues carrying an AI workflow label that are not Done,
-// ordered by most recently updated first (ties broken by issue key ascending).
+// Returns at most 5 issues of the configured project, regardless of labels, filtered only by
+// status (Dashboard.ActiveStatuses; empty = every non-Done status), ordered by most recently
+// updated first (ties broken by issue key ascending).
 public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
 {
     public const int MaxTasks = 5;
-    private static readonly (string Agent, string CodeKey)[] AiLabelKeys =
-    [
-        ("aiagent", "PickupLabel"),
-        ("aiagent", "AnalyzedLabel"),
-        ("aiagent", "PlannedLabel")
-    ];
 
     private readonly IntegrationSettings _settings;
-    private readonly Func<string, WorkflowLabels> _loadLabels;
     private readonly HttpClient _httpClient;
 
-    public ActiveAiTaskService(
-        IntegrationSettings settings,
-        Func<string, WorkflowLabels> loadLabels,
-        HttpClient httpClient)
+    public ActiveAiTaskService(IntegrationSettings settings, HttpClient httpClient)
     {
         _settings = settings;
-        _loadLabels = loadLabels;
         _httpClient = httpClient;
         if (Uri.TryCreate(settings.Jira.JiraBaseUrl, UriKind.Absolute, out var baseUrl))
         {
@@ -47,31 +37,22 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-AiDashboard/1.0");
     }
 
-    public static string BuildJql(IEnumerable<string> aiLabels, string projectKey, string doneStatus,
-        IEnumerable<string>? statuses = null)
+    public static string BuildJql(string projectKey, string doneStatus, IEnumerable<string>? statuses = null)
     {
         var statusList = (statuses ?? []).ToArray();
         var statusClause = statusList.Length > 0
             ? $"AND status in ({string.Join(", ", statusList.Select(s => $"\"{JiraQuery.EscapeJql(s)}\""))}) "
             : string.Empty;
-        var labels = string.Join(", ", aiLabels.Select(label => $"\"{JiraQuery.EscapeJql(label)}\""));
-        return $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND labels in ({labels}) " +
+        return $"project = \"{JiraQuery.EscapeJql(projectKey)}\" " +
                $"AND status != \"{JiraQuery.EscapeJql(doneStatus)}\" AND statusCategory != Done " + statusClause +
                "ORDER BY updated DESC, key ASC";
     }
 
     public async Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken)
     {
-        var configuredAiLabels = _settings.Dashboard.AiLabels;
-        var aiLabels = configuredAiLabels.Count > 0
-            ? configuredAiLabels.ToArray()
-            : AiLabelKeys
-                .Select(item => _loadLabels(item.Agent).Get(item.CodeKey))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
         var doneStatus = _settings.Jira.JiraDoneStatus;
         var statuses = _settings.Dashboard.ActiveStatuses;
-        var jql = BuildJql(aiLabels, _settings.Jira.JiraProjectKey, doneStatus, statuses);
+        var jql = BuildJql(_settings.Jira.JiraProjectKey, doneStatus, statuses);
 
         using var response = await _httpClient.GetAsync(
             $"/rest/api/3/search/jql?jql={Uri.EscapeDataString(jql)}" +
@@ -93,7 +74,6 @@ public sealed class ActiveAiTaskService : IActiveAiTaskService, IDisposable
                 ? labelsElement.EnumerateArray().Select(label => label.GetString() ?? string.Empty).ToArray()
                 : [];
             if (string.Equals(status, doneStatus, StringComparison.OrdinalIgnoreCase) ||
-                !labels.Intersect(aiLabels, StringComparer.Ordinal).Any() ||
                 (statuses.Count > 0 && !statuses.Contains(status, StringComparer.OrdinalIgnoreCase)))
             {
                 continue;

@@ -36,11 +36,9 @@ builder.Services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IActiveAiTaskService>(services =>
 {
-    var repository = services.GetRequiredService<WorkflowLabelRepository>();
     var httpClient = services.GetRequiredService<IHttpClientFactory>().CreateClient();
     return new ActiveAiTaskService(
         services.GetRequiredService<IntegrationSettings>(),
-        repository.Load,
         httpClient);
 });
 

@@ -231,6 +231,40 @@ public sealed class PlanningTests
     }
 
     [Fact]
+    public async Task PlanningReleasesTheIssueClaimWhenDone()
+    {
+        var f = new Fixture("""{"decision":"small","plan":"Change file X."}""", true, Issue(), Issue("DFAI-2"));
+        var claims = new TrackingClaimLock();
+
+        await f.Capability.RunCycleAsync(new AgentContext(f.Context.Agent, ["DFAI"], claims), default);
+
+        Assert.Contains("DFAI-1", claims.Acquired);
+        Assert.Contains("DFAI-2", claims.Acquired);
+        claims.AssertAllReleased();
+    }
+
+    [Fact]
+    public async Task PlanningReleasesTheIssueClaimWhenPlanningFails()
+    {
+        var f = new Fixture("unused", true, Issue());
+        var claims = new TrackingClaimLock();
+        var failing = new PlanningCapability(
+            () => Settings(), Labels, () => [new ManagerProject(5, "DFAI", Repo)], f.Plans, _ => f.Jira,
+            new FakePlanningRunner(_ => throw new InvalidOperationException("runner failed")));
+
+        try
+        {
+            await failing.RunCycleAsync(new AgentContext(f.Context.Agent, ["DFAI"], claims), default);
+        }
+        catch (InvalidOperationException)
+        {
+            // Whether the capability swallows or rethrows, the claim must be released.
+        }
+
+        claims.AssertAllReleased();
+    }
+
+    [Fact]
     public async Task PlainTextPlanIsStoredAsIs()
     {
         var f = new Fixture("Just do it.", true, Issue());

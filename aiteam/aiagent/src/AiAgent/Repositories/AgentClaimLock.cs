@@ -5,29 +5,14 @@ using DFCommonLib.DataAccess;
 
 namespace AiAgent.Repositories;
 
-/// <summary>MySQL named lock (GET_LOCK) so two agent processes never work on the same issue.</summary>
+/// <summary>
+/// MySQL named lock (GET_LOCK) so two agent processes never work on the same issue. Disposing the handle releases the
+/// lock (RELEASE_LOCK on its own connection), so the next agent can claim the issue as soon as a capability is done.
+/// </summary>
 public sealed class AgentClaimLock(IDbConnectionFactory connectionFactory) : IAgentClaimLock
 {
-    public IDisposable? TryAcquire(long agentId, string issueKey)
-    {
-        var command = connectionFactory.CreateCommand("SELECT GET_LOCK(@lock_name, 0)");
-        command.AddParameter("@lock_name", LockName(issueKey));
-        try
-        {
-            if (Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 1)
-            {
-                return command;
-            }
-
-            command.Dispose();
-            return null;
-        }
-        catch
-        {
-            command.Dispose();
-            throw;
-        }
-    }
+    public IDisposable? TryAcquire(long agentId, string issueKey) =>
+        MySqlNamedLock.TryAcquire(connectionFactory, LockName(issueKey));
 
     // Per issue (not per agent): a claim must exclude every agent.
     internal static string LockName(string issueKey) =>
