@@ -21,20 +21,12 @@ public sealed class ActiveAiTaskServiceTests
         }
     }
 
-    private static WorkflowLabels Labels(string agent) => new(
-        agent,
-        new Dictionary<string, string>
-        {
-            ["PickupLabel"] = agent == "aimanager" ? "ai-manager-planned" : "ai-agent-picked",
-            ["AnalyzedLabel"] = "ai-analyzed"
-        });
-
     private static ActiveAiTaskService Create(string body, out StubHandler handler)
     {
         handler = new StubHandler(body);
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
-        return new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
+        return new ActiveAiTaskService(settings, new HttpClient(handler));
     }
 
     private static string Issue(string key, string status, string updated, string label, string description = "\"d\"") =>
@@ -44,17 +36,17 @@ public sealed class ActiveAiTaskServiceTests
     [Fact]
     public void BuildJqlAddsStatusClauseOnlyWhenConfigured()
     {
-        Assert.DoesNotContain("status in", ActiveAiTaskService.BuildJql(["a"], "DFAI", "Done"));
-        var jql = ActiveAiTaskService.BuildJql(["a"], "DFAI", "Done", ["In Progress", "Q\"x"]);
+        Assert.DoesNotContain("status in", ActiveAiTaskService.BuildJql("DFAI", "Done"));
+        var jql = ActiveAiTaskService.BuildJql("DFAI", "Done", ["In Progress", "Q\"x"]);
         Assert.Contains("AND status in (\"In Progress\", \"Q\\\"x\") ORDER BY", jql);
     }
 
     [Fact]
-    public void BuildJqlFiltersLabelsAndDoneAndOrdersByUpdatedAndKey()
+    public void BuildJqlHasNoLabelFilterAndFiltersDoneAndOrdersByUpdatedAndKey()
     {
-        var jql = ActiveAiTaskService.BuildJql(["ai-analyzed"], "DFAI", "Done");
+        var jql = ActiveAiTaskService.BuildJql("DFAI", "Done");
 
-        Assert.Contains("labels in (\"ai-analyzed\")", jql);
+        Assert.DoesNotContain("labels", jql);
         Assert.Contains("status != \"Done\"", jql);
         Assert.EndsWith("ORDER BY updated DESC, key ASC", jql);
     }
@@ -79,7 +71,7 @@ public sealed class ActiveAiTaskServiceTests
     }
 
     [Fact]
-    public async Task ExcludesDoneAndUnlabelledIssuesAndReturnsFields()
+    public async Task ExcludesDoneIssuesKeepsUnlabelledAndReturnsFields()
     {
         var adf = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Hello\"}]}]}";
         var body = "{\"issues\":[" + string.Join(",",
@@ -90,20 +82,23 @@ public sealed class ActiveAiTaskServiceTests
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
-        var task = Assert.Single(result);
+        Assert.Equal(new[] { "A-2", "A-3" }, result.Select(t => t.Key));
+        var task = result.Single(t => t.Key == "A-3");
         Assert.Equal(("A-3", "S A-3", "In Review", "Hello"), (task.Key, task.Summary, task.Status, task.Description));
         Assert.Equal(new[] { "ai-analyzed" }, task.Labels);
     }
 
     [Fact]
-    public async Task IssueWithoutLabelsFieldIsExcludedWithoutError()
+    public async Task IssueWithoutLabelsFieldIsReturnedWithEmptyLabels()
     {
         var body = "{\"issues\":[{\"key\":\"A-1\",\"fields\":{\"summary\":\"s\",\"status\":{\"name\":\"To Do\"},\"updated\":\"2026-01-01T10:00:00.000+0000\"}}]}";
         using var service = Create(body, out _);
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
-        Assert.Empty(result);
+        var task = Assert.Single(result);
+        Assert.Equal("A-1", task.Key);
+        Assert.Empty(task.Labels);
     }
 
     [Fact]
@@ -142,20 +137,32 @@ public sealed class ActiveAiTaskServiceTests
     }
 
     [Fact]
-    public async Task UsesLabelsReplacedAtRuntimeAndFallsBackWhenEmpty()
+    public async Task RequestDoesNotFilterOnLabelsEvenWhenAiLabelsConfigured()
     {
         var handler = new StubHandler("{\"issues\":[]}");
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
-        var service = new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
-
         settings.Dashboard.AiLabels = ["runtime-label"];
-        await service.GetActiveAsync(CancellationToken.None);
-        Assert.Contains(Uri.EscapeDataString("\"runtime-label\""), handler.RequestUri!.Query);
+        using var service = new ActiveAiTaskService(settings, new HttpClient(handler));
 
-        settings.Dashboard.AiLabels = [];
         await service.GetActiveAsync(CancellationToken.None);
-        Assert.Contains(Uri.EscapeDataString("\"ai-analyzed\""), handler.RequestUri!.Query);
+
+        Assert.DoesNotContain(Uri.EscapeDataString("labels in"), handler.RequestUri!.Query);
+        Assert.DoesNotContain("runtime-label", handler.RequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task EmptyStatusListReturnsAllNonDoneStatuses()
+    {
+        var body = "{\"issues\":[" +
+                   Issue("A-1", "In Progress", "2026-01-02T00:00:00.000+0000", "x") + "," +
+                   Issue("A-2", "To Do", "2026-01-01T00:00:00.000+0000", "y") + "," +
+                   Issue("A-3", "Done", "2026-01-03T00:00:00.000+0000", "y") + "]}";
+        using var service = Create(body, out _);
+
+        var result = await service.GetActiveAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { "A-1", "A-2" }, result.Select(t => t.Key));
     }
 
     [Fact]
@@ -168,7 +175,7 @@ public sealed class ActiveAiTaskServiceTests
         var settings = new IntegrationSettings();
         settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
         settings.Dashboard.ActiveStatuses = ["in progress"];
-        var service = new ActiveAiTaskService(settings, Labels, new HttpClient(handler));
+        var service = new ActiveAiTaskService(settings, new HttpClient(handler));
 
         var result = await service.GetActiveAsync(CancellationToken.None);
 
