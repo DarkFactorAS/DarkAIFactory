@@ -42,7 +42,6 @@ public static class IntegrationSettingsPatcher
                 ('shared', 'Jira.JiraInProgressStatus', 'In Progress'),
                 ('shared', 'Jira.JiraInReviewStatus', 'In Review'),
                 ('shared', 'GitHub.AgentGitHubToken', ''),
-                ('shared', 'GitHub.TargetRepositoryUrl', ''),
                 ('aimanager', 'GitHub.GitHubRepositoryToken', ''),
                 ('aiworker', 'GitHub.GitHubRepositoryToken', ''),
                 ('aibuildpage', 'GitHub.GitHubRepositoryToken', '')

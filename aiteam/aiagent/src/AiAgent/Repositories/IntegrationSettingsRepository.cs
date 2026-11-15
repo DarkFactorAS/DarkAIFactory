@@ -64,7 +64,6 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             GitHub = new GitHubSettings
             {
                 AgentGitHubToken = Read("shared", "GitHub.AgentGitHubToken"),
-                TargetRepositoryUrl = Read("shared", "GitHub.TargetRepositoryUrl"),
                 GitHubRepositoryToken = Read(client, "GitHub.GitHubRepositoryToken"),
                 AgentModel = values.TryGetValue((client, "GitHub.AgentModel"), out var agentModel)
                     ? agentModel

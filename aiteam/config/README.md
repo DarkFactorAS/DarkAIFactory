@@ -106,15 +106,13 @@ Example non-secret updates:
 ```sql
 UPDATE settings SET value = 'https://your-company.atlassian.net'
 WHERE client = 'shared' AND name = 'Jira.JiraBaseUrl';
-UPDATE settings SET value = 'https://github.com/owner/repository.git'
-WHERE client = 'shared' AND name = 'GitHub.TargetRepositoryUrl';
 ```
 
 Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraStatusName` (`Selected for Development`),
 `Jira.JiraJql` (empty for generated JQL), `Jira.JiraInProgressStatus` (`In Progress`),
 `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (the GitHub Copilot
-credential, not a repository token) and `GitHub.TargetRepositoryUrl`. `GitHub.TargetRepositoryUrl`. The Claude model is `Claude.AgentModel` (seeded as `claude-sonnet-5-5`);
+credential, not a repository token). The Claude model is `Claude.AgentModel` (seeded as `claude-sonnet-5-5`);
 the Claude Code CLI runs `claude -p` with its own login (`claude auth login`, stored in a Docker
 volume); `Claude.AnthropicApiKey` is an optional override.
 The agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
@@ -132,8 +130,9 @@ mappings each polling cycle. The dashboard also uses the `manager_projects` keys
 active tasks and comment checks. The former `Jira.JiraProjectKey` setting is no longer read
 (existing rows are ignored and can be removed with
 `DELETE FROM settings WHERE client = 'shared' AND name = 'Jira.JiraProjectKey';`);
-`GitHub.TargetRepositoryUrl` is only a fallback when `manager_projects` is empty.
-No fallback occurs for invalid mappings or database read failures. The agent's
+The former `GitHub.TargetRepositoryUrl` setting is no longer read (remove old rows with
+`DELETE FROM settings WHERE client = 'shared' AND name = 'GitHub.TargetRepositoryUrl';`).
+The repository always comes from `manager_projects`; there is no fallback. The agent's
 repository token must have Contents and Pull requests read/write permission
 for every mapped repository.
 
