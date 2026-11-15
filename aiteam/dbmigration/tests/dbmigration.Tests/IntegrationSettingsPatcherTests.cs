@@ -19,12 +19,12 @@ public sealed class IntegrationSettingsPatcherTests
             .ToDictionary(match => (Client: match.Groups[1].Value, Name: match.Groups[2].Value),
                 match => match.Groups[3].Value);
 
-        Assert.Equal(18, values.Count);
+        Assert.Equal(17, values.Count);
         Assert.Contains("ON DUPLICATE KEY UPDATE `value` = `settings`.`value`", patcher.Sql[4]);
         Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", patcher.Sql[3]);
         Assert.Contains("'GitHub.AgentModel'", patcher.Sql[3]);
         Assert.Contains("('aiworker', 'GitHub.AgentModel', 'gpt-5-mini')", patcher.Sql[4]);
-        Assert.Equal(11, values.Keys.Count(key => key.Client == "shared"));
+        Assert.Equal(10, values.Keys.Count(key => key.Client == "shared"));
         Assert.DoesNotContain("Label", string.Join(",", values.Keys.Select(key => key.Name)));
         Assert.Empty(values[("shared", "Jira.JiraAssigneeAccountId")]);
         Assert.Empty(values[("shared", "Jira.JiraApiToken")]);

@@ -38,8 +38,7 @@ public sealed class JiraCapability(
 
             var recovery = new PullRequestTrackingRecovery(
                 context.AgentId, jira, pullRequests,
-                key => resolveRepository(key) ??
-                    (Uri.TryCreate(config.DefaultRepositoryUrl, UriKind.Absolute, out var fallback) ? fallback : null));
+                key => resolveRepository(key));
             var closer = new PullRequestCloser(
                 config, jira, pullRequests,
                 (record, token) => mergeChecker.IsMergedAsync(config.GitHubToken, record, token));

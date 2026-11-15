@@ -17,7 +17,6 @@ public sealed record JiraCapabilityConfig(
     IReadOnlyList<string> UnblockSourceStatuses,
     bool IntakeEnabled,
     string GitHubToken,
-    string DefaultRepositoryUrl,
     string PickupLabel,
     string FailureLabel,
     string IgnoredLabel)
@@ -69,7 +68,6 @@ public sealed record JiraCapabilityConfig(
             jira.JiraJql.Trim(),
             sources, intake,
             settings.GitHub.GitHubRepositoryToken.Trim(),
-            settings.GitHub.TargetRepositoryUrl.Trim(),
             pickup, failure, ignored);
     }
 

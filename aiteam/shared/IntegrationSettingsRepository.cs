@@ -60,7 +60,6 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             GitHub = new GitHubSettings
             {
                 AgentGitHubToken = Read("shared", "GitHub.AgentGitHubToken"),
-                TargetRepositoryUrl = Read("shared", "GitHub.TargetRepositoryUrl"),
                 // The dashboard performs no GitHub operations, so these per-client rows are optional.
                 GitHubRepositoryToken = ReadClientOptional("GitHub.GitHubRepositoryToken"),
                 AgentModel = ReadClientOptional("GitHub.AgentModel")
