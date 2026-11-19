@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "./auth.jsx";
 
 const TASK_REFRESH_INTERVAL_MS = 30000;
 
 async function request(url, options) {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });

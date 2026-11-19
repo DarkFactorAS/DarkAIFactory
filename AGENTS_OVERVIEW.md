@@ -39,9 +39,10 @@ See [aiteam/aiagent/README.md](aiteam/aiagent/README.md) for the capabilities
     (AI vs. non-AI).
   - Manages `agent_tasks` (CRUD, plus a PATCH that only works while a task is
     still `New`). This is the entry point for aiagent's Jira capability.
-  - Its only Jira write is `POST /api/tasks/{key}/comments`. It requires the
-    `Dashboard__WriteToken` bearer token and only accepts issues in the active
-    AI list.
+  - Its only Jira write is `POST /api/tasks/{key}/comments`. Like every
+    dashboard endpoint except `/api/health` and the login, it requires a logged-in
+    DarkFactor account (login via the account server, DFAI-214) and it only
+    accepts issues in the active AI list.
 - **dbmigration:** creates and upgrades all tables (`manager_projects`,
   `settings`, `workflow_labels`, `agent_tasks`, `agent_*`, …) and seeds the
   default settings and labels. Other services do not create tables.

@@ -6,7 +6,8 @@ import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
-import { WriteTokenProvider } from "./WriteToken.jsx";
+import { AuthProvider, useAuth } from "./auth.jsx";
+import LoginPage from "./LoginPage.jsx";
 import { POLL_INTERVAL_MS, listAgents, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
@@ -369,9 +370,9 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   );
 }
 
-export default function App() {
+function Dashboard({ theme, resolvedTheme, setTheme }) {
+  const { username, logout } = useAuth();
   const [labelsVersion, setLabelsVersion] = useState(0);
-  const { theme, resolvedTheme, setTheme } = useTheme();
   const [solvedOpen, setSolvedOpen] = useState(false);
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
   const headerRef = useRef(null);
@@ -427,7 +428,7 @@ export default function App() {
     };
   }, [solvedOpen]);
   return (
-    <WriteTokenProvider>
+    <>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <header ref={headerRef} className="bg-slate-900 px-6 py-4 shadow lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
         <div className="mb-2 flex justify-center lg:mb-0 lg:justify-start">
@@ -447,8 +448,20 @@ export default function App() {
         <h1 className="text-2xl font-bold text-white text-center">
           DarkAIFactory - AI Team workflow
         </h1>
-        <div className="mt-2 flex justify-center lg:mt-0 lg:justify-end">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-3 lg:mt-0 lg:justify-end">
           <ThemeToggle theme={theme} onChange={setTheme} />
+          {username && (
+            <span data-testid="signed-in-user" className="text-sm text-slate-300">
+              Signed in as <span className="font-semibold text-white">{username}</span>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={logout}
+            className="rounded border border-slate-500 px-2 py-1 text-sm text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          >
+            Log out
+          </button>
         </div>
       </header>
       <main ref={mainRef} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
@@ -481,6 +494,30 @@ export default function App() {
         <SolvedByProjectPanel labelsVersion={labelsVersion} onLabelsSaved={handleLabelsSaved} resolvedTheme={resolvedTheme} />
       </aside>
     </div>
-    </WriteTokenProvider>
+    </>
+  );
+}
+
+function AuthGate() {
+  const { status } = useAuth();
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400">
+        <p role="status">Loading...</p>
+      </div>
+    );
+  }
+  if (status !== "authenticated") {
+    return <LoginPage theme={theme} onThemeChange={setTheme} />;
+  }
+  return <Dashboard theme={theme} resolvedTheme={resolvedTheme} setTheme={setTheme} />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
   );
 }

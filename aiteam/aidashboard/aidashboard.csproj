@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="../shared/*.cs" Link="Configuration/%(Filename)%(Extension)" />
     <PackageReference Include="DarkFactor.Common.Lib" Version="1.6.6" />
+    <PackageReference Include="DarkFactor.AccountClient.Lib" Version="1.2.11" />
     <Content Remove="Config/appsettings.template.json" />
     <Content Update="Config/appsettings.*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

@@ -1,4 +1,5 @@
 import { request } from "./TaskEditor.jsx";
+import { apiFetch } from "./auth.jsx";
 
 // Polling interval of the aiAgent (PollIntervalSeconds default 30).
 export const POLL_INTERVAL_MS = 30000;
@@ -22,14 +23,9 @@ export function compareByContainer(a, b) {
   );
 }
 
-function authHeaders(token) {
-  if (!token) throw new Error("The dashboard write token is required.");
-  return { "Content-Type": "application/json", Authorization: "Bearer " + token };
-}
-
 // Returns { agents, nowMs }; nowMs comes from the server Date header (browser clock as fallback).
 export async function listAgents() {
-  const response = await fetch("/api/agents");
+  const response = await apiFetch("/api/agents");
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
   const agents = await response.json();
   const header = Date.parse(response.headers.get("Date") ?? "");
@@ -37,22 +33,20 @@ export async function listAgents() {
 }
 export const listProjects = () => request("/api/agents/projects");
 
-export const createAgent = (token, agent) =>
-  request("/api/agents", { method: "POST", headers: authHeaders(token), body: JSON.stringify(agent) });
+export const createAgent = (agent) =>
+  request("/api/agents", { method: "POST", body: JSON.stringify(agent) });
 
-export const updateAgent = (token, id, agent) =>
-  request(`/api/agents/${id}`, { method: "PUT", headers: authHeaders(token), body: JSON.stringify(agent) });
+export const updateAgent = (id, agent) =>
+  request(`/api/agents/${id}`, { method: "PUT", body: JSON.stringify(agent) });
 
-export const setAgentEnabled = (token, id, enabled) =>
+export const setAgentEnabled = (id, enabled) =>
   request(`/api/agents/${id}/enabled`, {
     method: "PATCH",
-    headers: authHeaders(token),
     body: JSON.stringify({ enabled }),
   });
 
-export async function deleteAgent(token, id) {
-  const headers = authHeaders(token);
-  const response = await fetch(`/api/agents/${id}`, { method: "DELETE", headers });
+export async function deleteAgent(id) {
+  const response = await apiFetch(`/api/agents/${id}`, { method: "DELETE" });
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {
@@ -123,12 +117,11 @@ export const getAiLabels = () => request("/api/settings/ai-labels");
 
 export const getActiveStatuses = () => request("/api/settings/active-statuses");
 
-export const saveActiveStatuses = (token, statuses) =>
+export const saveActiveStatuses = (statuses) =>
   request("/api/settings/active-statuses", {
     method: "PUT",
-    headers: authHeaders(token),
     body: JSON.stringify({ statuses }),
   });
 
-export const saveAiLabels = (token, labels) =>
-  request("/api/settings/ai-labels", { method: "PUT", headers: authHeaders(token), body: JSON.stringify({ labels }) });
+export const saveAiLabels = (labels) =>
+  request("/api/settings/ai-labels", { method: "PUT", body: JSON.stringify({ labels }) });

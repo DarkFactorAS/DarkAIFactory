@@ -81,27 +81,24 @@ The app makes read-only Jira calls for `/api/tasks/active-ai` and
 `/api/stats/solved-by-project`, plus one write: `POST /api/tasks/{key}/comments` (`text`) appends the text
 as a new Jira comment on that issue (the description is never changed; 400 on invalid input,
 502 if Jira fails or times out); its GitHub token can remain empty.
-Comment submissions require a bearer write token configured server-side through
-`Dashboard__WriteToken`. Set a strong secret using the deployment's secret management,
-serve the dashboard over HTTPS, and enter that token in the comment form. It is remembered in the
-`dashboard_write_token` browser cookie (see below) and is never returned by an API. Missing configuration disables comment
-writes (401). Only issues currently returned by the active AI task list in the configured
+Like every API endpoint, comment submissions require a logged-in session (see [Login](#login)).
+Only issues currently returned by the active AI task list in the configured
 Jira projects are authorized (403 otherwise).
 `GET /api/tasks/config` returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used by task creation.
-AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, Bearer write
-token required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
+AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, login
+required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
 list means: use the workflow pickup/analyzed labels. The "Edit AI labels" button in the "Tasks solved per project"
 panel uses it and redraws the graph.
 
 Active statuses: `GET /api/settings/active-statuses` returns `{ statuses }`; `PUT /api/settings/active-statuses`
-(`statuses`, Bearer write token required, 401 otherwise) validates (max 20 statuses, 1-255 chars, no commas; spaces
+(`statuses`, login required, 401 otherwise) validates (max 20 statuses, 1-255 chars, no commas; spaces
 are allowed; 400 otherwise), writes only `settings[aidashboard, Dashboard.ActiveStatuses]` and updates the running app
 immediately. An empty list means: show every non-Done status. The cogwheel button in the "Top 5 AI tasks" header
 opens the editor and reloads the panel after saving.
 
-Manual check (cogwheel): open the cogwheel, save `In Progress` with a token and the list narrows without a reload;
-an empty value restores all non-Done statuses; a bad token gives 401 and the token prompt; the list survives a reload.
+Manual check (cogwheel): open the cogwheel, save `In Progress` and the list narrows without a reload;
+an empty value restores all non-Done statuses; an expired session returns to the login page; the list survives a reload.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
@@ -112,13 +109,12 @@ The dashboard editor instead uses `PATCH /api/agent-tasks/{id}` (`title`, `descr
 which atomically edits only tasks still in `New` status, preserves workflow fields,
 and returns 409 if the task has progressed.
 
-Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`, `js/WriteToken.jsx`) sits in the left column (stacked vertically, one agent per row) and
-uses `/api/agents` (writes need the Bearer write token) plus the read-only
+Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`) sits in the left column (stacked vertically, one agent per row) and
+uses `/api/agents` plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / `Running on KEY` / Error. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
-writer must store UTC); "now" comes from the response `Date` header. The write token is asked for in the page and
-remembered in the `dashboard_write_token` cookie (`path=/; SameSite=Strict`, `Secure` on HTTPS, 30-day max-age) and shared by all write forms; a 401 clears the cookie and brings the prompt back. The cookie is set by JavaScript so it cannot be `HttpOnly`: any XSS can read it, and the browser also sends it to the server on every request (the server only authenticates the `Authorization: Bearer` header). No write request is sent without a token.
+writer must store UTC); "now" comes from the response `Date` header.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
 
 Top 5 AI tasks cards get a highlighted blue border (same as working agent cards) while an
@@ -135,7 +131,37 @@ Manual check: add `ai-approved` to an active AI issue in Jira and confirm the ye
 
 Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale
-heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it; the Network tab shows no write without a token, and a bad token gives 401 and asks again.
+heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it.
+
+## Login
+
+The whole dashboard requires a DarkFactor account (DFAI-214). Login uses the same account
+server and `DarkFactor.AccountClient.Lib` client as DFWeb and GameServer: the password is
+encrypted with `DFCrypt.EncryptInput` and checked with `IAccountClient.LoginAccount`. Any account
+the account server accepts may sign in. Configure the account server in the `AccountServer`
+section of the appsettings (see [Config](Config/README.md)).
+
+- `POST /api/auth/login` (`username`, `password`) returns `{ username }` and sets the
+  `aidashboard_auth` session cookie (HttpOnly, `SameSite=Strict`, `Secure` on HTTPS; 12 hours,
+  sliding). 400 for missing input, 401 `Invalid username or password.` (same text for unknown user
+  and wrong password), 502 if the account server fails, 503 if `AccountServer.Endpoint` is not set.
+- `GET /api/auth/me` returns `{ username }`, or 401 when not logged in.
+- `POST /api/auth/logout` ends the session (204).
+
+Every other `/api/*` endpoint except `/api/health` returns 401 without a session (no redirect).
+The SPA shell and its static files are public; the page checks `/api/auth/me` and shows the
+sign-in form (`js/LoginPage.jsx`) until the user logs in. The header shows the signed-in user
+and a Log out button. Any 401 from an API call (for example an expired session) returns the user to
+the sign-in form (`js/auth.jsx`). The password and the account token are never stored or logged.
+The earlier shared write token (`Dashboard__WriteToken`, `dashboard_write_token` cookie) was removed.
+
+Session cookies are protected with ASP.NET Core Data Protection keys kept in the container, so a
+restart or redeploy signs everyone out.
+
+Manual check: open the dashboard logged out and see only the sign-in form (no data requests other
+than `/api/auth/me`); a wrong password shows the error and clears the password field; a valid
+account opens the dashboard with the user name in the header; reload keeps the session; Log out
+returns to the form, and `/api/agents` then returns 401; check light and dark themes.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
 import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgents, statusLabel } from "./agentApi.js";
-import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 function statusBadgeColors(label) {
   if (label === "Disabled") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
@@ -10,28 +9,11 @@ function statusBadgeColors(label) {
 }
 
 function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
-  const { token, setToken } = useWriteToken();
-  const [busy, setBusy] = useState(false);
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
   const working = isWorking(agent, nowMs);
   const chips = agent.capabilities.filter((c) => c.enabled).map((c) => c.capability);
   if (active && !chips.some((c) => c.toLowerCase() === active.toLowerCase())) chips.push(active);
-
-  async function run(action) {
-    if (busy || !token) return;
-    setBusy(true);
-    onError(null);
-    try {
-      await action(token);
-      onChanged();
-    } catch (e) {
-      if (e.status === 401) setToken("");
-      onError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <li
@@ -84,7 +66,6 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
 }
 
 export default function AgentSlots() {
-  const { token } = useWriteToken();
   const [state, setState] = useState(() => ({ agents: null, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
   const [editor, setEditor] = useState(null); // null | { agent }
   const [actionError, setActionError] = useState(null);
@@ -131,12 +112,6 @@ export default function AgentSlots() {
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {actionError}
         </p>
-      )}
-      {!token && (
-        <div className="text-sm">
-          <p className="text-slate-600 dark:text-slate-300">Enter the write token to change agents.</p>
-          <WriteTokenPrompt />
-        </div>
       )}
       {agents && (
         <ul className="flex flex-col gap-3">

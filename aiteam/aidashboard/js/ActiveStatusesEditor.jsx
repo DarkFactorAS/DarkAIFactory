@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { getActiveStatuses, saveActiveStatuses } from "./agentApi.js";
-import { useWriteToken, WriteTokenPrompt } from "./WriteToken.jsx";
 
 export function parseStatuses(text) {
   const seen = new Set();
@@ -12,7 +11,6 @@ export function parseStatuses(text) {
 
 // Inline editor for settings Dashboard.ActiveStatuses (comma-separated input).
 export default function ActiveStatusesEditor({ onSaved, onCancel }) {
-  const { token, setToken } = useWriteToken();
   const [text, setText] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -31,10 +29,9 @@ export default function ActiveStatusesEditor({ onSaved, onCancel }) {
     setBusy(true);
     setError(null);
     try {
-      await saveActiveStatuses(token, parseStatuses(text));
+      await saveActiveStatuses(parseStatuses(text));
       onSaved();
     } catch (e) {
-      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       setBusy(false);
@@ -62,11 +59,10 @@ export default function ActiveStatusesEditor({ onSaved, onCancel }) {
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {!token && <WriteTokenPrompt />}
         <button
           type="button"
           onClick={save}
-          disabled={!token || !loaded || busy}
+          disabled={!loaded || busy}
           className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm disabled:opacity-50"
         >
           Save

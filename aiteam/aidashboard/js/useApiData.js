@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "./auth.jsx";
 
 // Fetches JSON from the API and exposes loading/error state.
 // With options.pollMs the data is re-fetched at that interval; background
@@ -18,7 +19,7 @@ export default function useApiData(url, { pollMs } = {}) {
       // responses can complete instead of being aborted by the next tick.
       if (inFlight) return;
       inFlight = true;
-      fetch(url, { signal: controller.signal })
+      apiFetch(url, { signal: controller.signal })
         .then((response) => {
           if (!response.ok) {
             throw new Error(`Request failed (${response.status})`);

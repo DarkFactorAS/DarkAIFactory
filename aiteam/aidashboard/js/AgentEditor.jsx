@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { CAPABILITIES, CONTAINERS, PROVIDERS, createAgent, deleteAgent, listProjects, updateAgent } from "./agentApi.js";
-import { WriteTokenPrompt, useWriteToken } from "./WriteToken.jsx";
 
 // Create/edit form for an agent definition. `agent` is null in create mode.
 export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
-  const { token, setToken } = useWriteToken();
   const [name, setName] = useState(agent?.name ?? "");
   const [role, setRole] = useState(agent?.role ?? "");
   const [behavior, setBehavior] = useState(agent?.behavior ?? "");
@@ -37,7 +35,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (inFlight.current || !token) return;
+    if (inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
     setError(null);
@@ -54,13 +52,12 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
     };
     try {
       if (agent) {
-        await updateAgent(token, agent.id, body);
+        await updateAgent(agent.id, body);
       } else {
-        await createAgent(token, body);
+        await createAgent(body);
       }
       onSaved();
     } catch (e) {
-      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       inFlight.current = false;
@@ -69,15 +66,14 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
   }
 
   async function handleDelete() {
-    if (inFlight.current || !token || !agent) return;
+    if (inFlight.current || !agent) return;
     inFlight.current = true;
     setSaving(true);
     setError(null);
     try {
-      await deleteAgent(token, agent.id);
+      await deleteAgent(agent.id);
       onDeleted();
     } catch (e) {
-      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       inFlight.current = false;
@@ -166,12 +162,6 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
           {projectOptions.length === 0 && <span className="text-slate-500 dark:text-slate-400">No projects available.</span>}
         </div>
       </fieldset>
-      {!token && (
-        <div className="text-sm">
-          <p className="text-slate-600 dark:text-slate-300">Enter the write token to save.</p>
-          <WriteTokenPrompt />
-        </div>
-      )}
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
@@ -180,7 +170,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={saving || !token}
+          disabled={saving}
           className="rounded bg-slate-900 px-3 py-1 text-sm text-white disabled:opacity-50"
         >
           Save
@@ -191,7 +181,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
         {agent && (
           <button
             type="button"
-            disabled={saving || !token}
+            disabled={saving}
             onClick={() => setConfirmingDelete(true)}
             className="rounded border px-3 py-1 text-sm text-red-700 dark:text-red-400 disabled:opacity-50"
           >
@@ -205,7 +195,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
           <div className="mt-1 flex gap-2">
             <button
               type="button"
-              disabled={saving || !token}
+              disabled={saving}
               onClick={handleDelete}
               className="rounded bg-red-700 px-2 py-0.5 text-white disabled:opacity-50"
             >

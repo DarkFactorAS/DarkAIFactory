@@ -1,13 +1,11 @@
 import { useRef, useState } from "react";
 import { request } from "./TaskEditor.jsx";
-import { useWriteToken, WriteTokenPrompt } from "./WriteToken.jsx";
 
 // Lets the user append text to an AI task; the backend adds it as a Jira comment.
 export default function AddTextPanel({ task, onClose }) {
   const [text, setText] = useState("");
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
-  const { token: writeToken, setToken } = useWriteToken();
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
 
@@ -21,13 +19,11 @@ export default function AddTextPanel({ task, onClose }) {
     try {
       await request(`/api/tasks/${encodeURIComponent(task.key)}/comments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + writeToken },
         body: JSON.stringify({ text }),
       });
       setText("");
       setStatus("Text added to the task.");
     } catch (e) {
-      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       inFlight.current = false;
@@ -37,7 +33,6 @@ export default function AddTextPanel({ task, onClose }) {
 
   return (
     <form onSubmit={handleSubmit} aria-label={`Add text to ${task.key}`} className="mt-3 space-y-2">
-      <WriteTokenPrompt />
       <textarea
         aria-label="Additional text"
         className="w-full rounded border border-slate-300 dark:border-slate-600 p-2 text-sm"
@@ -58,7 +53,7 @@ export default function AddTextPanel({ task, onClose }) {
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={submitting || !text.trim() || !writeToken}
+          disabled={submitting || !text.trim()}
           className="rounded bg-slate-900 px-3 py-1 text-sm text-white disabled:opacity-50"
         >
           Add text
