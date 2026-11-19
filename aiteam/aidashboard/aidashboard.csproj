@@ -4,8 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- Keep tests and frontend sources out of the web project build and publish output. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;js/**;css/**;dist/**;node_modules/**;index.html;package.json;package-lock.json;vite.config.js;NuGet.config</DefaultItemExcludes>
+    <!-- Keep tests and frontend sources out of the web project build and publish output.
+         src/** holds leftover bin/obj output from an older project layout; compiling it duplicates assembly attributes. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);src/**;tests/**;js/**;css/**;dist/**;node_modules/**;index.html;package.json;package-lock.json;vite.config.js;NuGet.config</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../shared/*.cs" Link="Configuration/%(Filename)%(Extension)" />

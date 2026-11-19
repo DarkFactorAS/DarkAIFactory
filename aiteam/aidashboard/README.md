@@ -25,7 +25,9 @@ stylesheets in `css/` (`index.css`). The Dockerfile builds them
 (`npm install && npm run build`) and copies the output to `/app/wwwroot`, which
 ASP.NET Core serves as static files with an SPA fallback to `index.html`
 (unknown `/api/*` routes return 404). For local frontend work run
-`npm install && npm run dev` in `aiteam/aidashboard` (proxies `/api` to localhost:5000).
+`npm install && npm run dev` in `aiteam/aidashboard` (port 5173, proxies `/api` to localhost:5000; override
+with `AIDASHBOARD_DEV_PORT` and `AIDASHBOARD_API_URL`). In VS Code, the "aidashboard: Full stack" launch
+configuration starts the API on 8282 and Vite on 8281 with the debugger attached.
 Without a built `wwwroot`, a plain HTML fallback page with the title is served.
 
 Build: `dotnet build aiteam/aidashboard/aidashboard.csproj`
