@@ -8,6 +8,7 @@ using AiDashboard.Tasks;
 using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.HttpApi;
+using DFCommonLib.Utils;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -221,6 +222,21 @@ public sealed class AuthEndpointsTests
             Endpoint = "https://account.example", ClientId = "id", ClientSecret = "client-secret", Scope = "scope",
         },
     };
+
+    [Fact]
+    public void AddDashboardAccountLogin_ResolvesRealAccountClient()
+    {
+        // Regression: AccountRestClient's constructor reads the static DFServices provider and
+        // threw "DFServices has not been initialized" when DFServices.Create was never called.
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfigurationHelper>(new FakeConfig(Configured()));
+        services.AddDashboardAccountLogin();
+        new DFServices(services).SetupLogger();
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<AccountServerLogin>(scope.ServiceProvider.GetRequiredService<IDashboardLogin>());
+    }
 
     [Fact]
     public async Task AccountServerLogin_Ok_UsesConfiguredServerAndEncryptsPassword()

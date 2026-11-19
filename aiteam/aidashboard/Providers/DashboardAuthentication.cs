@@ -1,3 +1,5 @@
+using AccountClientModule.Client;
+using DFCommonLib.Utils;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 
@@ -37,6 +39,29 @@ public static class DashboardAuthentication
             });
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the DFCommonLib account client and the login service (same setup as DFWeb and
+    /// GameServer). Pass the application's service collection: the account client's REST client
+    /// resolves its dependencies through the static DFServices provider, which is built lazily from
+    /// this collection on first use. The client also keeps its state in the ASP.NET session.
+    /// </summary>
+    public static IServiceCollection AddDashboardAccountLogin(this IServiceCollection services)
+    {
+        DFServices.Create(services);
+        services.AddHttpContextAccessor();
+        services.AddDistributedMemoryCache();
+        services.AddSession(options =>
+        {
+            options.Cookie.Name = "aidashboard_session";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.IsEssential = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+        });
+        AccountClient.SetupService(services);
+        services.AddScoped<IDashboardLogin, AccountServerLogin>();
         return services;
     }
 }

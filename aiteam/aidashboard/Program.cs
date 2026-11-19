@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AccountClientModule.Client;
 using AiDashboard.Agents;
 using AiDashboard.Auth;
 using AiDashboard.Stats;
@@ -15,18 +14,7 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDashboardAuthentication();
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<DashboardAppSettings>>();
-// The DFCommonLib account client (same as DFWeb/GameServer) keeps its state in the ASP.NET session.
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddDistributedMemoryCache();
-builder.Services.AddSession(options =>
-{
-    options.Cookie.Name = "aidashboard_session";
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-    options.Cookie.SameSite = SameSiteMode.Strict;
-});
-AccountClient.SetupService(builder.Services);
-builder.Services.AddScoped<IDashboardLogin, AccountServerLogin>();
+builder.Services.AddDashboardAccountLogin();
 new DFServices(builder.Services)
     .SetupLogger()
     .SetupMySql()
