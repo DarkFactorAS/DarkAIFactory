@@ -83,7 +83,7 @@ The app makes read-only Jira calls for `/api/tasks/active-ai` and
 `/api/stats/solved-by-project`, plus one write: `POST /api/tasks/{key}/comments` (`text`) appends the text
 as a new Jira comment on that issue (the description is never changed; 400 on invalid input,
 502 if Jira fails or times out); its GitHub token can remain empty.
-Like every API endpoint, comment submissions require a logged-in session (see [Login](#login)).
+Like every write endpoint, comment submissions require a logged-in session (see [Login](#login)).
 Only issues currently returned by the active AI task list in the configured
 Jira projects are authorized (403 otherwise).
 `GET /api/tasks/config` returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used by task creation.
@@ -100,7 +100,7 @@ immediately. An empty list means: show every non-Done status. The cogwheel butto
 opens the editor and reloads the panel after saving.
 
 Manual check (cogwheel): open the cogwheel, save `In Progress` and the list narrows without a reload;
-an empty value restores all non-Done statuses; an expired session returns to the login page; the list survives a reload.
+an empty value restores all non-Done statuses; saving with an expired session opens the login page; the list survives a reload.
 See the configuration guide for migrating existing credentials into the database.
 
 Task API (table `agent_tasks`, created only by dbmigration): `GET /api/agent-tasks[?status=]`,
@@ -137,7 +137,7 @@ heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highli
 
 ## Login
 
-The whole dashboard requires a DarkFactor account (DFAI-214). Login uses the same account
+The dashboard is public and read-only; making changes requires a DarkFactor account (DFAI-214). Login uses the same account
 server and `DarkFactor.AccountClient.Lib` client as DFWeb and GameServer: the password is
 encrypted with `DFCrypt.EncryptInput` and checked with `IAccountClient.LoginAccount`. Any account
 the account server accepts may sign in. Configure the account server in the `AccountServer`
@@ -150,20 +150,28 @@ section of the appsettings (see [Config](Config/README.md)).
 - `GET /api/auth/me` returns `{ username }`, or 401 when not logged in.
 - `POST /api/auth/logout` ends the session (204).
 
-Every other `/api/*` endpoint except `/api/health` returns 401 without a session (no redirect).
-The SPA shell and its static files are public; the page checks `/api/auth/me` and shows the
-sign-in form (`js/LoginPage.jsx`) until the user logs in. The header shows the signed-in user
-and a Log out button. Any 401 from an API call (for example an expired session) returns the user to
-the sign-in form (`js/auth.jsx`). The password and the account token are never stored or logged.
+Without a session every read (`GET`/`HEAD`) works, and every write (`POST`, `PUT`, `PATCH`,
+`DELETE`) returns 401 (no redirect); `/api/auth/me` also needs a session. This is the fallback
+authorization policy in `Providers/DashboardAuthentication.cs`, so new write endpoints are protected by
+default.
+
+The page checks `/api/auth/me`. Without a session it shows the dashboard read-only: the header shows
+"Read-only" and a Log in button (where Log out is when logged in), and the editing controls are hidden
+(the New task form, task and agent Edit buttons, Add agent, the statuses cogwheel, Edit AI labels, and
+adding text to a Top 5 task). Log in opens the sign-in form (`js/LoginPage.jsx`); Back to dashboard
+returns without logging in. Logged in, the header shows the user and a Log out button. A write that
+returns 401 (for example an expired session) switches to read-only and opens the sign-in form with a
+"session has expired" note (`js/auth.jsx`). The password and the account token are never stored or logged.
 The earlier shared write token (`Dashboard__WriteToken`, `dashboard_write_token` cookie) was removed.
 
 Session cookies are protected with ASP.NET Core Data Protection keys kept in the container, so a
 restart or redeploy signs everyone out.
 
-Manual check: open the dashboard logged out and see only the sign-in form (no data requests other
-than `/api/auth/me`); a wrong password shows the error and clears the password field; a valid
-account opens the dashboard with the user name in the header; reload keeps the session; Log out
-returns to the form, and `/api/agents` then returns 401; check light and dark themes.
+Manual check: open the dashboard logged out and see all panels with data, "Read-only" and Log in in
+the header, and no editing controls; Log in opens the form, Back to dashboard returns; a wrong password
+shows the error and clears the password field; a valid account returns to the dashboard with the user
+name, Log out and the editing controls; reload keeps the session; Log out returns to read-only, and a
+`POST /api/agent-tasks` then returns 401; check light and dark themes.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured

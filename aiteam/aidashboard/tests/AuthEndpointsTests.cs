@@ -43,6 +43,10 @@ public sealed class AuthEndpointsTests
         app.MapGet("/api/health", () => Results.Ok()).AllowAnonymous();
         // No explicit authorization metadata: protected by the fallback policy.
         app.MapGet("/api/protected", () => Results.Ok(new { ok = true }));
+        app.MapPost("/api/protected", () => Results.Ok(new { ok = true }));
+        app.MapPut("/api/protected", () => Results.Ok(new { ok = true }));
+        app.MapPatch("/api/protected", () => Results.Ok(new { ok = true }));
+        app.MapDelete("/api/protected", () => Results.Ok(new { ok = true }));
         AuthEndpoints.Map(app);
         app.MapFallback(() => Results.Text("<html></html>", "text/html")).AllowAnonymous();
         await app.StartAsync();
@@ -94,6 +98,8 @@ public sealed class AuthEndpointsTests
         Assert.False(response.Headers.Contains("Set-Cookie"));
         using var me = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
+        using var write = await client.PostAsync("/api/protected", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, write.StatusCode);
     }
 
     [Theory]
@@ -142,19 +148,39 @@ public sealed class AuthEndpointsTests
     }
 
     [Fact]
-    public async Task WithoutSession_ApiReturns401NotRedirect_WhileHealthAndSpaArePublic()
+    public async Task WithoutSession_ReadsArePublic_WhileHealthAndSpaArePublic()
     {
         var (app, client) = await StartAsync(new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor")));
         await using var _ = app;
 
-        using var protectedResponse = await client.GetAsync("/api/protected");
-        Assert.Equal(HttpStatusCode.Unauthorized, protectedResponse.StatusCode);
-        Assert.Null(protectedResponse.Headers.Location);
+        using var read = await client.GetAsync("/api/protected");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        using var head = await client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/protected"));
+        Assert.Equal(HttpStatusCode.OK, head.StatusCode);
 
         using var health = await client.GetAsync("/api/health");
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         using var spa = await client.GetAsync("/some/page");
         Assert.Equal(HttpStatusCode.OK, spa.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task WithoutSession_WritesReturn401NotRedirect_AndSucceedAfterLogin(string method)
+    {
+        var (app, client) = await StartAsync(new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor")));
+        await using var _ = app;
+
+        using var anonymous = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), "/api/protected"));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Null(anonymous.Headers.Location);
+
+        using (var loginResponse = await Login(client)) Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        using var loggedIn = await client.SendAsync(new HttpRequestMessage(new HttpMethod(method), "/api/protected"));
+        Assert.Equal(HttpStatusCode.OK, loggedIn.StatusCode);
     }
 
     [Fact]
@@ -169,6 +195,8 @@ public sealed class AuthEndpointsTests
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
         using var me = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
+        using var write = await client.PostAsync("/api/protected", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, write.StatusCode);
     }
 
     [Fact]

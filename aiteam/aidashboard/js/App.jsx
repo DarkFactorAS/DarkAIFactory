@@ -181,7 +181,9 @@ function AiShareBarChart({ items, resolvedTheme }) {
 function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   const state = useApiData("/api/stats/solved-by-project");
   useReloadOn(labelsVersion, state.reload);
-  const [editing, setEditing] = useState(false);
+  const { canEdit } = useAuth();
+  const [editingState, setEditing] = useState(false);
+  const editing = editingState && canEdit;
   return (
     <Panel
       title="Tasks solved per project"
@@ -199,6 +201,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
         )
       }
       actions={
+        canEdit &&
         !editing && (
           <button
             type="button"
@@ -232,8 +235,11 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
 const CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
 function ActiveAiTasksPanel({ labelsVersion }) {
+  const { canEdit } = useAuth();
   const [openKey, setOpenKey] = useState(null);
-  const [editing, setEditing] = useState(false);
+  const [editingState, setEditing] = useState(false);
+  // Without a login the panel is read-only: no status editor and no "add text" form on the cards.
+  const editing = editingState && canEdit;
   const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
   useEffect(() => {
     if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
@@ -299,6 +305,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
         )
       }
       actions={
+        canEdit &&
         !editing && (
           <button
             type="button"
@@ -331,9 +338,11 @@ function ActiveAiTasksPanel({ labelsVersion }) {
             >
               <button
                 type="button"
-                aria-expanded={openKey === task.key}
+                aria-expanded={canEdit ? openKey === task.key : undefined}
+                disabled={!canEdit}
+                title={canEdit ? undefined : "Log in to add text to this task"}
                 onClick={() => setOpenKey(openKey === task.key ? null : task.key)}
-                className="block w-full text-left"
+                className="block w-full text-left disabled:cursor-default"
               >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold">
@@ -360,7 +369,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 </p>
               )}
               </button>
-              {openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
+              {canEdit && openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
             );
           })}
@@ -371,7 +380,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
 }
 
 function Dashboard({ theme, resolvedTheme, setTheme }) {
-  const { username, logout } = useAuth();
+  const { username, canEdit, logout, openLogin } = useAuth();
   const [labelsVersion, setLabelsVersion] = useState(0);
   const [solvedOpen, setSolvedOpen] = useState(false);
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
@@ -450,18 +459,35 @@ function Dashboard({ theme, resolvedTheme, setTheme }) {
         </h1>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-3 lg:mt-0 lg:justify-end">
           <ThemeToggle theme={theme} onChange={setTheme} />
-          {username && (
-            <span data-testid="signed-in-user" className="text-sm text-slate-300">
-              Signed in as <span className="font-semibold text-white">{username}</span>
-            </span>
+          {canEdit ? (
+            <>
+              {username && (
+                <span data-testid="signed-in-user" className="text-sm text-slate-300">
+                  Signed in as <span className="font-semibold text-white">{username}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded border border-slate-500 px-2 py-1 text-sm text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <span data-testid="read-only-mode" className="text-sm text-slate-300">
+                Read-only
+              </span>
+              <button
+                type="button"
+                onClick={openLogin}
+                className="rounded border border-slate-500 px-2 py-1 text-sm text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                Log in
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded border border-slate-500 px-2 py-1 text-sm text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
-          >
-            Log out
-          </button>
         </div>
       </header>
       <main ref={mainRef} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
@@ -498,8 +524,10 @@ function Dashboard({ theme, resolvedTheme, setTheme }) {
   );
 }
 
+// The dashboard is public and read-only until the user logs in; the login page replaces it only
+// while open (header "Log in" button, or a write that failed with 401).
 function AuthGate() {
-  const { status } = useAuth();
+  const { status, loginOpen } = useAuth();
   const { theme, resolvedTheme, setTheme } = useTheme();
   if (status === "loading") {
     return (
@@ -508,7 +536,7 @@ function AuthGate() {
       </div>
     );
   }
-  if (status !== "authenticated") {
+  if (loginOpen) {
     return <LoginPage theme={theme} onThemeChange={setTheme} />;
   }
   return <Dashboard theme={theme} resolvedTheme={resolvedTheme} setTheme={setTheme} />;

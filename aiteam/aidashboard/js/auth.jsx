@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-// Fired when any API call returns 401 (session expired or logged out elsewhere).
+// Fired when any API call returns 401: a write was attempted without a valid session (for example
+// the session expired or was ended elsewhere). Reads are public, so they never return 401.
 export const UNAUTHORIZED_EVENT = "aidashboard:unauthorized";
 
 // fetch() for the dashboard API. The session is an HttpOnly cookie the browser sends
-// automatically; a 401 outside /api/auth/* sends the user back to the login page.
+// automatically; a 401 outside /api/auth/* drops to read-only mode and opens the login page.
 export async function apiFetch(url, options = {}) {
   const response = await fetch(url, { credentials: "same-origin", ...options });
   if (response.status === 401 && !String(url).startsWith("/api/auth/") && typeof window !== "undefined") {
@@ -23,11 +24,23 @@ async function errorMessage(response, fallback) {
   return fallback;
 }
 
-const AuthContext = createContext({ status: "loading", username: null, login: async () => {}, logout: async () => {} });
+const AuthContext = createContext({
+  status: "loading",
+  username: null,
+  canEdit: false,
+  loginOpen: false,
+  loginReason: null,
+  login: async () => {},
+  logout: async () => {},
+  openLogin: () => {},
+  closeLogin: () => {},
+});
 
-// status: "loading" (checking the session), "anonymous" or "authenticated".
+// status: "loading" (checking the session), "anonymous" (read-only) or "authenticated" (may edit).
+// loginOpen: the login page is shown instead of the dashboard; loginReason "expired" explains why.
 export function AuthProvider({ children }) {
   const [state, setState] = useState({ status: "loading", username: null });
+  const [loginPage, setLoginPage] = useState({ open: false, reason: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +63,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const onUnauthorized = () => setState({ status: "anonymous", username: null });
+    const onUnauthorized = () => {
+      setState({ status: "anonymous", username: null });
+      setLoginPage({ open: true, reason: "expired" });
+    };
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
@@ -68,6 +84,7 @@ export function AuthProvider({ children }) {
     }
     const body = await response.json();
     setState({ status: "authenticated", username: body.username ?? username });
+    setLoginPage({ open: false, reason: null });
   }, []);
 
   const logout = useCallback(async () => {
@@ -78,7 +95,22 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ ...state, login, logout }), [state, login, logout]);
+  const openLogin = useCallback(() => setLoginPage({ open: true, reason: null }), []);
+  const closeLogin = useCallback(() => setLoginPage({ open: false, reason: null }), []);
+
+  const value = useMemo(
+    () => ({
+      ...state,
+      canEdit: state.status === "authenticated",
+      loginOpen: loginPage.open && state.status !== "authenticated",
+      loginReason: loginPage.reason,
+      login,
+      logout,
+      openLogin,
+      closeLogin,
+    }),
+    [state, loginPage, login, logout, openLogin, closeLogin],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

@@ -6,14 +6,25 @@ using Microsoft.AspNetCore.Authorization;
 namespace AiDashboard.Auth;
 
 /// <summary>
-/// Cookie session for logged-in dashboard users. Every endpoint requires a session unless it is
-/// marked AllowAnonymous (health, login, logout and the SPA shell). API calls without a session get
-/// 401 instead of a redirect so the frontend can show the login page.
+/// Cookie session for logged-in dashboard users. The dashboard is read-only without a session:
+/// read requests (GET/HEAD) are open to everyone, while every other method (POST, PUT, PATCH,
+/// DELETE) requires a logged-in user unless the endpoint is marked AllowAnonymous (login, logout).
+/// Endpoints with explicit RequireAuthorization (for example /api/auth/me) always need a session.
+/// Calls without a session get 401 instead of a redirect so the frontend can offer the login page.
 /// </summary>
 public static class DashboardAuthentication
 {
     public const string CookieName = "aidashboard_auth";
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
+
+    /// <summary>Fallback policy: anonymous users may read (GET/HEAD); any write needs a session.</summary>
+    public static readonly AuthorizationPolicy ReadOnlyForAnonymousPolicy = new AuthorizationPolicyBuilder()
+        .RequireAssertion(context =>
+            context.User.Identity?.IsAuthenticated == true ||
+            (context.Resource is HttpContext http && IsReadOnly(http.Request.Method)))
+        .Build();
+
+    public static bool IsReadOnly(string method) => HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
 
     public static IServiceCollection AddDashboardAuthentication(this IServiceCollection services)
     {
@@ -38,7 +49,7 @@ public static class DashboardAuthentication
                 };
             });
         services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+            .SetFallbackPolicy(ReadOnlyForAnonymousPolicy);
         return services;
     }
 

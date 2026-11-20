@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
+import { useAuth } from "./auth.jsx";
 import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgents, statusLabel } from "./agentApi.js";
 
 function statusBadgeColors(label) {
@@ -8,7 +9,7 @@ function statusBadgeColors(label) {
   return "bg-slate-100 dark:bg-slate-700";
 }
 
-function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
+function AgentCard({ agent, nowMs, onEdit, canEdit }) {
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
   const working = isWorking(agent, nowMs);
@@ -56,19 +57,23 @@ function AgentCard({ agent, nowMs, onEdit, onChanged, onError }) {
         )}
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
-          Edit
-        </button>
-      </div>
+      {canEdit && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
+            Edit
+          </button>
+        </div>
+      )}
     </li>
   );
 }
 
+// Agents are visible to everyone; adding and editing them needs a login.
 export default function AgentSlots() {
+  const { canEdit } = useAuth();
   const [state, setState] = useState(() => ({ agents: null, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
-  const [editor, setEditor] = useState(null); // null | { agent }
-  const [actionError, setActionError] = useState(null);
+  const [editorState, setEditor] = useState(null); // null | { agent }
+  const editor = canEdit ? editorState : null;
 
   const load = useCallback(() => {
     listAgents()
@@ -108,11 +113,6 @@ export default function AgentSlots() {
           Unable to load agents: {error}
         </p>
       )}
-      {actionError && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {actionError}
-        </p>
-      )}
       {agents && (
         <ul className="flex flex-col gap-3">
           {[...agents].sort(compareByContainer).map((agent) => (
@@ -121,20 +121,21 @@ export default function AgentSlots() {
               agent={agent}
               nowMs={nowMs}
               onEdit={(a) => setEditor({ agent: a })}
-              onChanged={load}
-              onError={setActionError}
+              canEdit={canEdit}
             />
           ))}
-          <li>
-            <button
-              type="button"
-              aria-label="Add agent"
-              onClick={() => setEditor({ agent: null })}
-              className="flex h-full min-h-24 w-full items-center justify-center rounded border-2 border-dashed border-slate-300 dark:border-slate-600 text-3xl text-slate-400 dark:text-slate-500"
-            >
-              +
-            </button>
-          </li>
+          {canEdit && (
+            <li>
+              <button
+                type="button"
+                aria-label="Add agent"
+                onClick={() => setEditor({ agent: null })}
+                className="flex h-full min-h-24 w-full items-center justify-center rounded border-2 border-dashed border-slate-300 dark:border-slate-600 text-3xl text-slate-400 dark:text-slate-500"
+              >
+                +
+              </button>
+            </li>
+          )}
         </ul>
       )}
       {editor && (
