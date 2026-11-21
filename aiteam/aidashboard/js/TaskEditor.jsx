@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch, useAuth } from "./auth.jsx";
 
 const TASK_REFRESH_INTERVAL_MS = 30000;
 
 async function request(url, options) {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -87,10 +88,13 @@ function TaskForm({ initial, submitLabel, onSubmit, onCancel }) {
 }
 
 // Center panel: create tasks and edit those not yet sent to Jira (status New).
+// Without a login the pending tasks are listed read-only and the create/edit forms are hidden.
 export default function TaskEditor() {
+  const { canEdit, openLogin } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  const [editingIdState, setEditingId] = useState(null);
+  const editingId = canEdit ? editingIdState : null;
   const [projectKey, setProjectKey] = useState(null);
 
   const latestRequest = useRef(0);
@@ -155,7 +159,16 @@ export default function TaskEditor() {
   return (
     <section data-testid="center-panel" className="space-y-4 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <h2 className="text-lg font-semibold">New task</h2>
-      <TaskForm submitLabel="Create task" onSubmit={create} />
+      {canEdit ? (
+        <TaskForm submitLabel="Create task" onSubmit={create} />
+      ) : (
+        <p data-testid="task-login-hint" className="text-sm text-slate-500 dark:text-slate-400">
+          <button type="button" onClick={openLogin} className="font-semibold text-sky-700 underline dark:text-sky-400">
+            Log in
+          </button>{" "}
+          to create and edit tasks.
+        </p>
+      )}
       <h2 className="text-lg font-semibold">Tasks not yet sent to Jira</h2>
       <p className="text-xs text-slate-500 dark:text-slate-400">Updates every 30 s</p>
       {error && (
@@ -178,13 +191,15 @@ export default function TaskEditor() {
               <>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{task.title}</span>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(task.id)}
-                    className="rounded border px-2 py-0.5 text-sm"
-                  >
-                    Edit
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(task.id)}
+                      className="rounded border px-2 py-0.5 text-sm"
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
                 <p className="mt-1 whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{task.description}</p>
               </>

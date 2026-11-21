@@ -7,14 +7,13 @@ using AiTeam.Configuration;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AiDashboard.Tests;
 
 public sealed class DashboardSettingsEndpointsTests
 {
-    private const string Token = "test-write-token";
+    private const string Token = TestAuthHandler.Token;
 
     private sealed class NoopStatusesStore : IActiveStatusesStore
     {
@@ -40,11 +39,9 @@ public sealed class DashboardSettingsEndpointsTests
         settings.Dashboard.AiLabels = ["old"];
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["Dashboard:WriteToken"] = Token });
-        builder.Services.AddAuthentication(DashboardWriteAuthentication.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, DashboardWriteAuthentication>(
-                DashboardWriteAuthentication.SchemeName, _ => { });
+        builder.Services.AddAuthentication(TestAuthHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                TestAuthHandler.SchemeName, _ => { });
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IAiLabelsStore>(store);
         builder.Services.AddSingleton<IActiveStatusesStore>(new NoopStatusesStore());

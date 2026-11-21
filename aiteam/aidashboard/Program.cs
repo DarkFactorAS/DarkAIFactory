@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AiDashboard.Agents;
+using AiDashboard.Auth;
 using AiDashboard.Stats;
 using AiDashboard.Tasks;
 using AiTeam.Configuration;
@@ -11,11 +12,9 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddAuthentication(DashboardWriteAuthentication.SchemeName)
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DashboardWriteAuthentication>(
-        DashboardWriteAuthentication.SchemeName, _ => { });
-builder.Services.AddAuthorization();
-builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AppSettings>>();
+builder.Services.AddDashboardAuthentication();
+builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<DashboardAppSettings>>();
+builder.Services.AddDashboardAccountLogin();
 new DFServices(builder.Services)
     .SetupLogger()
     .SetupMySql()
@@ -56,6 +55,11 @@ builder.Services.AddScoped<IJiraSolvedClient>(services =>
 });
 
 var app = builder.Build();
+// Static files (the SPA shell and its assets) are public; they hold no data. They must run
+// before authorization, or the fallback policy would block them for logged-out users.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -74,7 +78,8 @@ DFLogger.LogOutput(
 // Load credentials server-side only; never expose them in page responses.
 _ = app.Services.GetRequiredService<IntegrationSettings>();
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
+AuthEndpoints.Map(app);
 // Valid projects come from the manager_projects table; projectKey is the first one (default for new tasks).
 app.MapGet("/api/tasks/config", (IAgentDefinitionRepository repository) =>
 {
@@ -104,10 +109,7 @@ AgentEndpoints.Map(app);
 JiraCommentEndpoint.Map(app);
 DashboardSettingsEndpoints.Map(app);
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
-// SPA fallback; unknown /api routes stay 404.
+// SPA fallback (public: the app shows its login page); unknown /api routes stay 404.
 app.MapFallback(context =>
 {
     if (context.Request.Path.StartsWithSegments("/api"))
@@ -125,6 +127,6 @@ app.MapFallback(context =>
 
     context.Response.ContentType = "text/html";
     return context.Response.SendFileAsync(index);
-});
+}).AllowAnonymous();
 
 app.Run();

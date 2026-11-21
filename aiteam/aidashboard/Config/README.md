@@ -2,8 +2,11 @@
 
 AIDashboard has its own config folder, separate from `aiteam/config`.
 
-- `appsettings.Production.json` is tracked with `DATABASE.*` placeholders for
-  project builds; do not use it as runtime configuration.
+- `appsettings.Production.json` is tracked with `DATABASE.*` and `ACCOUNTSERVER.*` placeholders
+  for project builds; do not use it as runtime configuration.
+- `AccountServer` (`Endpoint`, `ClientId`, `ClientSecret`, `Scope`) is the DarkFactor account
+  server used for the dashboard login, the same section as DFWeb. Without an `Endpoint` every
+  login returns 503.
 - For local use, copy `appsettings.template.json` to `appsettings.<Environment>.json`
   (e.g. `Development`, `Acceptance`) and fill in the values. These copies are git-ignored.
 - For Compose, create `aiteam/aidashboard/runtime-config/appsettings.Production.json`

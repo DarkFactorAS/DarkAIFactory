@@ -14,7 +14,8 @@
     <Compile Include="AgentTaskEndpointsTests.cs" />
     <Compile Include="AgentEndpointsTests.cs" />
     <Compile Include="JiraCommentEndpointTests.cs" />
-    <Compile Include="DashboardWriteAuthenticationTests.cs" />
+    <Compile Include="TestAuthHandler.cs" />
+    <Compile Include="AuthEndpointsTests.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
     <PackageReference Include="xunit" Version="2.*" />
     <Using Include="Xunit" />

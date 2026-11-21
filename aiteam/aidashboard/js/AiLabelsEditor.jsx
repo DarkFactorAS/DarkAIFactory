@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { getAiLabels, saveAiLabels } from "./agentApi.js";
-import { useWriteToken, WriteTokenPrompt } from "./WriteToken.jsx";
 
 export function parseLabels(text) {
   return [
@@ -15,7 +14,6 @@ export function parseLabels(text) {
 
 // Inline editor for settings Dashboard.AiLabels (comma-separated input).
 export default function AiLabelsEditor({ onSaved, onCancel }) {
-  const { token, setToken } = useWriteToken();
   const [text, setText] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,10 +32,9 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
     setBusy(true);
     setError(null);
     try {
-      await saveAiLabels(token, parseLabels(text));
+      await saveAiLabels(parseLabels(text));
       onSaved();
     } catch (e) {
-      if (e.status === 401) setToken("");
       setError(e.message);
     } finally {
       setBusy(false);
@@ -65,11 +62,10 @@ export default function AiLabelsEditor({ onSaved, onCancel }) {
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {!token && <WriteTokenPrompt />}
         <button
           type="button"
           onClick={save}
-          disabled={!token || !loaded || busy}
+          disabled={!loaded || busy}
           className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm disabled:opacity-50"
         >
           Save

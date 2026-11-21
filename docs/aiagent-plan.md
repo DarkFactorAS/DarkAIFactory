@@ -129,7 +129,7 @@ The work is split into three stages, each with its own Jira task:
 | 12 | Running alongside old agents | Yes. aiAgent uses its own labels under its own client key (`aiagent`). |
 | 13 | Language model field | Provider (`Claude` or `Copilot`) plus an optional model id. Empty means the default. |
 | 14 | Behavior text | Added after the built-in prompt as an "Agent role and behavior" section. |
-| 15 | Dashboard | Add, edit, enable/disable, delete and live status. All writes need `Dashboard__WriteToken`. |
+| 15 | Dashboard | Add, edit, enable/disable, delete and live status. The dashboard is read-only until a DarkFactor account logs in (DFAI-214). |
 | 16 | Agent scope | Each agent has a list of Jira project keys, mapped to repositories through `manager_projects`. |
 | 17 | Config reload | Config is re-read every polling cycle. A run already in progress keeps its old config. |
 | 18 | Success | Defined per capability (see 6.3). |
@@ -353,7 +353,7 @@ neither pattern matches. **Two overlaps remain, and they're handled by configura
   - `PUT /api/agents/{id}`
   - `PATCH /api/agents/{id}/enabled`
   - `DELETE /api/agents/{id}` (soft delete)
-- **Auth:** every write requires `Authorization: Bearer <Dashboard__WriteToken>`.
+- **Auth:** reads (GET) are public; every write (POST, PUT, PATCH, DELETE) requires a logged-in dashboard session (DarkFactor account login, DFAI-214).
 - **Validation:**
   - `name` is required and unique among agents that aren't deleted.
   - `behavior` can be at most 8,000 characters.
