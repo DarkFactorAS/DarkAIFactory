@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AiDashboard.Tests;
@@ -219,18 +218,16 @@ public sealed class AgentEndpointsTests
     }
 
     // Integration tests: real Kestrel host on a random port with the real write authentication.
-    private const string Token = "test-write-token";
+    private const string Token = TestAuthHandler.Token;
 
     private static async Task<(WebApplication App, HttpClient Client, FakeRepository Repository)> StartAsync()
     {
         var repository = new FakeRepository();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["Dashboard:WriteToken"] = Token });
-        builder.Services.AddAuthentication(DashboardWriteAuthentication.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, DashboardWriteAuthentication>(
-                DashboardWriteAuthentication.SchemeName, _ => { });
+        builder.Services.AddAuthentication(TestAuthHandler.SchemeName)
+            .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
+                TestAuthHandler.SchemeName, _ => { });
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IAgentDefinitionRepository>(repository);
         var app = builder.Build();
