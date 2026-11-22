@@ -241,6 +241,10 @@ public sealed class AuthEndpointsTests
         public ReturnData ResetPasswordWithEmail(string email) => throw new NotSupportedException();
         public ReturnData ResetPasswordWithCode(string code, string email) => throw new NotSupportedException();
         public ReturnData ResetPasswordWithToken(string token, string password) => throw new NotSupportedException();
+        public AdminUserListData AdminSearchUsers(string query) => throw new NotSupportedException();
+        public AdminUserData AdminGetUser(uint accountId) => throw new NotSupportedException();
+        public AdminUserData AdminUpdateUser(AdminUpdateUserData data) => throw new NotSupportedException();
+        public AdminUserData AdminSetPassword(uint accountId, string encryptedPassword) => throw new NotSupportedException();
     }
 
     private static DashboardAppSettings Configured() => new()
