@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Hosting;
 
 namespace AiDashboard.Auth;
 
@@ -21,8 +23,16 @@ public static class AuthEndpoints
     }
 
     internal static async Task<IResult> LoginAsync(
-        LoginRequest? request, IDashboardLogin login, HttpContext http, CancellationToken cancellationToken)
+        LoginRequest? request, IDashboardLogin login, HttpContext http, IWebHostEnvironment environment,
+        CancellationToken cancellationToken)
     {
+        if (!http.Request.IsHttps && !environment.IsDevelopment())
+        {
+            return Results.Json(
+                new { error = "HTTPS is required for login." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var username = request?.Username?.Trim();
         var password = request?.Password;
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password) ||

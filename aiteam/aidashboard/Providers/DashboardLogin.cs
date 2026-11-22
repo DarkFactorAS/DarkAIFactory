@@ -56,7 +56,10 @@ public sealed class AccountServerLogin(IAccountClient accountClient, IConfigurat
         try
         {
             accountClient.SetEndpoint(server.Endpoint);
-            accountClient.SetAuthCredentials(server.ClientId, server.ClientSecret, server.Scope);
+            accountClient.SetAuthCredentials(
+                server.ClientId ?? string.Empty,
+                server.ClientSecret ?? string.Empty,
+                server.Scope ?? string.Empty);
             var loginData = new LoginData { username = username, password = DFCrypt.EncryptInput(password) };
             // The account client API is synchronous; keep it off the request thread.
             data = await Task.Run(() => accountClient.LoginAccount(loginData), cancellationToken);

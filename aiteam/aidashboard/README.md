@@ -144,8 +144,10 @@ the account server accepts may sign in. Configure the account server in the `Acc
 section of the appsettings (see [Config](Config/README.md)).
 
 - `POST /api/auth/login` (`username`, `password`) returns `{ username }` and sets the
-  `aidashboard_auth` session cookie (HttpOnly, `SameSite=Strict`, `Secure` on HTTPS; 12 hours,
-  sliding). 400 for missing input, 401 `Invalid username or password.` (same text for unknown user
+  `aidashboard_auth` session cookie (HttpOnly, `SameSite=Strict`, Secure outside Development; 12 hours,
+  sliding). Login is accepted only when ASP.NET Core sees HTTPS outside Development; configure
+  HTTPS directly (this app does not process forwarded-protocol headers). 400 for missing input or an
+  insecure request, 401 `Invalid username or password.` (same text for unknown user
   and wrong password), 502 if the account server fails, 503 if `AccountServer.Endpoint` is not set.
 - `GET /api/auth/me` returns `{ username }`, or 401 when not logged in.
 - `POST /api/auth/logout` ends the session (204).
