@@ -72,11 +72,23 @@ public sealed class AccountServerLogin(IAccountClient accountClient, IConfigurat
             return new DashboardLoginResult(DashboardLoginStatus.Unavailable);
         }
 
-        return data.errorCode == AccountData.ErrorCode.OK
-            ? new DashboardLoginResult(
-                DashboardLoginStatus.Ok,
-                string.IsNullOrWhiteSpace(data.nickname) ? username : data.nickname,
-                data.id)
-            : new DashboardLoginResult(DashboardLoginStatus.InvalidCredentials);
+        switch (data.errorCode)
+        {
+            case AccountData.ErrorCode.OK:
+                return new DashboardLoginResult(
+                    DashboardLoginStatus.Ok,
+                    string.IsNullOrWhiteSpace(data.nickname) ? username : data.nickname,
+                    data.id);
+            // Same answer to the browser for unknown user and wrong password.
+            case AccountData.ErrorCode.UserDoesNotExist:
+            case AccountData.ErrorCode.WrongPassword:
+                return new DashboardLoginResult(DashboardLoginStatus.InvalidCredentials);
+            default:
+                // Anything else is a server or transport problem (the account client maps an
+                // unreachable server or a rejected OAuth2 client to an error code, not an exception).
+                // Reporting it as a wrong password would hide the real cause.
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Login", $"Account server returned {data.errorCode}");
+                return new DashboardLoginResult(DashboardLoginStatus.Unavailable);
+        }
     }
 }

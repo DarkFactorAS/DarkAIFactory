@@ -299,6 +299,23 @@ public sealed class AuthEndpointsTests
         Assert.Equal(DashboardLoginStatus.InvalidCredentials, result.Status);
     }
 
+    [Theory]
+    // An unreachable server or a rejected OAuth2 client comes back as an error code, not an
+    // exception; it must not be reported to the user as a wrong password.
+    [InlineData((AccountData.ErrorCode)500)]
+    [InlineData((AccountData.ErrorCode)401)]
+    [InlineData(AccountData.ErrorCode.ErrorInData)]
+    [InlineData(AccountData.ErrorCode.NotAuthorized)]
+    public async Task AccountServerLogin_ServerError_IsUnavailable(AccountData.ErrorCode code)
+    {
+        var login = new AccountServerLogin(
+            new FakeAccountClient(_ => new AccountData { errorCode = code }), new FakeConfig(Configured()));
+
+        var result = await login.LoginAsync("thor", "secret12", CancellationToken.None);
+
+        Assert.Equal(DashboardLoginStatus.Unavailable, result.Status);
+    }
+
     [Fact]
     public async Task AccountServerLogin_ClientThrows_IsUnavailable()
     {
