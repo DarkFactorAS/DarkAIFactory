@@ -1,3 +1,4 @@
+using AiDashboard.Agents;
 using AiDashboard.Tasks;
 using AiTeam.Configuration;
 using Microsoft.AspNetCore.Http;
@@ -10,12 +11,52 @@ public sealed class AgentTaskEndpointsTests
 
     private static T Value<T>(IResult result) => (T)((IValueHttpResult)result).Value!;
 
+    private static readonly IAgentDefinitionRepository Projects = new FakeProjects("DFAI", "P", "OTHER");
+
+    private sealed class FakeProjects(params string[] keys) : IAgentDefinitionRepository
+    {
+        public IReadOnlyList<string> ListProjectKeys() => keys;
+        public IReadOnlyList<AgentView> List() => [];
+        public AgentView? Find(long id) => null;
+        public bool NameExists(string name, long? excludeId) => false;
+        public IReadOnlyList<string> ExistingProjectKeys(IReadOnlyCollection<string> k) => [];
+        public IReadOnlyList<string> ListBuilderProjectKeys() => keys;
+        public AgentView Create(AgentWrite agent) => throw new NotSupportedException();
+        public AgentView? Update(long id, AgentWrite agent) => throw new NotSupportedException();
+        public bool SetEnabled(long id, bool enabled) => false;
+        public bool SoftDelete(long id) => false;
+    }
+
+    [Fact]
+    public void Create_AcceptsConfiguredKeyInAnyCaseAndStoresConfiguredSpelling()
+    {
+        var repository = new FakeRepository();
+        var result = AgentTaskEndpoints.Create(
+            repository, Projects, new AgentTaskRequest(" other ", "t", "d", null, null));
+
+        Assert.Equal(201, Status(result));
+        Assert.Equal("OTHER", Value<AgentTask>(result).ProjectKey);
+    }
+
+    [Fact]
+    public void CreateAndUpdate_RejectUnknownProject()
+    {
+        var repository = new FakeRepository();
+        repository.Create("P", "a", "d");
+
+        Assert.Equal(400, Status(AgentTaskEndpoints.Create(
+            repository, Projects, new AgentTaskRequest("NOPE", "t", "d", null, null))));
+        Assert.Equal(400, Status(AgentTaskEndpoints.Update(
+            repository, Projects, 1, new AgentTaskRequest("NOPE", "t", "d", "New", null))));
+        Assert.Single(repository.Tasks);
+    }
+
     [Fact]
     public void Create_StoresTrimmedTaskAsNew()
     {
         var repository = new FakeRepository();
         var result = AgentTaskEndpoints.Create(
-            repository, new AgentTaskRequest(" DFAI ", " Title ", " Body ", null, null));
+            repository, Projects, new AgentTaskRequest(" DFAI ", " Title ", " Body ", null, null));
 
         Assert.Equal(201, Status(result));
         var task = Value<AgentTask>(result);
@@ -34,7 +75,7 @@ public sealed class AgentTaskEndpointsTests
     public void Create_RejectsMissingFields(string? project, string? title, string? description)
     {
         var repository = new FakeRepository();
-        var result = AgentTaskEndpoints.Create(repository, new AgentTaskRequest(project, title, description, null, null));
+        var result = AgentTaskEndpoints.Create(repository, Projects, new AgentTaskRequest(project, title, description, null, null));
 
         Assert.Equal(400, Status(result));
         Assert.Empty(repository.Tasks);
@@ -44,10 +85,10 @@ public sealed class AgentTaskEndpointsTests
     public void Create_RejectsNullBodyAndOversizedValues()
     {
         var repository = new FakeRepository();
-        Assert.Equal(400, Status(AgentTaskEndpoints.Create(repository, null)));
+        Assert.Equal(400, Status(AgentTaskEndpoints.Create(repository, Projects, null)));
         var longTitle = new string('x', AgentTaskEndpoints.MaxTitleLength + 1);
         Assert.Equal(400, Status(AgentTaskEndpoints.Create(
-            repository, new AgentTaskRequest("P", longTitle, "d", null, null))));
+            repository, Projects, new AgentTaskRequest("P", longTitle, "d", null, null))));
         Assert.Empty(repository.Tasks);
     }
 
@@ -71,16 +112,16 @@ public sealed class AgentTaskEndpointsTests
         repository.Create("P", "a", "d");
 
         var ok = AgentTaskEndpoints.Update(
-            repository, 1, new AgentTaskRequest("P", "new", "d2", "Created", " DFAI-1 "));
+            repository, Projects, 1, new AgentTaskRequest("P", "new", "d2", "Created", " DFAI-1 "));
         Assert.Equal(200, Status(ok));
         var task = Value<AgentTask>(ok);
         Assert.Equal("Created", task.Status);
         Assert.Equal("DFAI-1", task.JiraKey);
 
         Assert.Equal(400, Status(AgentTaskEndpoints.Update(
-            repository, 1, new AgentTaskRequest("P", "new", "d2", "Done", null))));
+            repository, Projects, 1, new AgentTaskRequest("P", "new", "d2", "Done", null))));
         Assert.Equal(404, Status(AgentTaskEndpoints.Update(
-            repository, 99, new AgentTaskRequest("P", "new", "d2", "New", null))));
+            repository, Projects, 99, new AgentTaskRequest("P", "new", "d2", "New", null))));
     }
 
     [Fact]

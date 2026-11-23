@@ -86,7 +86,8 @@ as a new Jira comment on that issue (the description is never changed; 400 on in
 Like every write endpoint, comment submissions require a logged-in session (see [Login](#login)).
 Only issues currently returned by the active AI task list in the configured
 Jira projects are authorized (403 otherwise).
-`GET /api/tasks/config` returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used by task creation.
+`GET /api/tasks/config` returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
+The New task form has a project selector fed by `projectKeys`, defaulting to the first key; with only one project it shows the key as read-only text instead. The chosen project is shown as a badge in the pending task list and cannot be changed when editing. `POST`/`PUT /api/agent-tasks` reject a `projectKey` that is not in `manager_projects` (400).
 AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, login
 required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
 only `settings[aidashboard, Dashboard.AiLabels]` and updates the running app immediately, no restart needed. An empty
@@ -187,7 +188,7 @@ Manual check: open the dashboard logged out and see all panels with data, "Read-
 the header, and no editing controls; Log in opens the form, Back to dashboard returns; a wrong password
 shows the error and clears the password field; a valid account returns to the dashboard with the user
 name, Log out and the editing controls; reload keeps the session; Log out returns to read-only, and a
-`POST /api/agent-tasks` then returns 401; with "Remember me for 7 days" checked the cookie expires in about 7 days, unchecked about 12 hours; check light and dark themes.
+`POST /api/agent-tasks` then returns 401; with "Remember me for 7 days" checked the cookie expires in about 7 days, unchecked about 12 hours; check light and dark themes. With two or more `manager_projects` rows the New task form lists every project with the first selected; creating a task in the second shows that key as the badge and stores it as `project_key`; with one project no dropdown appears and the key is shown as text.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
