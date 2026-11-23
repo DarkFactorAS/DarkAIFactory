@@ -15,7 +15,6 @@ public sealed class JiraSettings
     public string JiraEmail { get; set; } = string.Empty;
     public string JiraApiToken { get; set; } = string.Empty;
     public string JiraStatusName { get; set; } = "Selected for Development";
-    public string JiraJql { get; set; } = string.Empty;
     public string JiraInProgressStatus { get; set; } = "In Progress";
     public string JiraInReviewStatus { get; set; } = "In Review";
     public string JiraAssigneeAccountId { get; set; } = string.Empty;

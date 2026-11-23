@@ -178,6 +178,13 @@ public static class IntegrationSettingsPatcher
                 ('aiclaudeworker', 'Claude.AgentModel', 'claude-sonnet-5-5')
             ON DUPLICATE KEY UPDATE `value` = `settings`.`value`
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        patcher.Patch(system, 12,
+            "DELETE FROM `settings` WHERE `client` = 'shared' AND `name` = 'Jira.JiraJql'");
         return patcher.Successful();
     }
 }

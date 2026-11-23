@@ -6,17 +6,6 @@ internal static class JiraQuery
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
-    public static string ScopeToProject(string jql, string projectKey)
-    {
-        var orderByIndex = FindOrderByIndex(jql);
-        var filter = (orderByIndex < 0 ? jql : jql[..orderByIndex]).TrimEnd();
-        var orderBy = orderByIndex < 0 ? string.Empty : $" {jql[orderByIndex..].TrimStart()}";
-        var projectFilter = $"project = \"{EscapeJql(projectKey)}\"";
-        return filter.Length == 0
-            ? $"{projectFilter}{orderBy}"
-            : $"{projectFilter} AND ({filter}){orderBy}";
-    }
-
     public static string AddPickupLabelExclusion(string jql, string pickupLabel)
     {
         var orderByIndex = FindOrderByIndex(jql);

@@ -9,7 +9,6 @@ internal sealed record BuilderSettings(
     string JiraApiToken,
     string GitHubRepositoryToken,
     string AgentGitHubToken,
-    string JiraJql,
     string JiraStatusName,
     string PickupLabel,
     string FailureLabel,
@@ -20,9 +19,6 @@ internal sealed record BuilderSettings(
     string DoneStatus,
     string AssigneeAccountId)
 {
-    /// <summary>A custom JQL replaces the planned-issue gate: issues without a stored plan get a local plan.</summary>
-    public bool AllowLocalPlan => !string.IsNullOrWhiteSpace(JiraJql);
-
     public static BuilderSettings Load(IntegrationSettings settings, WorkflowLabels labels)
     {
         if (!Uri.TryCreate(settings.Jira.JiraBaseUrl, UriKind.Absolute, out var jiraUri) ||
@@ -50,7 +46,6 @@ internal sealed record BuilderSettings(
             Required(settings.Jira.JiraApiToken, "Jira.JiraApiToken"),
             Required(settings.GitHub.GitHubRepositoryToken, "GitHub.GitHubRepositoryToken"),
             settings.GitHub.AgentGitHubToken,
-            settings.Jira.JiraJql.Trim(),
             Or(settings.Jira.JiraStatusName, "Selected for Development"),
             Label("PickupLabel"), Label("FailureLabel"), Label("AnalyzedLabel"), Label("IgnoredLabel"),
             Or(settings.Jira.JiraInProgressStatus, "In Progress"),

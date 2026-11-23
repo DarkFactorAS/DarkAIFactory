@@ -71,10 +71,8 @@ internal sealed record PlanningConfiguration(
             throw new InvalidOperationException("Jira.JiraAutoApproveSmallChanges must be true or false.");
         }
 
-        var jql = string.IsNullOrWhiteSpace(settings.Jira.JiraJql)
-            ? $"project = \"{EscapeJql(jiraProjectKey)}\" AND status = \"{EscapeJql(statusName)}\" " +
-              "AND issuetype != Epic ORDER BY priority DESC, created ASC"
-            : ScopeToProject(settings.Jira.JiraJql.Trim(), jiraProjectKey);
+        var jql = $"project = \"{EscapeJql(jiraProjectKey)}\" AND status = \"{EscapeJql(statusName)}\" " +
+                  "AND issuetype != Epic ORDER BY priority DESC, created ASC";
         foreach (var excluded in new[] { failed, picked, ignored })
         {
             jql = AddPickupLabelExclusion(jql, excluded);

@@ -64,11 +64,9 @@ internal sealed class BuilderCapability(
 
     internal static string BuildJql(BuilderSettings settings, string projectKey)
     {
-        var jql = settings.AllowLocalPlan
-            ? JiraQuery.ScopeToProject(settings.JiraJql, projectKey)
-            : $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND status = \"{JiraQuery.EscapeJql(settings.JiraStatusName)}\" " +
-              $"AND issuetype != Epic AND labels in (\"{JiraQuery.EscapeJql(settings.AnalyzedLabel)}\") " +
-              "ORDER BY priority DESC, created ASC";
+        var jql = $"project = \"{JiraQuery.EscapeJql(projectKey)}\" AND status = \"{JiraQuery.EscapeJql(settings.JiraStatusName)}\" " +
+                  $"AND issuetype != Epic AND labels in (\"{JiraQuery.EscapeJql(settings.AnalyzedLabel)}\") " +
+                  "ORDER BY priority DESC, created ASC";
         return JiraQuery.AddPickupLabelExclusion(jql, settings.PickupLabel);
     }
 
@@ -98,7 +96,7 @@ internal sealed class BuilderCapability(
 
         if (issue.Labels.Contains(settings.PickupLabel) || issue.Labels.Contains(settings.FailureLabel) ||
             issue.Labels.Contains(settings.IgnoredLabel) ||
-            (!settings.AllowLocalPlan && !issue.Labels.Contains(settings.AnalyzedLabel)) ||
+            !issue.Labels.Contains(settings.AnalyzedLabel) ||
             !string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
         {
             return;
@@ -129,7 +127,7 @@ internal sealed class BuilderCapability(
             return;
         }
 
-        if (plan is null && !settings.AllowLocalPlan)
+        if (plan is null)
         {
             await IgnoreAsync(context, jira, issue, "no plan exists for it. Waiting for the Planning capability.", cancellationToken);
             return;
@@ -162,7 +160,7 @@ internal sealed class BuilderCapability(
 
     private async Task ImplementAsync(
         AgentContext context, BuilderSettings settings, Uri repositoryUrl, IBuilderJira jira, BuilderIssue issue,
-        AgentPlan? storedPlan, CancellationToken cancellationToken)
+        AgentPlan storedPlan, CancellationToken cancellationToken)
     {
         string? workspacePath = null;
         string? branchName = null;
@@ -192,17 +190,7 @@ internal sealed class BuilderCapability(
             branchName = await gitHub.CloneAndBranchAsync(
                 workspacePath, issue.Key, issue.Summary, baseBranch, cancellationToken);
 
-            string plan;
-            if (storedPlan is not null)
-            {
-                plan = storedPlan.Plan;
-            }
-            else
-            {
-                AgentLog.LogOutput(DFLogLevel.INFO, Log, $"No stored plan for {issue.Key}; generating a plan locally.");
-                plan = await RunRunnerAsync(context, settings, RunnerModes.Plan, workspacePath,
-                    PromptBuilder.BuildPlanPrompt(issue), cancellationToken);
-            }
+            var plan = storedPlan.Plan;
 
             var before = await jira.GetIssueAsync(issue.Key, cancellationToken);
             if (ManagerPlan.Fingerprint(before.Summary, before.Description, repositoryUrl) !=

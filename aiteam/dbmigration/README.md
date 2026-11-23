@@ -43,6 +43,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `IntegrationSettings` | 2 | Default settings rows (empty credentials) |
 | `IntegrationSettings` | 10 | Scope constraint allows the `aiclaudeworker` client (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`, `Claude.AgentModel`) |
 | `IntegrationSettings` | 11 | `aiclaudeworker` rows (empty credentials, model `claude-sonnet-5-5`) |
+| `IntegrationSettings` | 12 | Removes the obsolete `shared` / `Jira.JiraJql` row |
 | `WorkflowLabels` | 4 | `aiclaudeworker` labels, equal to the `aiworker` defaults |
 | `AgentTasks` | 1 | `agent_tasks` (`CREATE TABLE IF NOT EXISTS`; project key, title, description, status New/Created/Failed, Jira key, created/updated), used by the dashboard task API |
 | `ReviewCommentAttempts` | 1 | `review_comment_attempts` (`CREATE TABLE IF NOT EXISTS`; used by the retired review worker; dropped by `LegacyAgentCleanup` 1) |
