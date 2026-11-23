@@ -106,6 +106,7 @@ services:
 #      - ${AIDASHBOARD_CONFIG_PATH:-./aidashboard/Config}:/app/Config:ro
     ports:
       # All host addresses, so the dashboard is reachable from other machines on the network.
+      # HTTPS only (self-signed unless a certificate is configured): https://localhost:8281
       - "0.0.0.0:${AIDASHBOARD_PORT:-8281}:8080"
     restart: "no"
     init: true

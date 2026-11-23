@@ -135,6 +135,18 @@ Manual check: cards appear above the task editor; create via `+`; edit; toggle e
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale
 heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it.
 
+## HTTPS
+
+Outside Development, Kestrel listens with TLS only, on port 8080 (`Https:Port` to change it), so
+the Docker container and the production deploy (`--publish <port>:8080`) are reached at
+`https://<host>:<port>`. Plain `http://` to that port does not work. The certificate comes from
+`Kestrel:Certificates:Default` (for example the environment variables
+`Kestrel__Certificates__Default__Path` and `Kestrel__Certificates__Default__Password` with a
+mounted `.pfx`). Without one, the app generates a self-signed certificate at startup
+(`Providers/DashboardHttps.cs`): traffic is encrypted, but browsers show a certificate warning
+that has to be accepted once per start. Development (`dotnet run`, VS Code launch) keeps plain
+HTTP on `ASPNETCORE_URLS` behind the Vite dev proxy.
+
 ## Login
 
 The dashboard is public and read-only; making changes requires a DarkFactor account (DFAI-214). Login uses the same account
@@ -145,8 +157,8 @@ section of the appsettings (see [Config](Config/README.md)).
 
 - `POST /api/auth/login` (`username`, `password`, optional `rememberMe`) returns `{ username }` and sets the
   `aidashboard_auth` session cookie (HttpOnly, `SameSite=Strict`, Secure outside Development; 12 hours,
-  sliding). `rememberMe: true` makes it a 7-day sliding cookie; unchecked or missing keeps the 12-hour one. Login is accepted only when ASP.NET Core sees HTTPS outside Development; configure
-  HTTPS directly (this app does not process forwarded-protocol headers). 400 for missing input or an
+  sliding). `rememberMe: true` makes it a 7-day sliding cookie; unchecked or missing keeps the 12-hour one. Login is accepted only when ASP.NET Core sees HTTPS outside Development (this app does not
+  process forwarded-protocol headers), so the app serves HTTPS itself there; see [HTTPS](#https). 400 for missing input or an
   insecure request, 401 `Invalid username or password.` (same text for unknown user
   and wrong password), 502 if the account server fails, 503 if `AccountServer.Endpoint` is not set.
 - `GET /api/auth/me` returns `{ username }`, or 401 when not logged in.
