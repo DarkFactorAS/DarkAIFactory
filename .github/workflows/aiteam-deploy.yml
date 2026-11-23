@@ -13,7 +13,7 @@ concurrency:
 jobs:
   dbmigrator:
     name: Deploy DBMigrator
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -24,7 +24,7 @@ jobs:
   aitechlead:
     name: Deploy AITechLead
     needs: [dbmigrator]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -35,7 +35,7 @@ jobs:
   aiworker:
     name: Deploy AIWorker
     needs: [aitechlead]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -46,7 +46,7 @@ jobs:
   aiclaudeworker:
     name: Deploy AIClaudeWorker
     needs: [aiworker]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -57,7 +57,7 @@ jobs:
   aireviewworker:
     name: Deploy AIReviewWorker
     needs: [aiclaudeworker]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -68,7 +68,7 @@ jobs:
   aiagent:
     name: Deploy AiAgent
     needs: [aireviewworker]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0
@@ -79,7 +79,7 @@ jobs:
   aijiramanager:
     name: Deploy AIJiraManager
     needs: [aiagent]
-    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.7
+    uses: DarkFactorAS/Infrastructure/.github/workflows/infrastructure-server-deploy.yml@v1.8
     with:
       environment: production
       external_port: 0

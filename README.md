@@ -69,7 +69,7 @@ git submodule update --init --recursive
 Pushes to `main` and pull requests run the aiagent and aidashboard .NET and Docker
 workflows in [.github/workflows](.github/workflows). The aiagent .NET workflow
 also builds/tests dbmigration. Docker CI uses the shared
-`infrastructure-server-ci.yml@v1.7` workflow from `DarkFactorAS/Infrastructure`.
+`infrastructure-docker-ci.yml@v1.8` workflow from `DarkFactorAS/Infrastructure`.
 
 ### Security scanning (Snyk)
 
@@ -114,7 +114,7 @@ The [Deploy - Production](.github/workflows/deploy.yml) workflow deploys
 DBMigrator, AITechLead (`aiteam/aimanager`), AIWorker, AIClaudeWorker
 (`aiteam/aiclaudeworker`), AIReviewWorker (`aiteam/aireviewworker`), AiAgent (`aiteam/aiagent`) and AIJiraManager
 (`aiteam/aijiramanager`) using the reusable
-`infrastructure-server-deploy.yml` workflow, pinned to `v1.7`. It runs only via
+`infrastructure-server-deploy.yml` workflow, pinned to `v1.8`. It runs only via
 manual `workflow_dispatch` and deploys only to `production`. The jobs run in
 order: DBMigrator, then AITechLead, then AIWorker, then AIClaudeWorker, then AIReviewWorker, then AiAgent, then AIJiraManager. Deployments are serialized.
 
