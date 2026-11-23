@@ -110,7 +110,7 @@ services:
       # Container port 443 (Https__Port below) makes Docker Desktop link to https://; app_protocol
       # marks the port as HTTPS for tools that read the compose file. Production keeps 8080.
       - name: https
-        target: 443
+        target: 8080
         host_ip: 0.0.0.0
         published: "${AIDASHBOARD_PORT:-8281}"
         protocol: tcp
@@ -118,7 +118,7 @@ services:
     restart: "no"
     init: true
     environment:
-      Https__Port: 443
+      Https__Port: 8080
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
     security_opt:
       - no-new-privileges:true
