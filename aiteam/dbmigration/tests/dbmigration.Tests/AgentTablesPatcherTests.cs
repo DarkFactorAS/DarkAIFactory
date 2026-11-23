@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(15, patcher.Sql.Count);
+        Assert.Equal(16, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -81,8 +81,18 @@ public sealed class AgentTablesPatcherTests
         var patcher = new RecordingPatcher(0);
         Assert.True(AgentTablesPatcher.Run(patcher));
 
-        Assert.Contains("'Dashboard.ActiveStatuses'", patcher.Sql[^1]);
-        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", patcher.Sql[^1]);
+        Assert.Contains("'Dashboard.ActiveStatuses'", patcher.Sql[^2]);
+        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", patcher.Sql[^2]);
+    }
+
+    [Fact]
+    public void Patcher_AllowsDashboardCardLabels()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(AgentTablesPatcher.Run(patcher));
+
+        Assert.Contains("'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))", patcher.Sql[^1]);
+        Assert.Contains("('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels')", patcher.Sql[^1]);
     }
 
     [Fact]
@@ -92,7 +102,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal(11, patcher.Numbers[10]);
-        Assert.Equal(15, patcher.Numbers[^1]);
+        Assert.Equal(16, patcher.Numbers[^1]);
         var sql = patcher.Sql[10];
         Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
         Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);

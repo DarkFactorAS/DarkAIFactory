@@ -27,6 +27,18 @@ public sealed class ActiveStatusesStore(IntegrationSettingsRepository repository
     public void Save(IReadOnlyList<string> statuses) => repository.SaveDashboardActiveStatuses(statuses);
 }
 
+public sealed record CardLabelsRequest(List<string>? Labels);
+
+public interface ICardLabelsStore
+{
+    void Save(IReadOnlyList<string> labels);
+}
+
+public sealed class CardLabelsStore(IntegrationSettingsRepository repository) : ICardLabelsStore
+{
+    public void Save(IReadOnlyList<string> labels) => repository.SaveDashboardCardLabels(labels);
+}
+
 // Read/write of the single setting Dashboard.AiLabels (client 'aidashboard').
 public static class DashboardSettingsEndpoints
 {
@@ -42,6 +54,51 @@ public static class DashboardSettingsEndpoints
         app.MapPut("/api/settings/ai-labels", Put).RequireAuthorization();
         app.MapGet("/api/settings/active-statuses", GetStatuses);
         app.MapPut("/api/settings/active-statuses", PutStatuses).RequireAuthorization();
+        app.MapGet("/api/settings/card-labels", GetCardLabels);
+        app.MapPut("/api/settings/card-labels", PutCardLabels).RequireAuthorization();
+    }
+
+    public static IResult GetCardLabels(IntegrationSettings settings) =>
+        Results.Ok(new { labels = settings.Dashboard.CardLabels });
+
+    public static IResult PutCardLabels(IntegrationSettings settings, ICardLabelsStore store, CardLabelsRequest? request)
+    {
+        if (request?.Labels is null)
+        {
+            return Results.BadRequest(new { error = "labels is required." });
+        }
+
+        var labels = IntegrationSettingsRepository.NormalizeAiLabels(request.Labels.Select(l => l ?? string.Empty));
+        if (labels.Count > MaxLabels)
+        {
+            return Results.BadRequest(new { error = $"At most {MaxLabels} labels are allowed." });
+        }
+
+        if (request.Labels.Any(l => l is not null && (l.Length > MaxLabelLength || l.Trim().Any(c => char.IsWhiteSpace(c) || c == ','))))
+        {
+            return Results.BadRequest(new
+            {
+                error = $"Each label must be at most {MaxLabelLength} characters and contain no whitespace or commas."
+            });
+        }
+
+        lock (SaveLock)
+        {
+            try
+            {
+                store.Save(labels);
+            }
+            catch (Exception ex)
+            {
+                DFLogger.LogOutput(DFLogLevel.ERROR, "Settings", $"Saving card labels failed ({ex.GetType().Name}).");
+                return Results.Json(new { error = "Unable to save the card labels." },
+                    statusCode: StatusCodes.Status500InternalServerError);
+            }
+
+            settings.Dashboard.CardLabels = labels;
+        }
+
+        return Results.Ok(new { labels });
     }
 
     public const int MaxStatuses = 20;

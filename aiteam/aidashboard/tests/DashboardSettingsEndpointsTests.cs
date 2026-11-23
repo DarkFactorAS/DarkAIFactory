@@ -20,6 +20,11 @@ public sealed class DashboardSettingsEndpointsTests
         public void Save(IReadOnlyList<string> statuses) { }
     }
 
+    private sealed class NoopCardLabelsStore : ICardLabelsStore
+    {
+        public void Save(IReadOnlyList<string> labels) { }
+    }
+
     private sealed class FakeStore : IAiLabelsStore
     {
         public List<IReadOnlyList<string>> Saved { get; } = [];
@@ -45,6 +50,7 @@ public sealed class DashboardSettingsEndpointsTests
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IAiLabelsStore>(store);
         builder.Services.AddSingleton<IActiveStatusesStore>(new NoopStatusesStore());
+        builder.Services.AddSingleton<ICardLabelsStore>(new NoopCardLabelsStore());
         builder.Services.AddSingleton(settings);
         var app = builder.Build();
         app.UseAuthentication();

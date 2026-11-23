@@ -100,6 +100,11 @@ are allowed; 400 otherwise), writes only `settings[aidashboard, Dashboard.Active
 immediately. An empty list means: show every non-Done status. The cogwheel button in the "Top 5 AI tasks" header
 opens the editor and reloads the panel after saving.
 
+Card labels: `GET /api/settings/card-labels` returns `{ labels }`; `PUT /api/settings/card-labels` (`labels`,
+login required, 401 otherwise) validates like the AI labels (max 20, 1-255 chars, no whitespace or commas; 400
+otherwise), writes only `settings[aidashboard, Dashboard.CardLabels]` and updates the running app immediately.
+The same cogwheel editor has a "Labels to show on cards" field. An empty list means the defaults below.
+
 Manual check (cogwheel): open the cogwheel, save `In Progress` and the list narrows without a reload;
 an empty value restores all non-Done statuses; saving with an expired session opens the login page; the list survives a reload.
 See the configuration guide for migrating existing credentials into the database.
@@ -124,8 +129,9 @@ Top 5 AI tasks cards get a highlighted blue border (same as working agent cards)
 enabled agent with a fresh heartbeat is Running on that issue in the Planning, Builder or Review
 capability (agents are polled every 30 seconds).
 
-Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each Jira label
-`ai-approved`, `aiagent-needs-clarification`, and `aiagent-ready-to-merge` on the issue (exact match,
+Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each configured
+Jira label (`Dashboard.CardLabels`; default `ai-approved`, `aiagent-needs-clarification` and
+`aiagent-ready-to-merge` when empty) that is on the issue (exact match,
 `data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label while all
 review threads are resolved, and removes it when unresolved or failed review work remains.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one

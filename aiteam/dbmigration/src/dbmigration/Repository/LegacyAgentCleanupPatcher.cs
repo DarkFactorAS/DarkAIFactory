@@ -42,9 +42,10 @@ public static class LegacyAgentCleanupPatcher
                     (`client` = 'shared' AND `name` NOT IN
                         ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel',
                          'GitHub.AgentModel', 'Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel',
-                         'Dashboard.AiLabels', 'Dashboard.ActiveStatuses'))
+                         'Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))
                     OR
-                    (`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses'))
+                    (`client` = 'aidashboard' AND `name` IN
+                        ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))
                     OR
                     (`client` = 'aiagent' AND `name` IN
                         ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))

@@ -67,7 +67,8 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
             Dashboard = new DashboardSettings
             {
                 AiLabels = ParseAiLabels(ReadClientOptional("Dashboard.AiLabels")),
-                ActiveStatuses = ParseStatuses(ReadClientOptional("Dashboard.ActiveStatuses"))
+                ActiveStatuses = ParseStatuses(ReadClientOptional("Dashboard.ActiveStatuses")),
+                CardLabels = ParseAiLabels(ReadClientOptional("Dashboard.CardLabels"))
             },
             Claude = new ClaudeSettings
             {
@@ -104,6 +105,10 @@ public sealed class IntegrationSettingsRepository(IDbConnectionFactory connectio
     // Writes only settings[aidashboard, Dashboard.ActiveStatuses].
     public void SaveDashboardActiveStatuses(IReadOnlyList<string> statuses) =>
         SaveDashboardSetting("Dashboard.ActiveStatuses", string.Join(",", NormalizeStatuses(statuses)));
+
+    // Writes only settings[aidashboard, Dashboard.CardLabels].
+    public void SaveDashboardCardLabels(IReadOnlyList<string> labels) =>
+        SaveDashboardSetting("Dashboard.CardLabels", string.Join(",", NormalizeAiLabels(labels)));
 
     private void SaveDashboardSetting(string name, string value)
     {

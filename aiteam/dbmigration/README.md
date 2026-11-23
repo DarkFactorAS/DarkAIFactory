@@ -49,7 +49,7 @@ Existing migration systems and IDs are retained; new upgrades append patches:
 | `LegacyAgentCleanup` | 1-3 | `DROP TABLE IF EXISTS` for `review_comment_attempts`, `pull_requests` and `manager_plans` (tables used only by the retired agents) |
 | `LegacyAgentCleanup` | 4 | Deletes `workflow_labels` rows of `aimanager`, `aiworker` and `aiclaudeworker` |
 | `LegacyAgentCleanup` | 5-6 | Deletes `settings` rows of the clients `aimanager`, `aiworker`, `aiclaudeworker`, `aibuildpage` and the unused `aidashboard` rows `Jira.JiraPickupLabel`, `Jira.JiraAnalyzedLabel`, `GitHub.GitHubRepositoryToken`, `GitHub.AgentModel` |
-| `LegacyAgentCleanup` | 7 | Replaces `ck_settings_scope`: `shared` (non client-scoped names), `aidashboard` (`Dashboard.AiLabels`, `Dashboard.ActiveStatuses`), `aiagent` (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`) |
+| `LegacyAgentCleanup` | 7 | Replaces `ck_settings_scope`: `shared` (non client-scoped names), `aidashboard` (`Dashboard.AiLabels`, `Dashboard.ActiveStatuses`, `Dashboard.CardLabels`), `aiagent` (`GitHub.GitHubRepositoryToken`, `Claude.AnthropicApiKey`) |
 | `LegacyAgentCleanup` | 8 | Removes the legacy labels `ai-manager-planned`, `ai-analyzed`, `ai-agent-picked` from `Dashboard.AiLabels`; if nothing is left, uses the `aiagent` labels from `workflow_labels` |
 
 Existing databases reuse their migration history. Already applied patches are

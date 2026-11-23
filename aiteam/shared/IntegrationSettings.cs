@@ -60,4 +60,13 @@ public sealed class DashboardSettings
         get => _activeStatuses;
         set => _activeStatuses = value.ToArray();
     }
+
+    // Jira labels shown as badges on the Top 5 AI task cards. Empty means: the dashboard's built-in defaults.
+    private volatile IReadOnlyList<string> _cardLabels = [];
+
+    public IReadOnlyList<string> CardLabels
+    {
+        get => _cardLabels;
+        set => _cardLabels = value.ToArray();
+    }
 }

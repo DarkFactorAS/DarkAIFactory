@@ -56,7 +56,8 @@ public sealed class LegacyAgentCleanupPatcherTests
         var sql = patcher.Sql[6];
         Assert.Contains("DROP CONSTRAINT `ck_settings_scope`", sql);
         Assert.Contains("ADD CONSTRAINT `ck_settings_scope` CHECK", sql);
-        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", sql);
+        Assert.Contains("'Dashboard.CardLabels'", sql);
+        Assert.Contains("('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels')", sql);
         Assert.Contains("`client` = 'aiagent' AND `name` IN", sql);
         Assert.DoesNotContain("aimanager", sql);
         Assert.DoesNotContain("aiworker", sql);
