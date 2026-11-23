@@ -2,6 +2,9 @@ using AccountClientModule.Client;
 using DFCommonLib.Utils;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace AiDashboard.Auth;
 
@@ -34,7 +37,7 @@ public static class DashboardAuthentication
                 options.Cookie.Name = CookieName;
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Strict;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.ExpireTimeSpan = SessionLifetime;
                 options.SlidingExpiration = true;
                 options.Events.OnRedirectToLogin = context =>
@@ -48,6 +51,16 @@ public static class DashboardAuthentication
                     return Task.CompletedTask;
                 };
             });
+        services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
+            .Configure<IWebHostEnvironment>((options, environment) =>
+                options.Cookie.SecurePolicy = environment.IsDevelopment()
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always);
+        services.AddOptions<SessionOptions>()
+            .Configure<IWebHostEnvironment>((options, environment) =>
+                options.Cookie.SecurePolicy = environment.IsDevelopment()
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always);
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(ReadOnlyForAnonymousPolicy);
         return services;

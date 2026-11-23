@@ -9,12 +9,16 @@ using AiTeam.Configuration;
 using DFCommonLib.Config;
 using DFCommonLib.HttpApi;
 using DFCommonLib.Utils;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace AiDashboard.Tests;
 
@@ -31,9 +35,10 @@ public sealed class AuthEndpointsTests
         }
     }
 
-    private static async Task<(WebApplication App, HttpClient Client)> StartAsync(IDashboardLogin login)
+    private static async Task<(WebApplication App, HttpClient Client)> StartAsync(
+        IDashboardLogin login, string environmentName = Environments.Development)
     {
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environmentName });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddDashboardAuthentication();
         builder.Services.AddSingleton(login);
@@ -76,6 +81,7 @@ public sealed class AuthEndpointsTests
         Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret12", cookie);
+        Assert.DoesNotContain("secure", cookie, StringComparison.OrdinalIgnoreCase);
 
         using var me = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
@@ -83,6 +89,25 @@ public sealed class AuthEndpointsTests
 
         using var protectedResponse = await client.GetAsync("/api/protected");
         Assert.Equal(HttpStatusCode.OK, protectedResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task ProductionLogin_RequiresHttps_AndUsesSecureCookies()
+    {
+        var login = new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor", 7));
+        var (app, client) = await StartAsync(login, Environments.Production);
+        await using var _ = app;
+
+        var cookieOptions = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+        var sessionOptions = app.Services.GetRequiredService<IOptions<SessionOptions>>().Value;
+        using var response = await Login(client);
+
+        Assert.Equal(CookieSecurePolicy.Always, cookieOptions.Cookie.SecurePolicy);
+        Assert.Equal(CookieSecurePolicy.Always, sessionOptions.Cookie.SecurePolicy);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("HTTPS is required for login.", await Error(response));
+        Assert.Empty(login.Calls);
     }
 
     [Fact]
@@ -284,6 +309,23 @@ public sealed class AuthEndpointsTests
         Assert.Equal("thor", client.LastLogin!.username);
         Assert.False(string.IsNullOrEmpty(client.LastLogin.password));
         Assert.NotEqual("secret12", client.LastLogin.password);
+    }
+
+    [Fact]
+    public async Task AccountServerLogin_NullOptionalCredentials_AreNormalized()
+    {
+        var client = new FakeAccountClient(_ => new AccountData { errorCode = AccountData.ErrorCode.OK });
+        var login = new AccountServerLogin(
+            client,
+            new FakeConfig(new DashboardAppSettings
+            {
+                AccountServer = new AccountServerSettings { Endpoint = "https://account.example" },
+            }));
+
+        var result = await login.LoginAsync("thor", "secret12", CancellationToken.None);
+
+        Assert.Equal(DashboardLoginStatus.Ok, result.Status);
+        Assert.Equal((string.Empty, string.Empty, string.Empty), client.Credentials);
     }
 
     [Theory]
