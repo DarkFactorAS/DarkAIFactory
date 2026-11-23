@@ -9,7 +9,7 @@ import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
-import { POLL_INTERVAL_MS, listAgents, workingIssueKeys } from "./agentApi.js";
+import { POLL_INTERVAL_MS, getCardLabels, listAgents, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
