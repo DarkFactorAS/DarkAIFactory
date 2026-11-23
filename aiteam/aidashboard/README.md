@@ -139,7 +139,9 @@ heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highli
 
 Outside Development, Kestrel listens with TLS only, on port 8080 (`Https:Port` to change it), so
 the Docker container and the production deploy (`--publish <port>:8080`) are reached at
-`https://<host>:<port>`. Plain `http://` to that port does not work. The certificate comes from
+`https://<host>:<port>`. Plain `http://` to that port does not work. `aiteam/docker-compose.yml`
+sets `Https__Port: 443` and publishes it as 8281 (`https://localhost:8281`), because Docker
+Desktop only links a port as `https://` when the container port is 443. The certificate comes from
 `Kestrel:Certificates:Default` (for example the environment variables
 `Kestrel__Certificates__Default__Path` and `Kestrel__Certificates__Default__Password` with a
 mounted `.pfx`). Without one, the app generates a self-signed certificate at startup
