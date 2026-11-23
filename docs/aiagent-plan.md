@@ -327,7 +327,9 @@ neither pattern matches. **Two overlaps remain, and they're handled by configura
    must exist in `manager_projects`, and the manager loads and polls every row in
    that table, so an aiAgent-only project is also polled by TechLead; `aiagent-*`
    labels don't exclude it. Before turning on aiAgent Planning, stop
-   `manager-agent` (the `Jira.JiraJql` setting no longer exists). The README documents this.
+   `manager-agent` (the `Jira.JiraJql` setting no longer exists). This section is the
+   reference for that requirement; `aiteam/aiagent/README.md` covers only the
+   `agent_tasks` intake warning.
 
 ### 4.4 Acceptance criteria
 
