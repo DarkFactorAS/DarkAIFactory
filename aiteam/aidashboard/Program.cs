@@ -12,6 +12,7 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
+builder.UseDashboardHttps();
 builder.Services.AddDashboardAuthentication();
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<DashboardAppSettings>>();
 builder.Services.AddDashboardAccountLogin();
