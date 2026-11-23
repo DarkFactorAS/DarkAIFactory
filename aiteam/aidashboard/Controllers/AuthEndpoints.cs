@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace AiDashboard.Auth;
 
-public sealed record LoginRequest(string? Username, string? Password);
+public sealed record LoginRequest(string? Username, string? Password, bool? RememberMe = null);
 
 /// <summary>Login, logout and current-user endpoints for the dashboard cookie session.</summary>
 public static class AuthEndpoints
@@ -51,10 +51,17 @@ public static class AuthEndpoints
                         new Claim(ClaimTypes.NameIdentifier, result.AccountId.ToString()),
                     ],
                     CookieAuthenticationDefaults.AuthenticationScheme);
+                var properties = new AuthenticationProperties { IsPersistent = true };
+                if (request?.RememberMe == true)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    properties.IssuedUtc = now;
+                    properties.ExpiresUtc = now + DashboardAuthentication.RememberMeLifetime;
+                }
                 await http.SignInAsync(
                     CookieAuthenticationDefaults.AuthenticationScheme,
                     new ClaimsPrincipal(identity),
-                    new AuthenticationProperties { IsPersistent = true });
+                    properties);
                 return Results.Ok(new { username = identity.Name });
             case DashboardLoginStatus.InvalidCredentials:
                 // Same message for unknown user and wrong password.

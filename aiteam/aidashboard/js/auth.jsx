@@ -72,12 +72,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Throws an Error with a user-facing message when the login is refused.
-  const login = useCallback(async (username, password) => {
+  const login = useCallback(async (username, password, rememberMe) => {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, rememberMe: !!rememberMe }),
     });
     if (!response.ok) {
       throw new Error(await errorMessage(response, `Login failed (${response.status})`));

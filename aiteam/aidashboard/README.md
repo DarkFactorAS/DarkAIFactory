@@ -143,9 +143,9 @@ encrypted with `DFCrypt.EncryptInput` and checked with `IAccountClient.LoginAcco
 the account server accepts may sign in. Configure the account server in the `AccountServer`
 section of the appsettings (see [Config](Config/README.md)).
 
-- `POST /api/auth/login` (`username`, `password`) returns `{ username }` and sets the
+- `POST /api/auth/login` (`username`, `password`, optional `rememberMe`) returns `{ username }` and sets the
   `aidashboard_auth` session cookie (HttpOnly, `SameSite=Strict`, Secure outside Development; 12 hours,
-  sliding). Login is accepted only when ASP.NET Core sees HTTPS outside Development; configure
+  sliding). `rememberMe: true` makes it a 7-day sliding cookie; unchecked or missing keeps the 12-hour one. Login is accepted only when ASP.NET Core sees HTTPS outside Development; configure
   HTTPS directly (this app does not process forwarded-protocol headers). 400 for missing input or an
   insecure request, 401 `Invalid username or password.` (same text for unknown user
   and wrong password), 502 if the account server fails, 503 if `AccountServer.Endpoint` is not set.
@@ -167,13 +167,13 @@ returns 401 (for example an expired session) switches to read-only and opens the
 The earlier shared write token (`Dashboard__WriteToken`, `dashboard_write_token` cookie) was removed.
 
 Session cookies are protected with ASP.NET Core Data Protection keys kept in the container, so a
-restart or redeploy signs everyone out.
+restart or redeploy signs everyone out, including remembered 7-day logins.
 
 Manual check: open the dashboard logged out and see all panels with data, "Read-only" and Log in in
 the header, and no editing controls; Log in opens the form, Back to dashboard returns; a wrong password
 shows the error and clears the password field; a valid account returns to the dashboard with the user
 name, Log out and the editing controls; reload keeps the session; Log out returns to read-only, and a
-`POST /api/agent-tasks` then returns 401; check light and dark themes.
+`POST /api/agent-tasks` then returns 401; with "Remember me for 7 days" checked the cookie expires in about 7 days, unchecked about 12 hours; check light and dark themes.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
