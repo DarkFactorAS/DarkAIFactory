@@ -9,6 +9,7 @@ export default function LoginPage({ theme, onThemeChange }) {
   const { login, closeLogin, loginReason } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -18,7 +19,7 @@ export default function LoginPage({ theme, onThemeChange }) {
     setBusy(true);
     setError(null);
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, rememberMe);
     } catch (e) {
       setError(e.message);
       setPassword("");
@@ -81,6 +82,20 @@ export default function LoginPage({ theme, onThemeChange }) {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-900 p-2 text-sm"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="login-remember"
+              name="rememberMe"
+              type="checkbox"
+              data-testid="login-remember"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-900"
+            />
+            <label htmlFor="login-remember" className="text-sm text-slate-700 dark:text-slate-300">
+              Remember me for 7 days
+            </label>
           </div>
           {error && (
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">

@@ -20,6 +20,9 @@ public static class DashboardAuthentication
     public const string CookieName = "aidashboard_auth";
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
 
+    /// <summary>Lifetime of the cookie when the user ticks "Remember me" (sliding).</summary>
+    public static readonly TimeSpan RememberMeLifetime = TimeSpan.FromDays(7);
+
     /// <summary>Fallback policy: anonymous users may read (GET/HEAD); any write needs a session.</summary>
     public static readonly AuthorizationPolicy ReadOnlyForAnonymousPolicy = new AuthorizationPolicyBuilder()
         .RequireAssertion(context =>

@@ -36,7 +36,7 @@ public sealed class AuthEndpointsTests
     }
 
     private static async Task<(WebApplication App, HttpClient Client)> StartAsync(
-        IDashboardLogin login, string environmentName = Environments.Development)
+        IDashboardLogin login, string environmentName = "Development")
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environmentName });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -59,11 +59,50 @@ public sealed class AuthEndpointsTests
         return (app, new HttpClient(handler) { BaseAddress = new Uri(app.Urls.First()) });
     }
 
-    private static Task<HttpResponseMessage> Login(HttpClient client, string? username = "thor", string? password = "secret12") =>
-        client.PostAsJsonAsync("/api/auth/login", new { username, password });
+    private static Task<HttpResponseMessage> Login(HttpClient client, string? username = "thor", string? password = "secret12", bool? rememberMe = null) =>
+        client.PostAsJsonAsync("/api/auth/login", new { username, password, rememberMe });
 
     private static async Task<string?> Error(HttpResponseMessage response) =>
         JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("error").GetString();
+
+    private static DateTimeOffset CookieExpires(HttpResponseMessage response)
+    {
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"),
+            c => c.StartsWith(DashboardAuthentication.CookieName + "=", StringComparison.Ordinal));
+        var expires = cookie.Split(';').Select(part => part.Trim())
+            .Single(part => part.StartsWith("expires=", StringComparison.OrdinalIgnoreCase))["expires=".Length..];
+        return DateTimeOffset.Parse(expires, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [Fact]
+    public async Task Login_RememberMe_SetsSevenDayCookie_AndMeReturnsUser()
+    {
+        var (app, client) = await StartAsync(new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor", 7)));
+        await using var _ = app;
+
+        using var response = await Login(client, rememberMe: true);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var remaining = CookieExpires(response) - DateTimeOffset.UtcNow;
+        Assert.InRange(remaining, TimeSpan.FromDays(7) - TimeSpan.FromMinutes(5), TimeSpan.FromDays(7) + TimeSpan.FromMinutes(5));
+        using var me = await client.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    public async Task Login_WithoutRememberMe_KeepsTwelveHourCookie(bool? rememberMe)
+    {
+        var (app, client) = await StartAsync(new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor", 7)));
+        await using var _ = app;
+
+        using var response = await Login(client, rememberMe: rememberMe);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var remaining = CookieExpires(response) - DateTimeOffset.UtcNow;
+        Assert.InRange(remaining, TimeSpan.FromHours(12) - TimeSpan.FromMinutes(5), TimeSpan.FromHours(12) + TimeSpan.FromMinutes(5));
+    }
 
     [Fact]
     public async Task Login_Ok_SetsHttpOnlySessionCookie_AndMeReturnsUser()
