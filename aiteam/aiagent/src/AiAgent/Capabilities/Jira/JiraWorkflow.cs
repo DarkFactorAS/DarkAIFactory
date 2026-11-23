@@ -23,11 +23,9 @@ public sealed class JiraWorkflow(IJiraClient jira, JiraCapabilityConfig configur
     /// <summary>Issues of the project that are ready to be picked up (not picked, failed or ignored).</summary>
     public Task<IReadOnlyList<JiraIssue>> FindWorkAsync(string projectKey, CancellationToken cancellationToken)
     {
-        var jql = string.IsNullOrWhiteSpace(configuration.JqlOverride)
-            ? $"project = \"{JiraQuery.EscapeJql(projectKey)}\" " +
-              $"AND status = \"{JiraQuery.EscapeJql(configuration.SelectedStatus)}\" " +
-              "AND issuetype != Epic ORDER BY priority DESC, created ASC"
-            : JiraQuery.ScopeToProject(configuration.JqlOverride, projectKey);
+        var jql = $"project = \"{JiraQuery.EscapeJql(projectKey)}\" " +
+                  $"AND status = \"{JiraQuery.EscapeJql(configuration.SelectedStatus)}\" " +
+                  "AND issuetype != Epic ORDER BY priority DESC, created ASC";
         foreach (var label in new[] { configuration.FailureLabel, configuration.PickupLabel, configuration.IgnoredLabel })
         {
             jql = JiraQuery.AddPickupLabelExclusion(jql, label);

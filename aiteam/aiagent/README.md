@@ -89,8 +89,7 @@ whose `requirements_hash` matches the current issue (the Builder prefers its own
 plan with a matching hash made by any agent), claims the issue, branches (sub-tasks branch off and
 target the parent's `aiagent/parent/<KEY>` branch), runs the runner in `implement` mode, pushes, opens the PR through `GitHubCore`
 (recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
-`aiagent-failed` and a recovery comment. With a custom `Jira.JiraJql` and no stored plan, a local plan is
-generated (fallback). Settings are read from the `aiagent` client and the `aiagent` workflow labels.
+`aiagent-failed` and a recovery comment. Settings are read from the `aiagent` client and the `aiagent` workflow labels.
 
 ### Build and test validation (Builder and Review)
 

@@ -13,7 +13,6 @@ public sealed record JiraCapabilityConfig(
     string InReviewStatus,
     string DoneStatus,
     string AssigneeAccountId,
-    string JqlOverride,
     IReadOnlyList<string> UnblockSourceStatuses,
     bool IntakeEnabled,
     string GitHubToken,
@@ -65,7 +64,6 @@ public sealed record JiraCapabilityConfig(
             Get(jira.JiraInReviewStatus, "In Review"),
             Get(jira.JiraDoneStatus, "Done"),
             jira.JiraAssigneeAccountId.Trim(),
-            jira.JiraJql.Trim(),
             sources, intake,
             settings.GitHub.GitHubRepositoryToken.Trim(),
             pickup, failure, ignored);

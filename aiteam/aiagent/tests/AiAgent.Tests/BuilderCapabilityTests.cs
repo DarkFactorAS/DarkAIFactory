@@ -86,8 +86,8 @@ public sealed class BuilderCapabilityTests : IDisposable
         }
     }
 
-    private static BuilderSettings Settings(string jql = "") => new(
-        new Uri("https://x.atlassian.net"), "e", "t", "repo-token", "", jql, "Selected for Development",
+    private static BuilderSettings Settings() => new(
+        new Uri("https://x.atlassian.net"), "e", "t", "repo-token", "", "Selected for Development",
         "aiagent-picked", "aiagent-failed", "aiagent-analyzed", "aiagent-ignored",
         "In Progress", "In Review", "Done", "");
 
@@ -233,19 +233,15 @@ public sealed class BuilderCapabilityTests : IDisposable
     }
 
     [Fact]
-    public async Task MissingPlanWaitsUnlessCustomJqlAllowsLocalPlan()
+    public async Task MissingPlanAlwaysWaits()
     {
         var issue = Issue();
         var jira = new FakeJira(issue);
         var runner = new FakeRunner();
-        await Create(jira, null, runner).Capability.RunCycleAsync(Context(), default);
-        Assert.Empty(runner.Requests);
-
-        var localRunner = new FakeRunner();
-        var (capability, prs) = Create(new FakeJira(issue), null, localRunner, Settings("status = Open"));
+        var (capability, prs) = Create(jira, null, runner);
         await capability.RunCycleAsync(Context(), default);
-        Assert.Equal([RunnerModes.Plan, RunnerModes.Implement], localRunner.Requests.Select(r => r.Mode));
-        Assert.Single(prs.Items);
+        Assert.Empty(runner.Requests);
+        Assert.Empty(prs.Items);
     }
 
     [Fact]

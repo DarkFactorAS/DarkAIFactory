@@ -110,11 +110,11 @@ WHERE client = 'shared' AND name = 'Jira.JiraBaseUrl';
 
 Shared settings are `Jira.JiraBaseUrl`, `Jira.JiraEmail`, `Jira.JiraApiToken`,
 `Jira.JiraStatusName` (`Selected for Development`),
-`Jira.JiraJql` (empty for generated JQL), `Jira.JiraInProgressStatus` (`In Progress`),
-`Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (the GitHub Copilot
+`Jira.JiraInProgressStatus` (`In Progress`), `Jira.JiraInReviewStatus` (`In Review`), `GitHub.AgentGitHubToken` (the GitHub Copilot
 credential, not a repository token). The Claude model is `Claude.AgentModel` (seeded as `claude-sonnet-5-5`);
 the Claude Code CLI runs `claude -p` with its own login (`claude auth login`, stored in a Docker
 volume); `Claude.AnthropicApiKey` is an optional override.
+The obsolete `Jira.JiraJql` setting was removed (IntegrationSettings patch 12); JQL is always generated per project.
 The agent (`aiagent`, see [its README](../aiagent/README.md)) reads the same
 `appsettings.<Environment>.json` (`PollIntervalSeconds`, `AgentsPerInstance` 1-3 agents per container, default 1,
 overridden by the env var `AIAGENT_AGENTS_PER_INSTANCE`); its runner uses a separate

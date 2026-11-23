@@ -44,7 +44,7 @@ public sealed class IntegrationSettingsPatcherTests
     }
 
     [Theory]
-    [InlineData(0, true, 11)]
+    [InlineData(0, true, 12)]
     [InlineData(1, false, 1)]
     [InlineData(2, false, 2)]
     [InlineData(3, false, 3)]
@@ -56,6 +56,7 @@ public sealed class IntegrationSettingsPatcherTests
     [InlineData(9, false, 9)]
     [InlineData(10, false, 10)]
     [InlineData(11, false, 11)]
+    [InlineData(12, false, 12)]
     public void Patcher_CreatesAndSeedsSettingsAndPropagatesFailures(
         int failingPatch, bool expected, int patchCount)
     {
@@ -69,6 +70,11 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.Contains("'GitHub.AgentModel'", patcher.Sql[0]);
         Assert.Contains("`client` = 'shared' AND `name` NOT IN", patcher.Sql[0]);
         Assert.Contains("`client` IN ('aimanager', 'aiworker', 'aibuildpage') AND `name` IN", patcher.Sql[0]);
+        if (patchCount == 12)
+        {
+            Assert.StartsWith("DELETE FROM `settings`", patcher.Sql[^1]);
+            Assert.Contains("'Jira.JiraJql'", patcher.Sql[^1]);
+        }
     }
 
     [Fact]
@@ -92,6 +98,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9),
             ("IntegrationSettings", 10),
             ("IntegrationSettings", 11),
+            ("IntegrationSettings", 12),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
@@ -222,6 +229,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 9),
             ("IntegrationSettings", 10),
             ("IntegrationSettings", 11),
+            ("IntegrationSettings", 12),
             ("WorkflowLabels", 1),
             ("WorkflowLabels", 2),
             ("WorkflowLabels", 3),
@@ -266,6 +274,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 3), ("IntegrationSettings", 4), ("IntegrationSettings", 5),
             ("IntegrationSettings", 6), ("IntegrationSettings", 7), ("IntegrationSettings", 8),
             ("IntegrationSettings", 9), ("IntegrationSettings", 10), ("IntegrationSettings", 11),
+            ("IntegrationSettings", 12),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
             ("WorkflowLabels", 5),
             ("AgentTasks", 1),
