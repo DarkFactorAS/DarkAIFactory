@@ -232,6 +232,30 @@ public static class AgentTablesPatcher
                     (`client` = 'aiagent' AND `name` IN
                         ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
                 )
+            """,
+            // DFAI-222: Dashboard.CardLabels (comma-separated Jira labels) shown as badges on the Top 5 task cards.
+            """
+            ALTER TABLE `settings`
+                DROP CONSTRAINT `ck_settings_scope`,
+                ADD CONSTRAINT `ck_settings_scope` CHECK (
+                    (`client` = 'shared' AND `name` NOT IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'Claude.AnthropicApiKey', 'Claude.AgentModel', 'Dashboard.AiLabels',
+                         'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))
+                    OR
+                    (`client` IN ('aimanager', 'aiworker', 'aidashboard') AND `name` IN
+                        ('Jira.JiraPickupLabel', 'Jira.JiraAnalyzedLabel', 'GitHub.GitHubRepositoryToken',
+                         'GitHub.AgentModel'))
+                    OR
+                    (`client` = 'aidashboard' AND `name` IN
+                        ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))
+                    OR
+                    (`client` = 'aiclaudeworker' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey', 'Claude.AgentModel'))
+                    OR
+                    (`client` = 'aiagent' AND `name` IN
+                        ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
+                )
             """
         ];
 

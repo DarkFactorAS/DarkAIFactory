@@ -64,7 +64,7 @@ public sealed class AiDatabasePatcherTests
                 "patch:AgentTables:11", "successful",
                 "patch:AgentTables:12", "successful",
                 "patch:AgentTables:13", "successful",
-                "patch:AgentTables:14", "successful", "patch:AgentTables:15", "successful",
+                "patch:AgentTables:14", "successful", "patch:AgentTables:15", "successful", "patch:AgentTables:16", "successful",
                 "init:LegacyAgentCleanup",
                 "patch:LegacyAgentCleanup:1", "successful",
                 "patch:LegacyAgentCleanup:2", "successful",

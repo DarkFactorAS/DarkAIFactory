@@ -123,5 +123,10 @@ export const saveActiveStatuses = (statuses) =>
     body: JSON.stringify({ statuses }),
   });
 
+export const getCardLabels = () => request("/api/settings/card-labels");
+
+export const saveCardLabels = (labels) =>
+  request("/api/settings/card-labels", { method: "PUT", body: JSON.stringify({ labels }) });
+
 export const saveAiLabels = (labels) =>
   request("/api/settings/ai-labels", { method: "PUT", body: JSON.stringify({ labels }) });

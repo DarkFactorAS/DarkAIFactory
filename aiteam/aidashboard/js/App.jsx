@@ -5,6 +5,7 @@ import TaskEditor from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
+import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
@@ -232,7 +233,7 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   );
 }
 
-const CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
+export const DEFAULT_CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
 function ActiveAiTasksPanel({ labelsVersion }) {
   const { canEdit } = useAuth();
@@ -241,6 +242,15 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   // Without a login the panel is read-only: no status editor and no "add text" form on the cards.
   const editing = editingState && canEdit;
   const state = useApiData("/api/tasks/active-ai", { pollMs: POLL_INTERVAL_MS });
+  // Labels shown as badges on the cards (Dashboard.CardLabels); empty or unavailable means the defaults.
+  const [cardLabels, setCardLabels] = useState(DEFAULT_CARD_BADGE_LABELS);
+  const loadCardLabels = () =>
+    getCardLabels()
+      .then((data) => setCardLabels(data.labels?.length ? data.labels : DEFAULT_CARD_BADGE_LABELS))
+      .catch(() => {});
+  useEffect(() => {
+    loadCardLabels();
+  }, []);
   useEffect(() => {
     if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
       setOpenKey(null);
@@ -295,13 +305,22 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       emptyText="No active AI tasks."
       extra={
         editing && (
-          <ActiveStatusesEditor
-            onCancel={() => setEditing(false)}
-            onSaved={() => {
-              setEditing(false);
-              state.reload();
-            }}
-          />
+          <>
+            <ActiveStatusesEditor
+              onCancel={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false);
+                state.reload();
+              }}
+            />
+            <CardLabelsEditor
+              onCancel={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false);
+                loadCardLabels();
+              }}
+            />
+          </>
         )
       }
       actions={
@@ -309,8 +328,8 @@ function ActiveAiTasksPanel({ labelsVersion }) {
         !editing && (
           <button
             type="button"
-            aria-label="Configure statuses"
-            title="Configure statuses"
+            aria-label="Configure statuses and labels"
+            title="Configure statuses and labels"
             onClick={() => setEditing(true)}
             className="rounded border border-slate-300 dark:border-slate-600 px-2 py-1 text-sm"
           >
@@ -350,7 +369,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                   {working && <span className="sr-only"> (being worked on)</span>}
                 </span>
                 <span className="flex flex-wrap items-center justify-end gap-1">
-                  {CARD_BADGE_LABELS.filter((l) => (task.labels ?? []).includes(l)).map((l) => (
+                  {cardLabels.filter((l) => (task.labels ?? []).includes(l)).map((l) => (
                     <span
                       key={l}
                       data-testid="ai-task-label-badge"

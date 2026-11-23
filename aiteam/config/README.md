@@ -59,7 +59,7 @@ column. Names use the former JSON section/property notation, for example
 - `aiagent`: exactly `GitHub.GitHubRepositoryToken` and `Claude.AnthropicApiKey`
   (optional; empty uses the Claude Code CLI login). `Claude.*` names are never
   allowed on `shared`.
-- `aidashboard`: exactly `Dashboard.AiLabels` and `Dashboard.ActiveStatuses`.
+- `aidashboard`: exactly `Dashboard.AiLabels`, `Dashboard.ActiveStatuses` and `Dashboard.CardLabels`.
   Each client reads its own rows; no fallback to another client or shared
   row is allowed. Missing rows fail explicitly.
 
