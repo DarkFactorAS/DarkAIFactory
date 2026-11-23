@@ -1,3 +1,4 @@
+using AiDashboard.Agents;
 using AiTeam.Configuration;
 using DFCommonLib.Logger;
 
@@ -58,7 +59,8 @@ public static class AgentTaskEndpoints
     public static IResult Get(IAgentTaskRepository repository, long id) =>
         Guard(() => repository.Find(id) is { } task ? Results.Ok(task) : Results.NotFound());
 
-    public static IResult Create(IAgentTaskRepository repository, AgentTaskRequest? request)
+    public static IResult Create(
+        IAgentTaskRepository repository, IAgentDefinitionRepository projects, AgentTaskRequest? request)
     {
         var error = Validate(request, requireStatus: false);
         if (error is not null)
@@ -68,13 +70,19 @@ public static class AgentTaskEndpoints
 
         return Guard(() =>
         {
+            if (ResolveProject(projects, request!.ProjectKey!) is not { } projectKey)
+            {
+                return Results.BadRequest(new { error = UnknownProjectMessage });
+            }
+
             var task = repository.Create(
-                request!.ProjectKey!.Trim(), request.Title!.Trim(), request.Description!.Trim());
+                projectKey, request.Title!.Trim(), request.Description!.Trim());
             return Results.Created($"/api/agent-tasks/{task.Id}", task);
         });
     }
 
-    public static IResult Update(IAgentTaskRepository repository, long id, AgentTaskRequest? request)
+    public static IResult Update(
+        IAgentTaskRepository repository, IAgentDefinitionRepository projects, long id, AgentTaskRequest? request)
     {
         var error = Validate(request, requireStatus: true);
         if (error is not null)
@@ -84,14 +92,25 @@ public static class AgentTaskEndpoints
 
         return Guard(() =>
         {
+            if (ResolveProject(projects, request!.ProjectKey!) is not { } projectKey)
+            {
+                return Results.BadRequest(new { error = UnknownProjectMessage });
+            }
+
             var jiraKey = string.IsNullOrWhiteSpace(request!.JiraKey) ? null : request.JiraKey.Trim();
             return repository.Update(
-                id, request.ProjectKey!.Trim(), request.Title!.Trim(), request.Description!.Trim(),
+                id, projectKey, request.Title!.Trim(), request.Description!.Trim(),
                 request.Status!, jiraKey) is { } task
                 ? Results.Ok(task)
                 : Results.NotFound();
         });
     }
+
+    private const string UnknownProjectMessage = "projectKey must be one of the configured projects.";
+
+    // Returns the configured spelling of the key, or null when it is not a configured project.
+    private static string? ResolveProject(IAgentDefinitionRepository projects, string projectKey) =>
+        projects.ListProjectKeys().FirstOrDefault(k => string.Equals(k, projectKey.Trim(), StringComparison.OrdinalIgnoreCase));
 
     public static string? Validate(AgentTaskRequest? request, bool requireStatus)
     {
