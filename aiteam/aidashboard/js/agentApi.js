@@ -139,5 +139,8 @@ export const saveAiLabels = (labels) =>
 export const approveTask = (key) =>
   request(`/api/tasks/${encodeURIComponent(key)}/approve`, { method: "POST" });
 
+export const mergeTask = (key) =>
+  request(`/api/tasks/${encodeURIComponent(key)}/merge`, { method: "POST" });
+
 // Latest Jira comments (newest first, at most 3) of an active AI task.
 export const getTaskComments = (key) => request(`/api/tasks/${encodeURIComponent(key)}/comments`);
