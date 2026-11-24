@@ -12,8 +12,18 @@ const string Html = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
+// Load the dashboard's Config/appsettings.<Environment>.json into host configuration so settings
+// such as DataProtection:KeysPath are honoured; environment variables and command-line args are
+// re-added afterwards so they keep overriding the file.
+builder.Configuration
+    .AddJsonFile(
+        Path.Combine(AppContext.BaseDirectory, "Config", $"appsettings.{builder.Environment.EnvironmentName}.json"),
+        optional: true,
+        reloadOnChange: false)
+    .AddEnvironmentVariables()
+    .AddCommandLine(args);
 builder.UseDashboardHttps();
-builder.Services.AddDashboardAuthentication();
+builder.Services.AddDashboardAuthentication(builder.Configuration["DataProtection:KeysPath"]);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<DashboardAppSettings>>();
 builder.Services.AddDashboardAccountLogin();
 new DFServices(builder.Services)

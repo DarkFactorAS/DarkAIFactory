@@ -36,6 +36,11 @@ Run: `dotnet run --project aiteam/aidashboard/aidashboard.csproj`
 
 ## Docker and deployment
 
+Login cookies are encrypted with ASP.NET Core Data Protection keys. The image stores them in
+`/app/keys` (`DataProtection__KeysPath`), and Compose mounts the named volume
+`aiteam_aidashboard_keys` there, so logins (including "Remember me" for 7 days) survive container
+restarts. Deleting that volume logs everyone out. For `docker run`, mount a volume at `/app/keys`.
+
 Build from the repository root with `NUGET_USERNAME` and `NUGET_TOKEN` set:
 
 ```sh

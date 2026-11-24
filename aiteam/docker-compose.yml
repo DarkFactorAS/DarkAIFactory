@@ -104,6 +104,9 @@ services:
         condition: service_completed_successfully
 #    volumes:
 #      - ${AIDASHBOARD_CONFIG_PATH:-./aidashboard/Config}:/app/Config:ro
+    volumes:
+      # Data Protection keys for the login cookie; deleting the volume logs everyone out.
+      - aidashboard_dataprotection_keys:/app/keys
     ports:
       # All host addresses, so the dashboard is reachable from other machines on the network.
       # HTTPS only (self-signed unless a certificate is configured): https://localhost:8281
@@ -160,6 +163,11 @@ services:
       - "127.0.0.1:8206:3306"
 
 volumes:
+
+  # Persisted Data Protection key ring for the aidashboard login cookie (created by compose).
+  # Intentionally has no fixed `name:` so compose scopes it to the project
+  # (<project>_aidashboard_dataprotection_keys); separate deployments must never share a key ring.
+  aidashboard_dataprotection_keys:
 
   # docker volume create aiagent_workspaces
   aiagent_workspaces:

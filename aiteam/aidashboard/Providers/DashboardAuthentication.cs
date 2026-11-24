@@ -3,6 +3,7 @@ using DFCommonLib.Utils;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 
@@ -32,8 +33,15 @@ public static class DashboardAuthentication
 
     public static bool IsReadOnly(string method) => HttpMethods.IsGet(method) || HttpMethods.IsHead(method);
 
-    public static IServiceCollection AddDashboardAuthentication(this IServiceCollection services)
+    public static IServiceCollection AddDashboardAuthentication(this IServiceCollection services, string? dataProtectionKeysPath = null)
     {
+        // The auth cookie is encrypted with Data Protection keys. Without a persisted key ring every
+        // restart generates new keys and all existing cookies (including "Remember me") stop working.
+        var dataProtection = services.AddDataProtection().SetApplicationName("aidashboard");
+        if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+        {
+            dataProtection.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+        }
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
