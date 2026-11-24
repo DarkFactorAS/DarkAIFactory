@@ -157,7 +157,9 @@ Manual check: add `ai-approved` to an active AI issue in Jira and confirm the ye
 30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
 `aiagent-ready-to-merge`; check light and dark themes.
 
-Manual check: cards appear above the task editor; create via `+` (the form opens as a modal overlay; close with ×, backdrop, Escape or Cancel); edit (also a modal overlay); toggle enable/disable; delete is only available
+The Agents heading has an `Edit` toggle button (`data-testid="agent-edit-toggle"`, `aria-pressed`) shown only when logged in. It is off by default and not persisted (it resets on logout); the per-card Edit buttons appear only while it is on. The `+` Add agent tile is unaffected.
+
+Manual check: cards appear above the task editor; the Edit buttons on cards only appear after turning the toggle on; create via `+` (the form opens as a modal overlay; close with ×, backdrop, Escape or Cancel); edit (also a modal overlay); toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale
 heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it.
 
