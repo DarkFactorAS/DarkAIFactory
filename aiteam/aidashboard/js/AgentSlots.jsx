@@ -122,6 +122,12 @@ export default function AgentSlots() {
   const [state, setState] = useState(() => ({ agents: null, metrics: {}, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
   const [editorState, setEditor] = useState(null); // null | { agent }
   const editor = canEdit ? editorState : null;
+  const [showEdit, setShowEdit] = useState(false);
+
+  // Reset on logout so the Edit buttons do not return automatically after the next login.
+  useEffect(() => {
+    if (!canEdit) setShowEdit(false);
+  }, [canEdit]);
 
   const load = useCallback(() => {
     // Metrics are optional: a failure leaves the last known values and never blocks the agents.
@@ -165,7 +171,22 @@ export default function AgentSlots() {
   const { agents, metrics, nowMs, error } = state;
   return (
     <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
-      <h2 className="text-lg font-semibold">Agents</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Agents</h2>
+        {canEdit && (
+          <button
+            type="button"
+            data-testid="agent-edit-toggle"
+            aria-pressed={showEdit}
+            title={showEdit ? "Hide edit buttons" : "Show edit buttons"}
+            onClick={() => setShowEdit((v) => !v)}
+            className={"rounded border px-2 py-0.5 text-xs" + (showEdit ? " bg-slate-200 dark:bg-slate-600" : "")}
+          >
+            Edit
+            <span className="sr-only">{showEdit ? " (hide edit buttons)" : " (show edit buttons)"}</span>
+          </button>
+        )}
+      </div>
       {!agents && !error && (
         <p role="status" className="text-slate-500 dark:text-slate-400">
           Loading...
@@ -185,7 +206,7 @@ export default function AgentSlots() {
               metrics={metrics[agent.id]}
               nowMs={nowMs}
               onEdit={(a) => setEditor({ agent: a })}
-              canEdit={canEdit}
+              canEdit={canEdit && showEdit}
             />
           ))}
           {canEdit && (
