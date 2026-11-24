@@ -20,6 +20,22 @@ public sealed class JiraRetryEndpointTests
         }
     }
 
+    private sealed class FakeComments(bool fail = false) : IJiraCommentClient
+    {
+        public List<(string Key, string Text)> Added { get; } = [];
+
+        public Task<IReadOnlyList<JiraCommentDto>> GetLatestCommentsAsync(
+            string issueKey, int count, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JiraCommentDto>>([]);
+
+        public Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken)
+        {
+            if (fail) throw new HttpRequestException("comment boom");
+            Added.Add((issueKey, text));
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class ActiveTasks(params string[] labels) : IActiveAiTaskService
     {
         public Task<IReadOnlyList<ActiveAiTask>> GetActiveAsync(CancellationToken cancellationToken) =>
@@ -33,8 +49,9 @@ public sealed class JiraRetryEndpointTests
 
     private static int Status(IResult result) => ((IStatusCodeHttpResult)result).StatusCode!.Value;
 
-    private static Task<IResult> Run(FakeClient client, ActiveTasks tasks, string key = "DFAI-1", string failure = "failed") =>
-        JiraRetryEndpoint.HandleAsync(client, tasks, new Labels(failure), key, CancellationToken.None);
+    private static Task<IResult> Run(FakeClient client, ActiveTasks tasks, string key = "DFAI-1", string failure = "failed",
+        FakeComments? comments = null) =>
+        JiraRetryEndpoint.HandleAsync(client, comments ?? new FakeComments(), tasks, new Labels(failure), key, CancellationToken.None);
 
     [Fact]
     public async Task InvalidKeyReturns400()
@@ -81,6 +98,37 @@ public sealed class JiraRetryEndpointTests
     public async Task JiraFailureReturns502()
     {
         Assert.Equal(502, Status(await Run(new FakeClient(fail: true), new ActiveTasks("failed"))));
+    }
+
+    [Fact]
+    public async Task SuccessfulRetryAddsOneComment()
+    {
+        var client = new FakeClient();
+        var comments = new FakeComments();
+        Assert.Equal(200, Status(await Run(client, new ActiveTasks("failed"), comments: comments)));
+        Assert.Single(client.Cleared);
+        var added = Assert.Single(comments.Added);
+        Assert.Equal("DFAI-1", added.Key);
+        Assert.Equal(JiraRetryEndpoint.RetryCommentText, added.Text);
+    }
+
+    [Fact]
+    public async Task NoCommentOnRejectedOrFailedRetry()
+    {
+        var comments = new FakeComments();
+        await Run(new FakeClient(), new ActiveTasks("failed"), "../x", comments: comments);
+        await Run(new FakeClient(), new ActiveTasks("failed"), "DFAI-2", comments: comments);
+        await Run(new FakeClient(), new ActiveTasks("other"), comments: comments);
+        Assert.Equal(502, Status(await Run(new FakeClient(fail: true), new ActiveTasks("failed"), comments: comments)));
+        Assert.Empty(comments.Added);
+    }
+
+    [Fact]
+    public async Task CommentFailureStillReturns200()
+    {
+        var client = new FakeClient();
+        Assert.Equal(200, Status(await Run(client, new ActiveTasks("failed"), comments: new FakeComments(fail: true))));
+        Assert.Single(client.Cleared);
     }
 
     [Fact]
