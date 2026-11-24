@@ -226,3 +226,17 @@ The header has a Theme selector (System, Light, Dark). System, the default, foll
 The "Tasks solved per project" panel is hidden by default. The bar-chart icon at the left of the header opens it as
 an overlay drawer on top of the page (it stays mounted, so its state is kept); close it with the × button, the
 backdrop or Escape.
+
+## Agent metrics
+
+`GET /api/agents/metrics` (public read) returns one entry per non-deleted agent:
+`[{"agentId": 1, "allTime": {...}, "last7Days": {...}}]`. Both windows aggregate `agent_runs`
+(`last7Days` = `started_at >= UTC now - 7 days`) and contain `succeeded`, `failed` (runs still in
+progress count as neither), `wallClockMs`/`avgWallClockMs` (`finished_at - started_at`),
+`llmDurationMs`/`avgLlmDurationMs`, `inputTokens`, `outputTokens`, `toolCalls` and `costUsd`.
+A value that no run reported is `null` (shown as "N/A"), never 0. Averages cover the runs that reported the value.
+The route is registered before `/api/agents/{id:long}` and does not clash with it.
+
+Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All-time / 7 days toggle; hover shows the
+averages, input vs output tokens and LLM vs wall-clock time. Metrics refresh on the 30 s agent poll.
+The JS bundle is built with `npm install && npm run build` in `aiteam/aidashboard` (output `dist`, git-ignored).

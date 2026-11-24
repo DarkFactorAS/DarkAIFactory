@@ -26,6 +26,7 @@ public static class AgentEndpoints
     {
         app.MapGet("/api/agents", List);
         app.MapGet("/api/agents/projects", ListProjects);
+        app.MapGet("/api/agents/metrics", Metrics);
         app.MapGet("/api/agents/{id:long}", Get);
         app.MapPost("/api/agents", Create).RequireAuthorization();
         app.MapPut("/api/agents/{id:long}", Update).RequireAuthorization();
@@ -38,6 +39,9 @@ public static class AgentEndpoints
 
     public static IResult ListProjects(IAgentDefinitionRepository repository) =>
         Guard(() => Results.Ok(repository.ListProjectKeys().Order(StringComparer.Ordinal).ToList()));
+
+    public static IResult Metrics(IAgentMetricsRepository repository) =>
+        Guard(() => Results.Ok(repository.List()));
 
     public static IResult Get(IAgentDefinitionRepository repository, long id) =>
         Guard(() => repository.Find(id) is { } agent ? Results.Ok(agent) : Results.NotFound());

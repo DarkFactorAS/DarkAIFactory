@@ -217,6 +217,11 @@ public sealed class AgentEndpointsTests
         public bool SoftDelete(long id) => throw new InvalidOperationException("secret");
     }
 
+    private sealed class NoMetrics : IAgentMetricsRepository
+    {
+        public IReadOnlyList<AgentMetrics> List() => [];
+    }
+
     // Integration tests: real Kestrel host on a random port with the real write authentication.
     private const string Token = TestAuthHandler.Token;
 
@@ -230,6 +235,7 @@ public sealed class AgentEndpointsTests
                 TestAuthHandler.SchemeName, _ => { });
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton<IAgentDefinitionRepository>(repository);
+        builder.Services.AddSingleton<IAgentMetricsRepository, NoMetrics>();
         var app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
