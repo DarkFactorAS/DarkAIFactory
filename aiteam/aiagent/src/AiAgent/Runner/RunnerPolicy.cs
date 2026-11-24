@@ -230,6 +230,15 @@ internal static class RunnerPolicy
 
                     break;
                 case "result":
+                    if (root.TryGetProperty("is_error", out var isError) && isError.ValueKind == JsonValueKind.True)
+                    {
+                        var error = root.TryGetProperty("result", out var errorText) &&
+                            errorText.ValueKind == JsonValueKind.String
+                                ? errorText.GetString()
+                                : null;
+                        throw new InvalidOperationException($"Claude CLI reported an error. {error}".Trim());
+                    }
+
                     resultEvent = root;
                     break;
             }
