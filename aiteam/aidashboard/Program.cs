@@ -112,6 +112,7 @@ AgentTaskEndpoints.Map(app);
 AgentEndpoints.Map(app);
 JiraCommentEndpoint.Map(app);
 JiraApprovalEndpoint.Map(app);
+JiraMergeEndpoint.Map(app);
 DashboardSettingsEndpoints.Map(app);
 
 // SPA fallback (public: the app shows its login page); unknown /api routes stay 404.
