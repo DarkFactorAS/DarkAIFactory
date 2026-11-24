@@ -132,6 +132,9 @@ uses `/api/agents` plus the read-only
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / `Running on KEY` / Error. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header.
+The agent editor (edit via Edit, create via `+`) opens as a centred modal overlay (native `<dialog>`) above a dimmed
+backdrop instead of below the agent list. Close it with the × button, a backdrop click, Escape or Cancel; all discard
+unsaved input. Save and Delete close it too, and the 30 s poll does not reset it.
 There is no frontend test runner; API tests are in `tests/AgentEndpointsTests.cs`.
 
 Top 5 AI tasks cards get a highlighted blue border (same as working agent cards) while an
@@ -141,13 +144,14 @@ capability (agents are polled every 30 seconds).
 Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each configured
 Jira label (`Dashboard.CardLabels`; default `ai-approved`, `aiagent-needs-clarification` and
 `aiagent-ready-to-merge` when empty) that is on the issue (exact match,
-`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label while all
-review threads are resolved, and removes it when unresolved or failed review work remains.
+`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label only after the
+pull request has at least one review comment and all review threads are resolved. It removes the label when
+unresolved or failed review work remains, and while the agent is fixing review comments.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
 30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
 `aiagent-ready-to-merge`; check light and dark themes.
 
-Manual check: cards appear above the task editor; create via `+`; edit; toggle enable/disable; delete is only available
+Manual check: cards appear above the task editor; create via `+` (the form opens as a modal overlay; close with ×, backdrop, Escape or Cancel); edit (also a modal overlay); toggle enable/disable; delete is only available
 in the edit form (Edit → Delete → inline Confirm/Cancel) and is not shown on cards or in the create form; status changes within one poll after updating `agent_status`; Offline after a stale
 heartbeat; setting `agent_status.state` to Running with a fresh heartbeat highlights the card border within one poll, while a stale heartbeat or disabling the agent removes it.
 

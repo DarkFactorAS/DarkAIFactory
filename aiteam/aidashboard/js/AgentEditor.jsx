@@ -87,7 +87,7 @@ export default function AgentEditor({ agent, onSaved, onCancel, onDeleted }) {
     <form
       onSubmit={handleSubmit}
       aria-label={agent ? `Edit ${agent.name}` : "Create agent"}
-      className="space-y-2 rounded border border-slate-200 dark:border-slate-700 p-3"
+      className="space-y-2"
     >
       <label className={label}>
         Name
