@@ -48,6 +48,11 @@ builder.Services.AddScoped<IJiraCommentClient>(services => new JiraCommentClient
     services.GetRequiredService<IntegrationSettings>(),
     services.GetRequiredService<IHttpClientFactory>().CreateClient()));
 
+builder.Services.AddScoped<IJiraLabelClient>(services => new JiraLabelClient(
+    services.GetRequiredService<IntegrationSettings>(),
+    services.GetRequiredService<IHttpClientFactory>().CreateClient()));
+builder.Services.AddScoped<IApprovalLabelSource, WorkflowApprovalLabelSource>();
+
 builder.Services.AddScoped<IJiraSolvedClient>(services =>
 {
     var repository = services.GetRequiredService<WorkflowLabelRepository>();
@@ -83,11 +88,7 @@ _ = app.Services.GetRequiredService<IntegrationSettings>();
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 AuthEndpoints.Map(app);
 // Valid projects come from the manager_projects table; projectKey is the first one (default for new tasks).
-app.MapGet("/api/tasks/config", (IAgentDefinitionRepository repository) =>
-{
-    var keys = repository.ListProjectKeys();
-    return Results.Ok(new { projectKey = keys.FirstOrDefault(), projectKeys = keys });
-});
+app.MapGet("/api/tasks/config", JiraApprovalEndpoint.ConfigAsync);
 
 app.MapGet("/api/tasks/active-ai", async (IActiveAiTaskService service, CancellationToken cancellationToken) =>
 {
@@ -109,6 +110,7 @@ app.MapGet("/api/stats/solved-by-project", SolvedByProjectEndpoint.HandleAsync);
 AgentTaskEndpoints.Map(app);
 AgentEndpoints.Map(app);
 JiraCommentEndpoint.Map(app);
+JiraApprovalEndpoint.Map(app);
 DashboardSettingsEndpoints.Map(app);
 
 // SPA fallback (public: the app shows its login page); unknown /api routes stay 404.

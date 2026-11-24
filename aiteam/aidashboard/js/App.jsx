@@ -1,7 +1,7 @@
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useEffect, useRef, useState } from "react";
 import useApiData from "./useApiData.js";
-import TaskEditor from "./TaskEditor.jsx";
+import TaskEditor, { request } from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
@@ -9,7 +9,7 @@ import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
-import { POLL_INTERVAL_MS, getCardLabels, listAgents, workingIssueKeys } from "./agentApi.js";
+import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
@@ -251,6 +251,35 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   useEffect(() => {
     loadCardLabels();
   }, []);
+  // Label names that gate the Approve button (from workflow_labels); defaults until loaded.
+  const [approvalLabels, setApprovalLabels] = useState({
+    approvalLabel: "aiagent-awaiting-approval",
+    approvedLabel: "aiagent-approved",
+  });
+  useEffect(() => {
+    request("/api/tasks/config")
+      .then((data) =>
+        setApprovalLabels((prev) => ({
+          approvalLabel: data.approvalLabel || prev.approvalLabel,
+          approvedLabel: data.approvedLabel || prev.approvedLabel,
+        })),
+      )
+      .catch(() => {});
+  }, []);
+  const [approving, setApproving] = useState(null);
+  const [approveError, setApproveError] = useState({});
+  const approve = async (key) => {
+    setApproving(key);
+    setApproveError((prev) => ({ ...prev, [key]: null }));
+    try {
+      await approveTask(key);
+      state.reload();
+    } catch (err) {
+      setApproveError((prev) => ({ ...prev, [key]: err.message || "Approval failed" }));
+    } finally {
+      setApproving(null);
+    }
+  };
   useEffect(() => {
     if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
       setOpenKey(null);
@@ -388,6 +417,27 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 </p>
               )}
               </button>
+              {canEdit &&
+                (task.labels ?? []).includes(approvalLabels.approvalLabel) &&
+                !(task.labels ?? []).includes(approvalLabels.approvedLabel) && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      data-testid="ai-task-approve-button"
+                      aria-label={`Approve ${task.key}`}
+                      disabled={approving === task.key}
+                      onClick={() => approve(task.key)}
+                      className="rounded bg-green-600 px-3 py-1 text-sm text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-600"
+                    >
+                      {approving === task.key ? "Approving..." : "Approve"}
+                    </button>
+                    {approveError[task.key] && (
+                      <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {approveError[task.key]}
+                      </p>
+                    )}
+                  </div>
+                )}
               {canEdit && openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
             );
