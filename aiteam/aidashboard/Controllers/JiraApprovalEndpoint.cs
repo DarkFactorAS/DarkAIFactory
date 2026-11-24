@@ -110,7 +110,8 @@ public static partial class JiraApprovalEndpoint
             approvalLabel = labels.ApprovalLabel,
             approvedLabel = labels.ApprovedLabel,
             mergeRequestedLabel = labels.MergeRequestedLabel,
-            readyToMergeLabel = labels.ReadyToMergeLabel
+            readyToMergeLabel = labels.ReadyToMergeLabel,
+            failureLabel = labels.FailureLabel
         });
     }
 
