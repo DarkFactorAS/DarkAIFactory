@@ -86,6 +86,12 @@ as a new Jira comment on that issue (the description is never changed; 400 on in
 Like every write endpoint, comment submissions require a logged-in session (see [Login](#login)).
 Only issues currently returned by the active AI task list in the configured
 Jira projects are authorized (403 otherwise).
+`GET /api/tasks/{key}/comments` (public, like the card description) returns the 3 newest Jira comments of an
+active issue as `[{ author, created, body }]`, newest first, with the body converted to plain text (400 invalid key,
+403 not active, 502 on Jira failure). Each "Top 5 AI tasks" card has a **Comments** button
+(`ai-task-history-button`) that loads and toggles these comments (`ai-task-history`); "No comments" is shown when empty.
+Manual check: add comments to an active issue, click Comments and see the latest 3 newest first; an issue
+without comments shows "No comments"; it works logged out; check the light and dark themes.
 `POST /api/tasks/{key}/approve` (login required) adds the approved label (`workflow_labels[aiagent, ApprovedLabel]`,
 default `aiagent-approved`) to an active issue that has the approval label (`ApprovalLabel`, default
 `aiagent-awaiting-approval`) so the agent continues; it changes only the labels field and the agent removes both labels.

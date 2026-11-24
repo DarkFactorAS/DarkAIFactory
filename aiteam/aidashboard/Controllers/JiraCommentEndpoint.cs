@@ -9,8 +9,13 @@ namespace AiDashboard.Tasks;
 
 public sealed record JiraCommentRequest(string? Text);
 
+public sealed record JiraCommentDto(string Author, DateTimeOffset Created, string Body);
+
 public interface IJiraCommentClient
 {
+    Task<IReadOnlyList<JiraCommentDto>> GetLatestCommentsAsync(
+        string issueKey, int count, CancellationToken cancellationToken);
+
     Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken);
 }
 
@@ -46,6 +51,75 @@ public sealed class JiraCommentClient : IJiraCommentClient
         });
     }
 
+    // Converts an Atlassian Document Format node to plain text; tolerates missing or unknown nodes.
+    public static string AdfToPlainText(JsonElement node)
+    {
+        var builder = new StringBuilder();
+        AppendAdf(node, builder);
+        return builder.ToString().Trim('\n');
+    }
+
+    private static void AppendAdf(JsonElement node, StringBuilder builder)
+    {
+        if (node.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var type = node.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String
+            ? typeElement.GetString()
+            : null;
+        if (type == "text" && node.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
+        {
+            builder.Append(text.GetString());
+        }
+        else if (type == "hardBreak")
+        {
+            builder.Append('\n');
+        }
+
+        if (node.TryGetProperty("content", out var children) && children.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in children.EnumerateArray())
+            {
+                AppendAdf(child, builder);
+            }
+        }
+
+        if (type is "paragraph" or "heading" or "codeBlock" or "listItem" or "blockquote")
+        {
+            builder.Append('\n');
+        }
+    }
+
+    public async Task<IReadOnlyList<JiraCommentDto>> GetLatestCommentsAsync(
+        string issueKey, int count, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}/comment?orderBy=-created&maxResults={count}",
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var comments = new List<JiraCommentDto>();
+        if (document.RootElement.ValueKind == JsonValueKind.Object &&
+            document.RootElement.TryGetProperty("comments", out var array) && array.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in array.EnumerateArray().Take(count))
+            {
+                var author = item.TryGetProperty("author", out var a) && a.ValueKind == JsonValueKind.Object &&
+                    a.TryGetProperty("displayName", out var n) && n.ValueKind == JsonValueKind.String
+                    ? n.GetString()! : "Unknown";
+                var created = item.TryGetProperty("created", out var c) && c.ValueKind == JsonValueKind.String &&
+                    DateTimeOffset.TryParse(c.GetString(), out var parsed) ? parsed : default;
+                var body = item.TryGetProperty("body", out var b) ? AdfToPlainText(b) : "";
+                comments.Add(new JiraCommentDto(author, created, body));
+            }
+        }
+
+        return comments;
+    }
+
     public async Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken)
     {
         using var content = new StringContent(BuildBody(text), Encoding.UTF8, "application/json");
@@ -62,8 +136,43 @@ public static partial class JiraCommentEndpoint
     [GeneratedRegex("^[A-Za-z][A-Za-z0-9_]*-[0-9]+$")]
     private static partial Regex KeyPattern();
 
-    public static void Map(IEndpointRouteBuilder app) =>
+    public const int HistoryCount = 3;
+
+    public static void Map(IEndpointRouteBuilder app)
+    {
         app.MapPost("/api/tasks/{key}/comments", HandleAsync).RequireAuthorization();
+        app.MapGet("/api/tasks/{key}/comments", HandleGetAsync);
+    }
+
+    public static async Task<IResult> HandleGetAsync(
+        IJiraCommentClient client, IActiveAiTaskService activeTasks,
+        string key, CancellationToken cancellationToken)
+    {
+        if (!KeyPattern().IsMatch(key))
+        {
+            return Results.BadRequest(new { error = "key must be a valid Jira issue key." });
+        }
+
+        try
+        {
+            if (!(await activeTasks.GetActiveAsync(cancellationToken))
+                    .Any(task => string.Equals(task.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            var comments = await client.GetLatestCommentsAsync(key, HistoryCount, cancellationToken);
+            return Results.Ok(comments.Take(HistoryCount).Select(c => new { author = c.Author, created = c.Created, body = c.Body }));
+        }
+        catch (Exception ex) when (
+            ex is HttpRequestException or InvalidOperationException or InvalidDataException or
+                JsonException or KeyNotFoundException ||
+            ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            DFLogger.LogOutput(DFLogLevel.ERROR, "JiraComment", ex.Message);
+            return Results.Problem("Unable to load the comments from Jira.", statusCode: StatusCodes.Status502BadGateway);
+        }
+    }
 
     public static string? Validate(string key, JiraCommentRequest? request)
     {

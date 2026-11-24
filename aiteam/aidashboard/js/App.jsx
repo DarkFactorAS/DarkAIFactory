@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor, { request } from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
+import TaskHistory from "./TaskHistory.jsx";
 import AgentSlots from "./AgentSlots.jsx";
 import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
 import CardLabelsEditor from "./CardLabelsEditor.jsx";
@@ -266,6 +267,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       )
       .catch(() => {});
   }, []);
+  const [historyOpen, setHistoryOpen] = useState({});
   const [approving, setApproving] = useState(null);
   const [approveError, setApproveError] = useState({});
   const approve = async (key) => {
@@ -417,6 +419,19 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 </p>
               )}
               </button>
+              <div className="mt-2">
+                <button
+                  type="button"
+                  data-testid="ai-task-history-button"
+                  aria-expanded={!!historyOpen[task.key]}
+                  aria-label={`Comments for ${task.key}`}
+                  onClick={() => setHistoryOpen((prev) => ({ ...prev, [task.key]: !prev[task.key] }))}
+                  className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                >
+                  Comments
+                </button>
+              </div>
+              {historyOpen[task.key] && <TaskHistory taskKey={task.key} />}
               {canEdit &&
                 (task.labels ?? []).includes(approvalLabels.approvalLabel) &&
                 !(task.labels ?? []).includes(approvalLabels.approvedLabel) && (
