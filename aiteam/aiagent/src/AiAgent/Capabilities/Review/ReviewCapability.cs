@@ -107,6 +107,14 @@ public sealed class ReviewCapability(
     internal static bool IsReadyToMerge(int totalThreads, int unresolvedThreads, int failedCount) =>
         totalThreads > 0 && unresolvedThreads == 0 && failedCount == 0;
 
+    /// <summary>
+    /// A pull request may be considered for automatic merge when no review thread is unresolved and no fix
+    /// failed. Unlike <see cref="IsReadyToMerge"/>, it does not require a review thread: an approved pull
+    /// request without threads is still eligible, and <see cref="AutoMergePolicy.BlockReason"/> decides the rest.
+    /// </summary>
+    internal static bool IsMergeCandidate(int unresolvedThreads, int failedCount) =>
+        unresolvedThreads == 0 && failedCount == 0;
+
     private async Task TryUpdateReadinessLabelAsync(string issueKey, bool ready, CancellationToken cancellationToken)
     {
         try
@@ -150,13 +158,17 @@ public sealed class ReviewCapability(
         var readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount);
         await TryUpdateReadinessLabelAsync(pullRequest.PullRequest.JiraKey, readyToMerge, cancellationToken);
 
-        if (!readyToMerge)
+        if (!IsMergeCandidate(threads.Unresolved, failedCount))
         {
             return;
         }
 
         var prefix = $"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey})";
-        Log($"{prefix} is ready to be merged: all review comments are resolved.");
+        if (readyToMerge)
+        {
+            Log($"{prefix} is ready to be merged: all review comments are resolved.");
+        }
+
         if (!options.AutoMergeEnabled)
         {
             return;
