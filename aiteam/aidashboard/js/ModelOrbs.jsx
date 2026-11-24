@@ -75,7 +75,13 @@ export default function ModelOrbs() {
         });
     };
     load();
-    const timer = setInterval(load, POLL_INTERVAL_MS);
+const timer = setInterval(() => {
+      setAgentState((prev) => {
+        const localNow = Date.now();
+        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
+      });
+      load();
+    }, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
