@@ -5,6 +5,8 @@ namespace AiAgent.Capabilities.Review;
 /// <summary>
 /// Builds the prompt for the runner <c>merge</c> mode: resolve the conflict markers left in the working tree by
 /// merging the base branch into the head branch. Names and paths are untrusted data and are sanitised.
+/// The "edit only the conflicted files" rule is a prompt instruction only: the runner <c>merge</c> mode does not
+/// yet receive the conflicted-file set or bounds-check changed files, so callers must not rely on it as enforcement.
 /// </summary>
 public static class MergeConflictPromptBuilder
 {
@@ -31,7 +33,7 @@ public static class MergeConflictPromptBuilder
         prompt.AppendLine("Rules:");
         prompt.AppendLine("- Resolve every conflict marker in the conflicted files and remove all markers.");
         prompt.AppendLine("- Keep the intent of both sides: combine the base branch changes and the head branch changes so that neither is lost.");
-        prompt.AppendLine("- Edit ONLY the conflicted files. Any change to another file is discarded and fails the run.");
+        prompt.AppendLine("- Edit ONLY the conflicted files. Do not create, delete or modify any other file.");
         prompt.AppendLine("- The result must compile and keep existing tests passing.");
         prompt.AppendLine("- Do not run git commit, git push, git merge, git rebase or any git command that changes history or branches; the agent does that.");
         prompt.AppendLine();
