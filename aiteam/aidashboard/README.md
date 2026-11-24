@@ -113,10 +113,12 @@ the issue gets `aiagent-merge-requested` and the card shows "Merge requested". L
 hides it. Check light and dark themes.
 `POST /api/tasks/{key}/retry` (login required) clears **all** labels on an active issue that has the `aiagent-failed` label
 (`workflow_labels[aiagent, FailureLabel]`) by setting the Jira `labels` field to an empty array; this also removes non-AI labels
-and any `aiagent-pr-tracking-pending` label. 400 invalid key, 403 issue not active, 409 issue has no failure label, 502 Jira
+and any `aiagent-pr-tracking-pending` label. After the labels are cleared it also adds a Jira comment saying the next attempt
+starts on a fresh branch created from the parent branch (or the default branch); if only the comment fails the response is still 200
+with `commentAdded: false`. 400 invalid key, 403 issue not active, 409 issue has no failure label, 502 Jira
 failure (generic error). The "Active AI tasks" cards show a red **Retry** button for logged-in users when the issue has the failure label.
 Manual check: logged in, add `aiagent-failed` to an active issue; the red Retry button appears; click it: all labels are removed
-in Jira and the card refreshes without the button. Logged out: no button. Check light and dark themes.
+in Jira, the issue has a new comment saying the next attempt starts on a fresh branch from the parent branch, and the card refreshes without the button. Logged out: no button. Check light and dark themes.
 
 `GET /api/tasks/config` also returns `approvalLabel`, `approvedLabel`, `mergeRequestedLabel` and `readyToMergeLabel`, and returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
 The New task form has a project selector fed by `projectKeys`, defaulting to the first key; with only one project it shows the key as read-only text instead. The chosen project is shown as a badge in the pending task list and cannot be changed when editing. `POST`/`PUT /api/agent-tasks` reject a `projectKey` that is not in `manager_projects` (400).
