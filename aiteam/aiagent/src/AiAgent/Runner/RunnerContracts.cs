@@ -5,8 +5,9 @@ public static class RunnerModes
     public const string Plan = "plan";
     public const string Implement = "implement";
     public const string Review = "review";
+    public const string Merge = "merge";
 
-    public static bool IsValid(string? mode) => mode is Plan or Implement or Review;
+    public static bool IsValid(string? mode) => mode is Plan or Implement or Review or Merge;
 }
 
 /// <summary>Body of <c>POST /run</c>.</summary>
