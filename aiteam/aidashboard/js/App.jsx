@@ -268,7 +268,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
           approvedLabel: data.approvedLabel || prev.approvedLabel,
           mergeRequestedLabel: data.mergeRequestedLabel || prev.mergeRequestedLabel,
           readyToMergeLabel: data.readyToMergeLabel || prev.readyToMergeLabel,
-          failureLabel: prev.failureLabel,
+          failureLabel: data.failureLabel || prev.failureLabel,
         })),
       )
       .catch(() => {});
