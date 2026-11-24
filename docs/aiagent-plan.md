@@ -272,7 +272,7 @@ Stage 1 also seeds:
 - **`settings` rows** for client key `aiagent`. These are blank credentials, filled
   in the same way as for the existing agents.
 - **`workflow_labels` rows** for client key `aiagent`, for example `aiagent-picked`,
-  `aiagent-failed`, `aiagent-analyzed`, `aiagent-planned` and `aiagent-ignored`.
+  `aiagent-failed`, `aiagent-analyzed`, `aiagent-planned`, `aiagent-ignored` and `aiagent-merge-requested` (key `MergeRequestedLabel`, added by the dashboard when a merge is requested).
 
 **Stage 2**
 
@@ -299,7 +299,7 @@ NULL means "not available" (Copilot), which the dashboard shows as N/A.
 | **Jira** | `aijiramanager`, the Jira parts of `aiworker` / `aiclaudeworker`, and `PullRequestCloser` in `aimanager` | 1) Intake: `agent_tasks` rows in `New` become Jira issues, scoped to the agent's projects. 2) Pickup, status changes and recovery with the `aiagent-*` labels. 3) Move `In Review` → `Done` when every row in `agent_pull_requests` for the issue is merged. 4) **New:** move an issue to `Selected for Development` when every issue linked to it by "is blocked by" is `Done`. The source statuses are configurable, default `To Do` / `Backlog`. |
 | **Planning** | `aimanager` (`ManagerPlanner`, `TriageResult`, prompts) | Same five decisions and split logic. Writes `agent_plans` and labels the issue `aiagent-analyzed`. Runs the runner in `plan` mode. |
 | **Builder** | `aiworker` / `aiclaudeworker` (`Program.cs`, `PromptBuilder.cs`) | Plan gate (the fingerprint must match), then claim, branch, run in `implement` mode, run build and test, then the core opens the PR. The fallback local plan stays. |
-| **Review** | `aireviewworker` | Unresolved review comments on aiAgent's own PRs (`agent_pull_requests`). Runs in `review` mode. Only the cited files may change. Build and test run, then a push that is never forced. |
+| **Review** | `aireviewworker` | Unresolved review comments on aiAgent's own PRs (`agent_pull_requests`). Runs in `review` mode. Only the cited files may change. Build and test run, then a push that is never forced. **Dashboard merge requests:** issues labelled `MergeRequestedLabel` (`aiagent-merge-requested`) get their open PRs brought up to date with the base (conflicts resolved by the runner in `merge` mode, no force push), then merged with `AIAGENT_MERGE_METHOD` once the PR is not a draft, `mergeable_state` is `clean` and all checks are green; pending checks are retried next cycle. Failures add `aiagent-failed`, remove the request label and post one Jira comment; success removes the label and `PullRequestCloser` moves the issue to Done. One `agent_runs` row per request. |
 
 ### 4.2 Language models
 

@@ -45,7 +45,12 @@ public sealed class JiraLabelClient : IJiraLabelClient
     }
 }
 
-public sealed record ApprovalLabels(string ApprovalLabel, string ApprovedLabel);
+public sealed record ApprovalLabels(
+    string ApprovalLabel,
+    string ApprovedLabel,
+    string MergeRequestedLabel = WorkflowApprovalLabelSource.DefaultMergeRequestedLabel,
+    string ReadyToMergeLabel = WorkflowApprovalLabelSource.DefaultReadyToMergeLabel,
+    string FailureLabel = WorkflowApprovalLabelSource.DefaultFailureLabel);
 
 public interface IApprovalLabelSource
 {
@@ -57,13 +62,19 @@ public sealed class WorkflowApprovalLabelSource(WorkflowLabelRepository reposito
 {
     public const string DefaultApprovalLabel = "aiagent-awaiting-approval";
     public const string DefaultApprovedLabel = "aiagent-approved";
+    public const string DefaultMergeRequestedLabel = "aiagent-merge-requested";
+    public const string DefaultReadyToMergeLabel = "aiagent-ready-to-merge";
+    public const string DefaultFailureLabel = "aiagent-failed";
 
     public ApprovalLabels Get()
     {
         var labels = repository.Load("aiagent");
         return new ApprovalLabels(
             Pick(labels, "ApprovalLabel", DefaultApprovalLabel),
-            Pick(labels, "ApprovedLabel", DefaultApprovedLabel));
+            Pick(labels, "ApprovedLabel", DefaultApprovedLabel),
+            Pick(labels, "MergeRequestedLabel", DefaultMergeRequestedLabel),
+            DefaultReadyToMergeLabel,
+            Pick(labels, "FailureLabel", DefaultFailureLabel));
     }
 
     private static string Pick(WorkflowLabels labels, string key, string fallback)
@@ -97,7 +108,10 @@ public static partial class JiraApprovalEndpoint
             projectKey = keys.FirstOrDefault(),
             projectKeys = keys,
             approvalLabel = labels.ApprovalLabel,
-            approvedLabel = labels.ApprovedLabel
+            approvedLabel = labels.ApprovedLabel,
+            mergeRequestedLabel = labels.MergeRequestedLabel,
+            readyToMergeLabel = labels.ReadyToMergeLabel,
+            failureLabel = labels.FailureLabel
         });
     }
 

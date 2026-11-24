@@ -104,6 +104,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("WorkflowLabels", 5),
+            ("WorkflowLabels", 6),
             ("AgentTasks", 1),
             ("ReviewCommentAttempts", 1),
             
@@ -173,7 +174,7 @@ public sealed class IntegrationSettingsPatcherTests
         Assert.True(WorkflowLabelPatcher.Run(patcher));
 
         Assert.Equal("WorkflowLabels", patcher.System);
-        Assert.Equal(5, patcher.Sql.Count);
+        Assert.Equal(6, patcher.Sql.Count);
         Assert.Contains("CREATE TABLE IF NOT EXISTS `workflow_labels`", patcher.Sql[0]);
         var rows = Regex.Matches(patcher.Sql[1], @"\('(aimanager|aiworker|aidashboard)', '([^']+)', '([^']+)', '")
             .ToDictionary(match => (match.Groups[1].Value, match.Groups[2].Value), match => match.Groups[3].Value);
@@ -235,6 +236,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("WorkflowLabels", 3),
             ("WorkflowLabels", 4),
             ("WorkflowLabels", 5),
+            ("WorkflowLabels", 6),
             ("AgentTasks", 1),
             ("ReviewCommentAttempts", 1),
             
@@ -277,6 +279,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("IntegrationSettings", 12),
             ("WorkflowLabels", 1), ("WorkflowLabels", 2), ("WorkflowLabels", 3), ("WorkflowLabels", 4),
             ("WorkflowLabels", 5),
+            ("WorkflowLabels", 6),
             ("AgentTasks", 1),
             ("ReviewCommentAttempts", 1),
             

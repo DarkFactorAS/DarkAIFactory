@@ -153,6 +153,17 @@ public sealed class AgentTablesPatcherTests
         Assert.Contains("ON DUPLICATE KEY UPDATE", sql);
     }
 
+    [Fact]
+    public void WorkflowLabelPatcher_SeedsMergeRequestedLabelIdempotently()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(WorkflowLabelPatcher.Run(patcher));
+        var sql = patcher.Sql[5];
+        Assert.Contains("('aiagent', 'MergeRequestedLabel', 'aiagent-merge-requested',", sql);
+        Assert.Contains("ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`", sql);
+        Assert.DoesNotContain("DELETE", sql);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(6)]
