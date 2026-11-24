@@ -54,6 +54,12 @@ public sealed record ReviewOptions(
 
     /// <summary>Path prefixes of agent code; a pull request changing any of them is never merged automatically.</summary>
     public IReadOnlyList<string> AgentCodePaths { get; init; } = AutoMergePolicy.DefaultAgentCodePaths;
+
+    /// <summary>Jira label set by the dashboard to request the merge of a pull request (workflow label MergeRequestedLabel).</summary>
+    public string MergeRequestedLabel { get; init; } = "aiagent-merge-requested";
+
+    /// <summary>Jira label added when a merge request fails (workflow label FailureLabel).</summary>
+    public string FailureLabel { get; init; } = "aiagent-failed";
 }
 
 /// <summary>Facts about a pull request that decide whether it may be merged automatically.</summary>
@@ -68,6 +74,9 @@ public sealed record PullRequestMergeInfo(
 
     /// <summary>Null when every check run and commit status on the head is green; otherwise why it is not.</summary>
     public string? ChecksProblem { get; init; }
+
+    /// <summary>True when <see cref="ChecksProblem"/> is only that checks are still running (not red).</summary>
+    public bool ChecksPending { get; init; }
 
     /// <summary>The reviewer recommended approval after the latest non-merge commit.</summary>
     public bool ReviewerApproved { get; init; }

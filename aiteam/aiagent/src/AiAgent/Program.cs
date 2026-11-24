@@ -110,6 +110,7 @@ else
 {
     string? Env(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
     var repositoryToken = reviewSettings.GitHub.GitHubRepositoryToken.Trim();
+    var reviewLabels = new WorkflowLabelRepository(connectionFactory).Load("aiagent");
     capabilities = capabilities.Append(new ReviewCapability(
         new ReviewOptions(
             repositoryToken,
@@ -123,7 +124,9 @@ else
             MergeMethod = Env("AIAGENT_MERGE_METHOD") ?? "squash",
             AgentCodePaths = Env("AIAGENT_AGENT_CODE_PATHS")?.Split(
                     ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                ?? AutoMergePolicy.DefaultAgentCodePaths
+                ?? AutoMergePolicy.DefaultAgentCodePaths,
+            MergeRequestedLabel = reviewLabels.GetOrDefault("MergeRequestedLabel", "aiagent-merge-requested"),
+            FailureLabel = reviewLabels.GetOrDefault("FailureLabel", "aiagent-failed")
         },
         new AgentPullRequestRepository(connectionFactory),
         new AgentReviewAttemptRepository(connectionFactory),

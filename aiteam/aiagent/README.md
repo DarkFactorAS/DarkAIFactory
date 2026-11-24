@@ -151,6 +151,20 @@ comments until the next cycle.
   sub-tasks) or when it changes agent code (path prefixes from `AIAGENT_AGENT_CODE_PATHS`, comma separated, default
   `aiteam/,.agents/,AGENTS.md,CLAUDE.md,.github/`); the reason is logged. `AIAGENT_MERGE_METHOD` is `squash` (default),
   `merge` or `rebase`. The merge is pinned to the checked head SHA. Jira is moved to Done by the existing flow.
+- Dashboard merge requests (`MergeRequestHandler`): each cycle the Review capability searches the agent's Jira
+  projects for issues with the `MergeRequestedLabel` workflow label (default `aiagent-merge-requested`, set by the
+  dashboard). For every open `agent_pull_requests` row of such an issue: a head branch behind its base (`aiagent/parent/<KEY>`
+  for sub-tasks, otherwise the default branch) is cloned and `origin/<base>` is merged into it. On conflicts the
+  runner runs in `merge` mode with the conflicted files (build/test validation runs in the runner); the request fails
+  when conflict markers remain or validation fails. The merge commit is pushed without force; when the head already
+  contains the base nothing is pushed. After a push the request stays for later cycles until the checks finish. The pull
+  request is merged (`AIAGENT_MERGE_METHOD`, pinned to the checked head SHA) only when it is not a draft,
+  `mergeable_state` is `clean` and every check run and status is green; pending checks are retried next cycle. This
+  human-triggered merge does not need `AIAGENT_AUTO_MERGE` and ignores the parent-branch and `AIAGENT_AGENT_CODE_PATHS`
+  exclusions, but never bypasses branch protection or force-pushes. On any failure (no open pull request, unresolved
+  conflict, failed validation or push, red checks, GitHub merge error) the `FailureLabel` is added, the merge-requested
+  label removed and one Jira comment with the reason (no secrets) is posted. On success the merge-requested label is
+  removed and `PullRequestCloser` moves the issue to Done. Each request is one `agent_runs` row (Review capability).
 
 ## Run recording (`Metrics`, table `agent_runs`)
 
