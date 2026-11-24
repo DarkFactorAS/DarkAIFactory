@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, useAuth } from "./auth.jsx";
 
+export const PROJECT_KEY_STORAGE_KEY = "aidashboard.projectKey";
+
+function readStoredProjectKey() {
+  try {
+    return window.localStorage.getItem(PROJECT_KEY_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function storeProjectKey(key) {
+  try {
+    window.localStorage.setItem(PROJECT_KEY_STORAGE_KEY, key);
+  } catch {
+    // storage may be blocked; the choice then only lasts for this page
+  }
+}
+
 const TASK_REFRESH_INTERVAL_MS = 30000;
 
 async function request(url, options) {
@@ -26,7 +44,7 @@ async function request(url, options) {
 function TaskForm({ initial, submitLabel, onSubmit, onCancel, projectKeys = [], defaultProjectKey = null }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [chosenProject, setChosenProject] = useState(null);
+  const [chosenProject, setChosenProject] = useState(readStoredProjectKey);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const creating = !initial;
@@ -59,7 +77,10 @@ function TaskForm({ initial, submitLabel, onSubmit, onCancel, projectKeys = [], 
           data-testid="task-project-select"
           className="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-2"
           value={projectKey ?? ""}
-          onChange={(e) => setChosenProject(e.target.value)}
+          onChange={(e) => {
+            setChosenProject(e.target.value);
+            storeProjectKey(e.target.value);
+          }}
         >
           {projectKeys.map((key) => (
             <option key={key} value={key}>
