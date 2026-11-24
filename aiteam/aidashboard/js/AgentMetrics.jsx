@@ -25,6 +25,10 @@ function formatCostPrecise(usd) {
   return usd == null ? NA : `$${Number(usd).toFixed(4)}`;
 }
 
+function totalTokens(t) {
+  return t.inputTokens == null && t.outputTokens == null ? null : (t.inputTokens ?? 0) + (t.outputTokens ?? 0);
+}
+
 export function metricsDetails(t) {
   return [
     `Average wall-clock time: ${formatDuration(t.avgWallClockMs)}`,
@@ -32,6 +36,7 @@ export function metricsDetails(t) {
     `LLM time: ${formatDuration(t.llmDurationMs)} (average ${formatDuration(t.avgLlmDurationMs)})`,
     `Input tokens: ${formatCount(t.inputTokens)}`,
     `Output tokens: ${formatCount(t.outputTokens)}`,
+    `Total tokens: ${formatCount(totalTokens(t))}`,
     `Tool calls: ${formatCount(t.toolCalls)}`,
     `Cost: ${formatCostPrecise(t.costUsd)}`,
   ].join("\n");
@@ -41,8 +46,7 @@ export default function AgentMetrics({ metrics }) {
   const [range, setRange] = useState("allTime");
   if (!metrics) return null;
   const t = metrics[range];
-  const tokens =
-    t.inputTokens == null && t.outputTokens == null ? null : (t.inputTokens ?? 0) + (t.outputTokens ?? 0);
+  const details = metricsDetails(t);
   return (
     <div data-testid="agent-metrics" className="mt-2 text-xs text-slate-600 dark:text-slate-300">
       <div className="mb-1 inline-flex overflow-hidden rounded border border-slate-300 dark:border-slate-600">
@@ -61,9 +65,25 @@ export default function AgentMetrics({ metrics }) {
           </button>
         ))}
       </div>
-      <p data-testid="agent-metrics-row" title={metricsDetails(t)} className="cursor-help whitespace-nowrap overflow-x-auto">
-        {t.succeeded} succeeded / {t.failed} failed · {formatDuration(t.wallClockMs)} · {formatCount(tokens)} tokens ·{" "}
-        {formatCount(t.toolCalls)} tool calls · {formatCost(t.costUsd)}
+      <p data-testid="agent-metrics-row" className="whitespace-nowrap overflow-x-auto">
+        {t.succeeded} succeeded / {t.failed} failed{" "}
+        <span
+          data-testid="agent-metrics-info"
+          role="img"
+          tabIndex={0}
+          title={details}
+          aria-label={details}
+          className="inline-block cursor-help align-text-bottom text-slate-500 dark:text-slate-400"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="h-3.5 w-3.5">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </span>{" "}
+        · {formatDuration(t.wallClockMs)} · {formatCost(t.costUsd)}
       </p>
     </div>
   );
