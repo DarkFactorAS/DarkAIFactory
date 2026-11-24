@@ -164,9 +164,10 @@ services:
 
 volumes:
 
-  # Persisted Data Protection key ring for the aidashboard login cookie (created by compose)
+  # Persisted Data Protection key ring for the aidashboard login cookie (created by compose).
+  # Intentionally has no fixed `name:` so compose scopes it to the project
+  # (<project>_aidashboard_dataprotection_keys); separate deployments must never share a key ring.
   aidashboard_dataprotection_keys:
-    name: ${AIDASHBOARD_KEYS_VOLUME_NAME:-aiteam_aidashboard_keys}
 
   # docker volume create aiagent_workspaces
   aiagent_workspaces:
