@@ -482,8 +482,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
             string.Equals(
                 NormalizeBotLogin(item?["user"]?["login"]?.GetValue<string>()),
                 NormalizeBotLogin(_reviewerLogin),
-                StringComparison.OrdinalIgnoreCase)
-            && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
+                StringComparison.OrdinalIgnoreCase);
 
         // Read every page of reviews so a qualifying approval beyond the first page is not missed.
         var reviews = new List<JsonNode?>();
@@ -498,21 +497,24 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
             }
         }
 
-        // Only submitted APPROVED or COMMENTED reviews count; dismissed and pending reviews keep their body and
-        // commit ID but must never enable a merge.
-        foreach (var review in reviews.Where(IsReviewer).Where(review =>
-                     review?["state"]?.GetValue<string>() is { } reviewState
-                     && (string.Equals(reviewState, "APPROVED", StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(reviewState, "COMMENTED", StringComparison.OrdinalIgnoreCase))))
+        // Only the newest submitted review by the reviewer on the latest non-merge commit (or later) decides: a
+        // later review without the phrase, such as CHANGES_REQUESTED, withdraws an earlier approval. Pending reviews
+        // are not submitted and are skipped. The decisive review must be APPROVED or COMMENTED and contain the
+        // phrase; dismissed reviews keep their body and commit ID but must never enable a merge.
+        var latest = reviews
+            .Where(IsReviewer)
+            .Where(review => !string.Equals(review?["state"]?.GetValue<string>(), "PENDING", StringComparison.OrdinalIgnoreCase))
+            .Where(review => shas.IndexOf(review?["commit_id"]?.GetValue<string>() ?? string.Empty) >= lastIndex)
+            .LastOrDefault();
+        if (latest is null)
         {
-            var index = shas.IndexOf(review!["commit_id"]?.GetValue<string>() ?? string.Empty);
-            if (index >= lastIndex)
-            {
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        var state = latest["state"]?.GetValue<string>();
+        return (string.Equals(state, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(state, "COMMENTED", StringComparison.OrdinalIgnoreCase))
+            && (latest["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
     }
 
     /// <summary>
