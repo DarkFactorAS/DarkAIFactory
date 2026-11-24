@@ -219,7 +219,7 @@ default. The chevron toggle next to the heading expands and collapses them; the 
 
 ## Theme
 
-The project choice in the New task form is stored only in the browser's localStorage (`aidashboard.projectKey`) and is never sent to the server.
+The last project chosen in the New task form is remembered as a preference in the browser's localStorage (`aidashboard.projectKey`); the preference itself is not synced to the server, but the selected project key is sent to the server as part of the request body when a task is created.
 
 The header has a Theme selector (System, Light, Dark). System, the default, follows the OS/browser
 `prefers-color-scheme` and updates live. The choice is stored only in the browser's `localStorage`
