@@ -46,13 +46,14 @@ public sealed class ReviewCapability(
             .Where(stored => context.ProjectKeys.Contains(
                 ProjectKeyOf(stored.PullRequest.JiraKey), StringComparer.OrdinalIgnoreCase))
             .ToList();
-        if (tracked.Count == 0)
+
+        using var client = new ReviewGitHubClient(
+            options.RepositoryToken, options.ReviewerLogin, options.MaxAttempts, attempts, gitHubHandler, gitHubApiUrl);
+        if (!await HandleMergeRequestsAsync(context, client, tracked, cancellationToken) || tracked.Count == 0)
         {
             return;
         }
 
-        using var client = new ReviewGitHubClient(
-            options.RepositoryToken, options.ReviewerLogin, options.MaxAttempts, attempts, gitHubHandler, gitHubApiUrl);
         var open = await client.ListOpenPullRequestsAsync(tracked, cancellationToken);
         foreach (var pullRequest in open)
         {
@@ -98,6 +99,111 @@ public sealed class ReviewCapability(
                     $"PR #{pullRequest.PullRequest.PullRequestNumber}: review cycle failed: {exception.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Handles issues carrying the merge-requested label (set by the dashboard). Returns false when the runner is
+    /// busy, so the rest of the cycle is skipped like for review fixes.
+    /// </summary>
+    private async Task<bool> HandleMergeRequestsAsync(
+        AgentContext context, ReviewGitHubClient client, IReadOnlyList<StoredAgentPullRequest> tracked,
+        CancellationToken cancellationToken)
+    {
+        if (createJiraClient is null || string.IsNullOrWhiteSpace(options.MergeRequestedLabel))
+        {
+            return true;
+        }
+
+        IJiraClient? jira = null;
+        try
+        {
+            jira = createJiraClient();
+            var keys = string.Join(", ", context.ProjectKeys.Select(key => $"\"{JiraQuery.EscapeJql(key)}\""));
+            if (keys.Length == 0)
+            {
+                return true;
+            }
+
+            var issues = await jira.SearchAsync(
+                $"project in ({keys}) AND labels = \"{JiraQuery.EscapeJql(options.MergeRequestedLabel)}\" ORDER BY updated ASC",
+                cancellationToken);
+            foreach (var issue in issues)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using var claim = context.ClaimLock.TryAcquire(context.AgentId, issue.Key);
+                if (claim is null)
+                {
+                    Log($"{issue.Key}: merge request skipped; the issue is claimed elsewhere.");
+                    continue;
+                }
+
+                try
+                {
+                    var rows = tracked.Where(stored =>
+                        string.Equals(stored.PullRequest.JiraKey, issue.Key, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var handler = new MergeRequestHandler(
+                        options, client, gitRunner, new RunnerFixRunner(runnerClient, context.Agent, options, RunnerModes.Merge));
+                    MergeRequestResult? result = null;
+                    await (recorder ?? AiAgent.Metrics.NullAgentRunRecorder.Instance)
+                        .Bind(context, Kind)(issue.Key, async run =>
+                        {
+                            result = await handler.HandleAsync(issue.Key, rows, cancellationToken);
+                            switch (result.Outcome)
+                            {
+                                case MergeRequestOutcome.Merged:
+                                    run.Succeed();
+                                    break;
+                                case MergeRequestOutcome.Failed:
+                                    run.Fail(result.Reason ?? "The merge request failed.");
+                                    break;
+                                default:
+                                    // Waiting for checks: a push is work, a plain wait is not.
+                                    if (result.Pushed) run.Succeed(); else run.Discard();
+                                    break;
+                            }
+                        });
+                    if (result is { Outcome: MergeRequestOutcome.Merged })
+                    {
+                        await jira.RemoveLabelAsync(issue.Key, options.MergeRequestedLabel, cancellationToken);
+                    }
+                    else if (result is { Outcome: MergeRequestOutcome.Failed } failed)
+                    {
+                        await FailMergeRequestAsync(jira, issue.Key, failed.Reason, cancellationToken);
+                    }
+                }
+                catch (RunnerBusyException)
+                {
+                    Log("The runner is busy; retrying the merge request in the next cycle.");
+                    return false;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    AgentLog.LogOutput(DFLogLevel.ERROR, Category, $"{issue.Key}: merge request failed: {exception.Message}");
+                }
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"Could not process merge requests: {exception.Message}");
+        }
+        finally
+        {
+            (jira as IDisposable)?.Dispose();
+        }
+
+        return true;
+    }
+
+    private async Task FailMergeRequestAsync(
+        IJiraClient jira, string issueKey, string? reason, CancellationToken cancellationToken)
+    {
+        await jira.AddLabelAsync(issueKey, options.FailureLabel, cancellationToken);
+        await jira.RemoveLabelAsync(issueKey, options.MergeRequestedLabel, cancellationToken);
+        await jira.AddCommentAsync(
+            issueKey,
+            $"The requested merge was not completed: {reason ?? "unknown reason"}\n" +
+            $"The `{options.FailureLabel}` label was added. Remove it and request the merge again after resolving the problem.",
+            cancellationToken);
     }
 
     /// <summary>
@@ -360,7 +466,8 @@ public sealed class ReviewCapability(
             Task.FromResult<string?>("project commands are not executed in the orchestrator; validation runs in aiagent-runner.");
     }
 
-    private sealed class RunnerFixRunner(RunnerClient client, AgentDefinition agent, ReviewOptions options) : IFixRunner
+    private sealed class RunnerFixRunner(
+        RunnerClient client, AgentDefinition agent, ReviewOptions options, string mode = RunnerModes.Review) : IFixRunner
     {
         public async Task RunAsync(string workspacePath, string prompt, CancellationToken cancellationToken)
         {
@@ -373,7 +480,7 @@ public sealed class ReviewCapability(
             {
                 response = await client.RunAsync(
                     new RunnerRequest(
-                        provider, agent.LlmModel ?? string.Empty, RunnerModes.Review, workspacePath,
+                        provider, agent.LlmModel ?? string.Empty, mode, workspacePath,
                         PromptComposer.Compose(agent, prompt),
                         provider == "copilot" ? options.CopilotToken : null),
                     timeout.Token);

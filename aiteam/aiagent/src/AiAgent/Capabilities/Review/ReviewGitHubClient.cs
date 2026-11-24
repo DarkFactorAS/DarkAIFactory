@@ -11,7 +11,7 @@ namespace AiAgent.Capabilities.Review;
 /// Reads inline review comments through the GitHub GraphQL API (the REST API does not expose
 /// resolved state). Threads are paged with cursors.
 /// </summary>
-public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
+public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGitHub, IDisposable
 {
     public const int PageSize = 100;
 
@@ -341,6 +341,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             $"{repoPath}/compare/{Uri.EscapeDataString(baseBranch)}...{Uri.EscapeDataString(headSha)}", null, cancellationToken);
         var behindBy = compare?["behind_by"]?.GetValue<int>() ?? 0;
 
+        var checks = await GetChecksProblemAsync(repoPath, headSha, cancellationToken);
         return new PullRequestMergeInfo(
             node["draft"]?.GetValue<bool>() ?? false,
             node["mergeable_state"]?.GetValue<string>() ?? "unknown",
@@ -350,7 +351,8 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         {
             BaseBranch = baseBranch,
             BehindBy = behindBy,
-            ChecksProblem = await GetChecksProblemAsync(repoPath, headSha, cancellationToken),
+            ChecksProblem = checks.Problem,
+            ChecksPending = checks.Pending,
             ReviewerApproved = await HasReviewerApprovalAsync(path, repoPath, baseBranch, headSha, approvalPhrase, cancellationToken)
         };
     }
@@ -367,14 +369,14 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
     /// Null when every check run is completed with success, skipped or neutral and the combined commit status is
     /// not failing or pending; otherwise a description.
     /// </summary>
-    private async Task<string?> GetChecksProblemAsync(string repoPath, string headSha, CancellationToken cancellationToken)
+    private async Task<(string? Problem, bool Pending)> GetChecksProblemAsync(string repoPath, string headSha, CancellationToken cancellationToken)
     {
         var runs = await SendRestAsync(HttpMethod.Get, $"{repoPath}/commits/{headSha}/check-runs?per_page={PageSize}", null, cancellationToken);
         var total = runs?["total_count"]?.GetValue<int>() ?? 0;
         var list = runs?["check_runs"]?.AsArray() ?? [];
         if (total > list.Count)
         {
-            return "too many check runs to verify";
+            return ("too many check runs to verify", false);
         }
 
         foreach (var run in list)
@@ -382,13 +384,13 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
             var name = run?["name"]?.GetValue<string>() ?? "check";
             if (!string.Equals(run?["status"]?.GetValue<string>(), "completed", StringComparison.OrdinalIgnoreCase))
             {
-                return $"check '{name}' is not finished";
+                return ($"check '{name}' is not finished", true);
             }
 
             var conclusion = run?["conclusion"]?.GetValue<string>() ?? string.Empty;
             if (conclusion is not ("success" or "skipped" or "neutral"))
             {
-                return $"check '{name}' concluded '{conclusion}'";
+                return ($"check '{name}' concluded '{conclusion}'", false);
             }
         }
 
@@ -396,8 +398,8 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IDisposable
         var state = status?["state"]?.GetValue<string>() ?? "success";
         var statusCount = status?["total_count"]?.GetValue<int>() ?? 0;
         return statusCount > 0 && !string.Equals(state, "success", StringComparison.OrdinalIgnoreCase)
-            ? $"commit status is '{state}'"
-            : null;
+            ? ($"commit status is '{state}'", string.Equals(state, "pending", StringComparison.OrdinalIgnoreCase))
+            : (null, false);
     }
 
     /// <summary>

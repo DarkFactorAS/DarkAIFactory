@@ -15,6 +15,70 @@ public sealed class ReviewGit(IGitRunner git)
         branch.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' or '/') &&
         !ProtectedBranches.Contains(branch, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Syntax check for a branch that is only read (the PR base), so the protected-branch list does not apply.</summary>
+    public static bool IsSafeBranchName(string? branch) =>
+        !string.IsNullOrWhiteSpace(branch) &&
+        branch.Length <= 200 &&
+        !branch.StartsWith('-') && !branch.StartsWith('/') && !branch.EndsWith('/') &&
+        !branch.Contains("..", StringComparison.Ordinal) &&
+        branch.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' or '/');
+
+    /// <summary>Fetches the base branch into <c>origin/&lt;base&gt;</c> (the clone is single-branch).</summary>
+    public async Task FetchBaseAsync(string workspacePath, string baseBranch, CancellationToken cancellationToken)
+    {
+        if (!IsSafeBranchName(baseBranch))
+        {
+            throw new InvalidOperationException($"Refusing to fetch base branch '{baseBranch}'.");
+        }
+
+        await git.RunAsync(
+            workspacePath,
+            ["fetch", "--quiet", "origin", $"+refs/heads/{baseBranch}:refs/remotes/origin/{baseBranch}"],
+            true, cancellationToken);
+    }
+
+    /// <summary>True when <c>origin/&lt;base&gt;</c> is already contained in HEAD.</summary>
+    public async Task<bool> ContainsBaseAsync(string workspacePath, string baseBranch, CancellationToken cancellationToken)
+    {
+        var result = await git.RunAsync(
+            workspacePath, ["merge-base", "--is-ancestor", $"refs/remotes/origin/{baseBranch}", "HEAD"], false,
+            cancellationToken, allowExitCodeOne: true);
+        return result.ExitCode == 0;
+    }
+
+    /// <summary>
+    /// Merges <c>origin/&lt;base&gt;</c> into the checked-out head without committing. Returns the conflicted paths
+    /// (empty when the merge is clean and staged).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> MergeBaseAsync(
+        string workspacePath, string baseBranch, CancellationToken cancellationToken)
+    {
+        var merge = await git.RunAsync(
+            workspacePath, ["merge", "--no-commit", "--no-ff", "--quiet", $"refs/remotes/origin/{baseBranch}"], false,
+            cancellationToken, allowExitCodeOne: true);
+        if (merge.ExitCode == 0)
+        {
+            return [];
+        }
+
+        var unmerged = await git.RunAsync(
+            workspacePath, ["diff", "--name-only", "--diff-filter=U", "-z"], false, cancellationToken);
+        var files = unmerged.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        if (files.Length == 0)
+        {
+            throw new InvalidOperationException("The merge failed without reporting conflicted files.");
+        }
+
+        return files;
+    }
+
+    /// <summary>Stages everything and creates the merge commit (also when the merge changed nothing).</summary>
+    public async Task CommitMergeAsync(string workspacePath, string message, CancellationToken cancellationToken)
+    {
+        await git.RunAsync(workspacePath, ["add", "--all"], false, cancellationToken);
+        await git.RunAsync(workspacePath, ["commit", "--no-verify", "--message", message], false, cancellationToken);
+    }
+
     public async Task CloneAsync(Uri repositoryUrl, string branch, string workspacePath, CancellationToken cancellationToken)
     {
         if (!IsPushableBranch(branch))
