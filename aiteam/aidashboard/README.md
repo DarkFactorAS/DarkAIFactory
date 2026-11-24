@@ -155,6 +155,14 @@ uses `/api/agents` plus the read-only
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
 older than 90 s (3 polls), else Idle / the Jira key (or Running without a key) / Error. Idle shows no badge. The capability chips sit in the header row next to the agent name, before the badge. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header.
+
+Model status orbs (`js/ModelOrbs.jsx`, `js/Orb.jsx`, DFAI-246) sit in the centre column directly above the New task
+form and are visible logged in or not. They port the Claude/Codex particle orbs from ThorDashboard and show one orb
+per LLM provider (Claude, Copilot), driven by the agents in `/api/agents` (polled every 30 s): working (faster,
+brighter; `(n)` when several agents run) when an agent with that `llmProvider` is Running, error (red) when an online
+agent reports an error/failed state, waiting (amber) for another non-idle state, idle when at least one agent is
+enabled and online, otherwise offline (grey). "Pause motion" (stored in localStorage `aidashboard.pauseMotion`) and
+`prefers-reduced-motion` draw a single still frame.
 The agent editor (edit via Edit, create via `+`) opens as a centred modal overlay (native `<dialog>`) above a dimmed
 backdrop instead of below the agent list. Close it with the × button, a backdrop click, Escape or Cancel; all discard
 unsaved input. Save and Delete close it too, and the 30 s poll does not reset it.

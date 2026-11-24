@@ -5,6 +5,7 @@ import TaskEditor, { request } from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
 import TaskHistory from "./TaskHistory.jsx";
 import AgentSlots from "./AgentSlots.jsx";
+import ModelOrbs from "./ModelOrbs.jsx";
 import ActiveStatusesEditor from "./ActiveStatusesEditor.jsx";
 import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
@@ -663,7 +664,10 @@ function Dashboard({ theme, resolvedTheme, setTheme }) {
       </header>
       <main ref={mainRef} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
         <AgentSlots />
-        <TaskEditor />
+        <div className="space-y-6">
+          <ModelOrbs />
+          <TaskEditor />
+        </div>
         <ActiveAiTasksPanel labelsVersion={labelsVersion} />
       </main>
       {solvedOpen && (
