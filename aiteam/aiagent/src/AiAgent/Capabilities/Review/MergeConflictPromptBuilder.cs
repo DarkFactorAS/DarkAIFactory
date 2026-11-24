@@ -14,7 +14,14 @@ public static class MergeConflictPromptBuilder
     public static string Build(string issueKey, string baseBranch, string headBranch, IReadOnlyList<string> conflictedFiles)
     {
         var files = conflictedFiles.Select(Clean).Where(file => file.Length > 0)
-            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Take(MaxFiles).ToList();
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        if (files.Count > MaxFiles)
+        {
+            throw new ArgumentException(
+                $"Too many conflicted files ({files.Count}); at most {MaxFiles} can be resolved in one run.",
+                nameof(conflictedFiles));
+        }
+
         var prompt = new StringBuilder();
         prompt.AppendLine($"You are resolving merge conflicts for Jira issue {Clean(issueKey)}.");
         prompt.AppendLine($"Branch '{Clean(baseBranch)}' (base) has been merged into branch '{Clean(headBranch)}' (head), which is");
