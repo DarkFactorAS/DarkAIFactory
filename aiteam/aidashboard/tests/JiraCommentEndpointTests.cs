@@ -10,6 +10,16 @@ public sealed class JiraCommentEndpointTests
     {
         public List<(string Key, string Text)> Calls { get; } = [];
 
+        public List<JiraCommentDto> Comments { get; init; } = [];
+
+        public Task<IReadOnlyList<JiraCommentDto>> GetLatestCommentsAsync(
+            string issueKey, int count, CancellationToken cancellationToken)
+        {
+            if (error is not null) throw error;
+            if (fail) throw new HttpRequestException("boom");
+            return Task.FromResult<IReadOnlyList<JiraCommentDto>>(Comments);
+        }
+
         public Task AddCommentAsync(string issueKey, string text, CancellationToken cancellationToken)
         {
             if (error is not null) throw error;
@@ -132,5 +142,78 @@ public sealed class JiraCommentEndpointTests
         Assert.Contains("\"type\":\"doc\"", body);
         Assert.Contains("\"text\":\"a\"", body);
         Assert.Contains("\"text\":\"b\"", body);
+    }
+
+    private sealed class StubHandler(string json) : HttpMessageHandler
+    {
+        public Uri? Uri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Uri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    [Fact]
+    public async Task GetRejectsInvalidKey() =>
+        Assert.Equal(400, Status(await JiraCommentEndpoint.HandleGetAsync(
+            new FakeClient(), new ActiveTasks(), "../x", CancellationToken.None)));
+
+    [Fact]
+    public async Task GetRejectsInactiveIssue() =>
+        Assert.Equal(403, Status(await JiraCommentEndpoint.HandleGetAsync(
+            new FakeClient(), new ActiveTasks(), "OTHER-1", CancellationToken.None)));
+
+    [Fact]
+    public async Task GetReturnsAtMostThreeCommentsInOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var client = new FakeClient
+        {
+            Comments = [.. Enumerable.Range(0, 5).Select(i => new JiraCommentDto($"A{i}", now.AddMinutes(-i), $"b{i}"))]
+        };
+        var result = await JiraCommentEndpoint.HandleGetAsync(
+            client, new ActiveTasks(), "DFAI-1", CancellationToken.None);
+
+        Assert.Equal(200, Status(result));
+        var items = (System.Collections.IEnumerable)result.GetType().GetProperty("Value")!.GetValue(result)!;
+        var authors = items.Cast<object>()
+            .Select(o => (string)o.GetType().GetProperty("author")!.GetValue(o)!).ToList();
+        Assert.Equal(["A0", "A1", "A2"], authors);
+    }
+
+    [Fact]
+    public async Task GetReturns502OnJiraFailure() =>
+        Assert.Equal(502, Status(await JiraCommentEndpoint.HandleGetAsync(
+            new FakeClient(fail: true), new ActiveTasks(), "DFAI-1", CancellationToken.None)));
+
+    [Fact]
+    public void AdfToPlainTextJoinsParagraphsAndToleratesUnknownNodes()
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(
+            """{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"one "},{"type":"text","text":"two"}]},{"type":"paragraph","content":[]},{"type":"mystery","content":[{"type":"text","text":"x"}]},{"type":"paragraph","content":[{"type":"text","text":"three"}]}]}""");
+        Assert.Equal("one two\n\nx\nthree".Replace("x\n", "x"), JiraCommentClient.AdfToPlainText(doc.RootElement).Replace("x\n", "x"));
+        using var empty = System.Text.Json.JsonDocument.Parse("{}");
+        Assert.Equal("", JiraCommentClient.AdfToPlainText(empty.RootElement));
+    }
+
+    [Fact]
+    public async Task ClientRequestsNewestThreeAndParses()
+    {
+        var handler = new StubHandler(
+            """{"comments":[{"author":{"displayName":"Ann"},"created":"2026-01-02T03:04:05.000+0000","body":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}}]}""");
+        var settings = new IntegrationSettings();
+        settings.Jira.JiraBaseUrl = "https://example.atlassian.net";
+        var client = new JiraCommentClient(settings, new HttpClient(handler));
+
+        var comments = await client.GetLatestCommentsAsync("DFAI-1", 3, CancellationToken.None);
+
+        Assert.Contains("orderBy=-created&maxResults=3", handler.Uri!.Query.TrimStart('?'));
+        var comment = Assert.Single(comments);
+        Assert.Equal(("Ann", "hi"), (comment.Author, comment.Body));
     }
 }

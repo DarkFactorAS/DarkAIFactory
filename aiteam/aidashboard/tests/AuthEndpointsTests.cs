@@ -274,8 +274,13 @@ public sealed class AuthEndpointsTests
         await using var app = builder.Build();
         JiraCommentEndpoint.Map(app);
         var routeBuilder = (IEndpointRouteBuilder)app;
-        var endpoint = Assert.Single(routeBuilder.DataSources.SelectMany(source => source.Endpoints));
-        Assert.NotEmpty(endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>());
+        var endpoints = routeBuilder.DataSources.SelectMany(source => source.Endpoints).ToList();
+        Assert.Equal(2, endpoints.Count);
+        var post = endpoints.Single(e => e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+        Assert.NotEmpty(post.Metadata.GetOrderedMetadata<IAuthorizeData>());
+        // The comment history read is public, like the card description.
+        var get = endpoints.Single(e => e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("GET"));
+        Assert.Empty(get.Metadata.GetOrderedMetadata<IAuthorizeData>());
     }
 
     private sealed class FakeConfig(AppSettings settings) : IConfigurationHelper
