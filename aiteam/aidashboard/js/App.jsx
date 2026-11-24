@@ -234,6 +234,12 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   );
 }
 
+function hasLabelIgnoreCase(labels, label) {
+  if (!label) return false;
+  const target = String(label).toLowerCase();
+  return (labels ?? []).some((l) => String(l).toLowerCase() === target);
+}
+
 export const DEFAULT_CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
 function ActiveAiTasksPanel({ labelsVersion }) {
@@ -491,7 +497,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 )}
               {canEdit &&
                 (task.labels ?? []).includes(approvalLabels.readyToMergeLabel) &&
-                !(task.labels ?? []).includes(approvalLabels.failureLabel) &&
+                !hasLabelIgnoreCase(task.labels, approvalLabels.failureLabel) &&
                 (((task.labels ?? []).includes(approvalLabels.mergeRequestedLabel) || mergeRequested[task.key]) ? (
                   <p data-testid="ai-task-merge-requested" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                     Merge requested
@@ -515,7 +521,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                     )}
                   </div>
                 ))}
-              {canEdit && (task.labels ?? []).includes(approvalLabels.failureLabel) && (
+              {canEdit && hasLabelIgnoreCase(task.labels, approvalLabels.failureLabel) && (
                 <div className="mt-2">
                   <button
                     type="button"
