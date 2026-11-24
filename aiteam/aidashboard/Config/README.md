@@ -13,3 +13,9 @@ AIDashboard has its own config folder, separate from `aiteam/config`.
   from the template and fill in the real database settings. Compose mounts that
   separate directory at `/app/Config`; set `AIDASHBOARD_CONFIG_PATH` to use a
   different runtime-config directory. See the [dashboard setup](../../README.md#docker-and-deployment).
+- `DataProtection:KeysPath` (env `DataProtection__KeysPath`) is the folder where the ASP.NET Core
+  Data Protection key ring is stored. It encrypts the login cookie, so persisting it keeps users
+  (including "Remember me", 7 days) logged in across restarts. The Docker image sets it to
+  `/app/keys`, which Compose mounts as the named volume `aiteam_aidashboard_keys`
+  (override with `AIDASHBOARD_KEYS_VOLUME_NAME`). Deleting the volume logs everyone out. When unset
+  (local runs) the framework default key location is used.

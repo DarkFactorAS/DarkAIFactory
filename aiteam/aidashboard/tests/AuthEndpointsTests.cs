@@ -36,11 +36,11 @@ public sealed class AuthEndpointsTests
     }
 
     private static async Task<(WebApplication App, HttpClient Client)> StartAsync(
-        IDashboardLogin login, string environmentName = "Development")
+        IDashboardLogin login, string environmentName = "Development", string? keysPath = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environmentName });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Services.AddDashboardAuthentication();
+        builder.Services.AddDashboardAuthentication(keysPath);
         builder.Services.AddSingleton(login);
         var app = builder.Build();
         app.UseAuthentication();
@@ -87,6 +87,48 @@ public sealed class AuthEndpointsTests
         Assert.InRange(remaining, TimeSpan.FromDays(7) - TimeSpan.FromMinutes(5), TimeSpan.FromDays(7) + TimeSpan.FromMinutes(5));
         using var me = await client.GetAsync("/api/auth/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_CookieSurvivesRestart_WhenKeysArePersisted()
+    {
+        var keys = Directory.CreateTempSubdirectory("dashboard-keys-").FullName;
+        var otherKeys = Directory.CreateTempSubdirectory("dashboard-keys-").FullName;
+        try
+        {
+            var login = new FakeLogin(new DashboardLoginResult(DashboardLoginStatus.Ok, "Thor", 7));
+            var (app, client) = await StartAsync(login, keysPath: keys);
+            string cookie;
+            await using (app)
+            {
+                using var response = await Login(client, rememberMe: true);
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"),
+                    c => c.StartsWith(DashboardAuthentication.CookieName + "=", StringComparison.Ordinal)).Split(';')[0];
+            }
+
+            async Task<HttpStatusCode> MeAsync(string keysPath)
+            {
+                var (app2, client2) = await StartAsync(login, keysPath: keysPath);
+                await using var _ = app2;
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+                request.Headers.Add("Cookie", cookie);
+                using var me = await client2.SendAsync(request);
+                if (me.StatusCode == HttpStatusCode.OK)
+                {
+                    Assert.Equal("Thor", (await me.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("username").GetString());
+                }
+                return me.StatusCode;
+            }
+
+            Assert.Equal(HttpStatusCode.OK, await MeAsync(keys));
+            Assert.Equal(HttpStatusCode.Unauthorized, await MeAsync(otherKeys));
+        }
+        finally
+        {
+            Directory.Delete(keys, true);
+            Directory.Delete(otherKeys, true);
+        }
     }
 
     [Theory]
