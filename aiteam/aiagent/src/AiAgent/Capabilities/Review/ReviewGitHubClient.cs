@@ -357,6 +357,22 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
         };
     }
 
+    /// <summary>
+    /// True when the reviewer's approval phrase applies to the current head of the pull request. Cheaper than
+    /// <see cref="GetMergeInfoAsync"/>: it does not load files, checks or the compare data.
+    /// </summary>
+    public async Task<bool> HasReviewerApprovalAsync(
+        StoredAgentPullRequest pullRequest, string approvalPhrase, CancellationToken cancellationToken)
+    {
+        var path = RestPath(pullRequest);
+        var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
+            ?? throw new InvalidDataException($"Pull request {pullRequest.PullRequest.PullRequestUrl} not found.");
+        var headSha = node["head"]?["sha"]?.GetValue<string>() ?? string.Empty;
+        var baseBranch = node["base"]?["ref"]?.GetValue<string>() ?? string.Empty;
+        var repoPath = path[..path.IndexOf("/pulls/", StringComparison.Ordinal)];
+        return await HasReviewerApprovalAsync(path, repoPath, baseBranch, headSha, approvalPhrase, cancellationToken);
+    }
+
     /// <summary>Asks GitHub to merge the base branch into the head branch (no force push), pinned to the head.</summary>
     public async Task UpdateBranchAsync(
         StoredAgentPullRequest pullRequest, string headSha, CancellationToken cancellationToken)
@@ -466,8 +482,7 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
             string.Equals(
                 NormalizeBotLogin(item?["user"]?["login"]?.GetValue<string>()),
                 NormalizeBotLogin(_reviewerLogin),
-                StringComparison.OrdinalIgnoreCase)
-            && (item?["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
+                StringComparison.OrdinalIgnoreCase);
 
         // Read every page of reviews so a qualifying approval beyond the first page is not missed.
         var reviews = new List<JsonNode?>();
@@ -482,21 +497,24 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
             }
         }
 
-        // Only submitted APPROVED or COMMENTED reviews count; dismissed and pending reviews keep their body and
-        // commit ID but must never enable a merge.
-        foreach (var review in reviews.Where(IsReviewer).Where(review =>
-                     review?["state"]?.GetValue<string>() is { } reviewState
-                     && (string.Equals(reviewState, "APPROVED", StringComparison.OrdinalIgnoreCase)
-                         || string.Equals(reviewState, "COMMENTED", StringComparison.OrdinalIgnoreCase))))
+        // Only the newest submitted review by the reviewer on the latest non-merge commit (or later) decides: a
+        // later review without the phrase, such as CHANGES_REQUESTED, withdraws an earlier approval. Pending reviews
+        // are not submitted and are skipped. The decisive review must be APPROVED or COMMENTED and contain the
+        // phrase; dismissed reviews keep their body and commit ID but must never enable a merge.
+        var latest = reviews
+            .Where(IsReviewer)
+            .Where(review => !string.Equals(review?["state"]?.GetValue<string>(), "PENDING", StringComparison.OrdinalIgnoreCase))
+            .Where(review => shas.IndexOf(review?["commit_id"]?.GetValue<string>() ?? string.Empty) >= lastIndex)
+            .LastOrDefault();
+        if (latest is null)
         {
-            var index = shas.IndexOf(review!["commit_id"]?.GetValue<string>() ?? string.Empty);
-            if (index >= lastIndex)
-            {
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        var state = latest["state"]?.GetValue<string>();
+        return (string.Equals(state, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(state, "COMMENTED", StringComparison.OrdinalIgnoreCase))
+            && (latest["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
     }
 
     /// <summary>
