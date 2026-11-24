@@ -10,7 +10,7 @@ import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
-import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, workingIssueKeys } from "./agentApi.js";
+import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, mergeTask, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
@@ -256,6 +256,9 @@ function ActiveAiTasksPanel({ labelsVersion }) {
   const [approvalLabels, setApprovalLabels] = useState({
     approvalLabel: "aiagent-awaiting-approval",
     approvedLabel: "aiagent-approved",
+    mergeRequestedLabel: "aiagent-merge-requested",
+    readyToMergeLabel: "aiagent-ready-to-merge",
+    failureLabel: "aiagent-failed",
   });
   useEffect(() => {
     request("/api/tasks/config")
@@ -263,6 +266,9 @@ function ActiveAiTasksPanel({ labelsVersion }) {
         setApprovalLabels((prev) => ({
           approvalLabel: data.approvalLabel || prev.approvalLabel,
           approvedLabel: data.approvedLabel || prev.approvedLabel,
+          mergeRequestedLabel: data.mergeRequestedLabel || prev.mergeRequestedLabel,
+          readyToMergeLabel: data.readyToMergeLabel || prev.readyToMergeLabel,
+          failureLabel: data.failureLabel || prev.failureLabel,
         })),
       )
       .catch(() => {});
@@ -280,6 +286,22 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       setApproveError((prev) => ({ ...prev, [key]: err.message || "Approval failed" }));
     } finally {
       setApproving(null);
+    }
+  };
+  const [merging, setMerging] = useState(null);
+  const [mergeRequested, setMergeRequested] = useState({});
+  const [mergeError, setMergeError] = useState({});
+  const merge = async (key) => {
+    setMerging(key);
+    setMergeError((prev) => ({ ...prev, [key]: null }));
+    try {
+      await mergeTask(key);
+      setMergeRequested((prev) => ({ ...prev, [key]: true }));
+      state.reload();
+    } catch (err) {
+      setMergeError((prev) => ({ ...prev, [key]: err.message || "Merge request failed" }));
+    } finally {
+      setMerging(null);
     }
   };
   useEffect(() => {
@@ -453,6 +475,32 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                     )}
                   </div>
                 )}
+              {canEdit &&
+                (task.labels ?? []).includes(approvalLabels.readyToMergeLabel) &&
+                !(task.labels ?? []).includes(approvalLabels.failureLabel) &&
+                (((task.labels ?? []).includes(approvalLabels.mergeRequestedLabel) || mergeRequested[task.key]) ? (
+                  <p data-testid="ai-task-merge-requested" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    Merge requested
+                  </p>
+                ) : (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      data-testid="ai-task-merge-button"
+                      aria-label={`Merge ${task.key}`}
+                      disabled={merging === task.key}
+                      onClick={() => merge(task.key)}
+                      className="rounded bg-purple-600 px-3 py-1 text-sm text-white hover:bg-purple-700 disabled:opacity-50 dark:bg-purple-700 dark:hover:bg-purple-600"
+                    >
+                      {merging === task.key ? "Requesting merge..." : "Merge"}
+                    </button>
+                    {mergeError[task.key] && (
+                      <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {mergeError[task.key]}
+                      </p>
+                    )}
+                  </div>
+                ))}
               {canEdit && openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
             );
