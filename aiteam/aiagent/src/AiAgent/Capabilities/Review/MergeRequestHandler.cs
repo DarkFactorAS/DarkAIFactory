@@ -176,6 +176,7 @@ public sealed class MergeRequestHandler(
             {
                 Log($"{prefix}: merging '{info.BaseBranch}' conflicts in {conflicts.Count} file(s); asking the runner to resolve them.");
                 var prompt = MergeConflictPromptBuilder.Build(issueKey, info.BaseBranch, info.HeadBranch, conflicts);
+                var baseline = await SnapshotWorkspaceAsync(workspace, cancellationToken);
                 try
                 {
                     await mergeRunner.RunAsync(workspace, prompt, cancellationToken);
@@ -195,6 +196,14 @@ public sealed class MergeRequestHandler(
                 {
                     return Failed(
                         $"{prefix}: conflict markers remain in {string.Join(", ", remaining.Take(10))}; the conflict was not resolved.");
+                }
+
+                var outOfScope = FindChangesOutsideConflicts(
+                    baseline, await SnapshotWorkspaceAsync(workspace, cancellationToken), conflicts);
+                if (outOfScope.Count > 0)
+                {
+                    return Failed(
+                        $"{prefix}: the runner changed files outside the conflicted set: {string.Join(", ", outOfScope.Take(10))}; nothing was pushed.");
                 }
             }
 
@@ -228,6 +237,48 @@ public sealed class MergeRequestHandler(
                 TryDelete(Builder.BuilderCapability.GitMetadataDirectoryFor(workspace));
             }
         }
+    }
+
+    /// <summary>
+    /// Content hashes of every path git would stage with <c>add --all</c> (tracked plus untracked, not ignored).
+    /// Missing tracked files map to an empty hash so deletions are detected.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> SnapshotWorkspaceAsync(
+        string workspace, CancellationToken cancellationToken)
+    {
+        var listed = await gitRunner.RunAsync(
+            workspace, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], false, cancellationToken);
+        var root = Path.GetFullPath(workspace);
+        var snapshot = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var file in listed.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (snapshot.ContainsKey(file))
+            {
+                continue;
+            }
+
+            var full = Path.GetFullPath(Path.Combine(root, file));
+            snapshot[file] = File.Exists(full)
+                ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(full, cancellationToken)))
+                : string.Empty;
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>Paths added, removed or modified between two snapshots that are not among the conflicted files.</summary>
+    internal static IReadOnlyList<string> FindChangesOutsideConflicts(
+        IReadOnlyDictionary<string, string> before, IReadOnlyDictionary<string, string> after,
+        IReadOnlyList<string> conflicts)
+    {
+        var allowed = new HashSet<string>(conflicts, StringComparer.Ordinal);
+        return before.Keys.Concat(after.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .Where(path => !allowed.Contains(path))
+            .Where(path => !before.TryGetValue(path, out var old) || !after.TryGetValue(path, out var current) ||
+                           !string.Equals(old, current, StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>Files (of the originally conflicted ones) that still contain conflict marker lines.</summary>
