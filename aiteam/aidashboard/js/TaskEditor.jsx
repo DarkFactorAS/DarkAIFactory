@@ -139,6 +139,7 @@ export default function TaskEditor() {
   const { canEdit, openLogin } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [editingIdState, setEditingId] = useState(null);
   const editingId = canEdit ? editingIdState : null;
   const [projectKeys, setProjectKeys] = useState([]);
@@ -160,6 +161,7 @@ export default function TaskEditor() {
       .then((data) => {
         if (!mounted.current || requestId !== latestRequest.current) return;
         setTasks(data);
+        setLoaded(true);
         setError(null);
         // Close the edit form if the edited task has left the list (sent to Jira).
         setEditingId((current) =>
@@ -228,6 +230,11 @@ export default function TaskEditor() {
       {error && (
         <p role="alert" className="text-red-600 dark:text-red-400">
           Unable to load tasks: {error}
+        </p>
+      )}
+      {loaded && !error && tasks.length === 0 && (
+        <p data-testid="task-empty" className="text-sm text-slate-500 dark:text-slate-400">
+          No pending tasks.
         </p>
       )}
       <ul className="space-y-3">
