@@ -203,7 +203,7 @@ Manual check: open the dashboard logged out and see all panels with data, "Read-
 the header, and no editing controls; Log in opens the form, Back to dashboard returns; a wrong password
 shows the error and clears the password field; a valid account returns to the dashboard with the user
 name, Log out and the editing controls; reload keeps the session; Log out returns to read-only, and a
-`POST /api/agent-tasks` then returns 401; with "Remember me for 7 days" checked the cookie expires in about 7 days, unchecked about 12 hours; check light and dark themes. With two or more `manager_projects` rows the New task form lists every project with the first selected; creating a task in the second shows that key as the badge and stores it as `project_key`; with one project no dropdown appears and the key is shown as text.
+`POST /api/agent-tasks` then returns 401; with "Remember me for 7 days" checked the cookie expires in about 7 days, unchecked about 12 hours; check light and dark themes. With two or more `manager_projects` rows the New task form lists every project and preselects the last chosen one (kept across reloads and server restarts; the default is used when the stored key is missing or unknown); creating a task in the second shows that key as the badge and stores it as `project_key`; with one project no dropdown appears and the key is shown as text.
 
 The connection is read from the standard DarkFactor `AppSettings` configuration (`DatabaseConnection`).
 `DarkFactor.Common.Lib` is published to the private `DarkFactor` NuGet feed, which must be configured
@@ -218,6 +218,8 @@ In the "Tasks solved per project" panel, the "AI vs non-AI per project" list and
 default. The chevron toggle next to the heading expands and collapses them; the state is not persisted.
 
 ## Theme
+
+The project choice in the New task form is stored only in the browser's localStorage (`aidashboard.projectKey`) and is never sent to the server.
 
 The header has a Theme selector (System, Light, Dark). System, the default, follows the OS/browser
 `prefers-color-scheme` and updates live. The choice is stored only in the browser's `localStorage`
