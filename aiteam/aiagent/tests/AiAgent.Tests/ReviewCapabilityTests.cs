@@ -504,6 +504,15 @@ public sealed class ReviewCapabilityTests
     public void ReadyToMergeNeedsCommentsNoUnresolvedThreadsAndNoFailures(int total, int unresolved, int failed, bool expected) =>
         Assert.Equal(expected, ReviewCapability.IsReadyToMerge(total, unresolved, failed));
 
+    [Theory]
+    [InlineData(0, 0, 0, true, true)]
+    [InlineData(0, 0, 0, false, false)]
+    [InlineData(0, 1, 0, true, false)]
+    [InlineData(0, 0, 1, true, false)]
+    [InlineData(2, 0, 0, false, true)]
+    public void ReviewerApprovalReplacesTheNeedForAReviewThread(int total, int unresolved, int failed, bool approved, bool expected) =>
+        Assert.Equal(expected, ReviewCapability.IsReadyToMerge(total, unresolved, failed, approved));
+
     private sealed class GraphQlStub(string state = "OPEN") : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];

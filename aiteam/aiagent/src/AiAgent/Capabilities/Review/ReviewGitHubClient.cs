@@ -357,6 +357,22 @@ public sealed class ReviewGitHubClient : IReviewThreadResolver, IMergeRequestGit
         };
     }
 
+    /// <summary>
+    /// True when the reviewer's approval phrase applies to the current head of the pull request. Cheaper than
+    /// <see cref="GetMergeInfoAsync"/>: it does not load files, checks or the compare data.
+    /// </summary>
+    public async Task<bool> HasReviewerApprovalAsync(
+        StoredAgentPullRequest pullRequest, string approvalPhrase, CancellationToken cancellationToken)
+    {
+        var path = RestPath(pullRequest);
+        var node = await SendRestAsync(HttpMethod.Get, path, null, cancellationToken)
+            ?? throw new InvalidDataException($"Pull request {pullRequest.PullRequest.PullRequestUrl} not found.");
+        var headSha = node["head"]?["sha"]?.GetValue<string>() ?? string.Empty;
+        var baseBranch = node["base"]?["ref"]?.GetValue<string>() ?? string.Empty;
+        var repoPath = path[..path.IndexOf("/pulls/", StringComparison.Ordinal)];
+        return await HasReviewerApprovalAsync(path, repoPath, baseBranch, headSha, approvalPhrase, cancellationToken);
+    }
+
     /// <summary>Asks GitHub to merge the base branch into the head branch (no force push), pinned to the head.</summary>
     public async Task UpdateBranchAsync(
         StoredAgentPullRequest pullRequest, string headSha, CancellationToken cancellationToken)

@@ -103,7 +103,7 @@ click it: the issue gets `aiagent-approved` and, after the agent runs, both labe
 Check light and dark themes. Tip: add `aiagent-awaiting-approval` to the card badge labels to see it on the card.
 `POST /api/tasks/{key}/merge` (login required) requests the merge of a ready pull request by adding the merge-requested label
 (`workflow_labels[aiagent, MergeRequestedLabel]`, default `aiagent-merge-requested`) to an active issue that has the
-`aiagent-ready-to-merge` label and not the `aiagent-failed` label (`FailureLabel`). 400 invalid key, 403 issue not active,
+`aiagent-ready-to-merge` label (also set by the Review capability on reviewer approval, "Approval recommended") and not the `aiagent-failed` label (`FailureLabel`). 400 invalid key, 403 issue not active,
 409 not ready to merge or failed, 502 Jira failure (generic error); 200 without a Jira call if the label is already present.
 The dashboard never calls GitHub. The "Top 5 AI tasks" cards show a **Merge** button for logged-in users when the issue has the
 ready-to-merge label and neither the merge-requested nor the failed label; after the click (or when the label is present) the
@@ -161,7 +161,9 @@ Top 5 AI tasks cards show a yellow badge (text = label name) next to the status 
 Jira label (`Dashboard.CardLabels`; default `ai-approved`, `aiagent-needs-clarification` and
 `aiagent-ready-to-merge` when empty) that is on the issue (exact match,
 `data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label only after the
-pull request has at least one review comment and all review threads are resolved. It removes the label when
+pull request has at least one review comment and all review threads are resolved, or when the reviewer's latest
+review after the last non-merge commit contains the approval phrase ("Approval recommended", configurable via
+`ApprovalPhrase`) and nothing is unresolved or failed. It removes the label when
 unresolved or failed review work remains, and while the agent is fixing review comments.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
 30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and

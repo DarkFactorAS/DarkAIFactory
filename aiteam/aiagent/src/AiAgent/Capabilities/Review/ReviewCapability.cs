@@ -207,11 +207,11 @@ public sealed class ReviewCapability(
     }
 
     /// <summary>
-    /// A pull request is ready to merge only after it has received at least one review comment thread,
-    /// no review thread is unresolved and no fix failed.
+    /// A pull request is ready to merge when no review thread is unresolved, no fix failed, and it either
+    /// received at least one review comment thread or the reviewer left the approval phrase.
     /// </summary>
-    internal static bool IsReadyToMerge(int totalThreads, int unresolvedThreads, int failedCount) =>
-        totalThreads > 0 && unresolvedThreads == 0 && failedCount == 0;
+    internal static bool IsReadyToMerge(int totalThreads, int unresolvedThreads, int failedCount, bool reviewerApproved = false) =>
+        unresolvedThreads == 0 && failedCount == 0 && (totalThreads > 0 || reviewerApproved);
 
     /// <summary>
     /// A pull request may be considered for automatic merge when no review thread is unresolved and no fix
@@ -261,28 +261,54 @@ public sealed class ReviewCapability(
             return;
         }
 
+        var prefix = $"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey})";
+        var candidate = IsMergeCandidate(threads.Unresolved, failedCount);
         var readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount);
+        PullRequestMergeInfo? info = null;
+        if (candidate && options.AutoMergeEnabled)
+        {
+            try
+            {
+                info = await client.GetMergeInfoAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
+                readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount, info.ReviewerApproved);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
+            }
+        }
+        else if (candidate && !readyToMerge)
+        {
+            try
+            {
+                var approved = await client.HasReviewerApprovalAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
+                readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount, approved);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: could not check the reviewer approval: {exception.Message}");
+            }
+        }
+
         await TryUpdateReadinessLabelAsync(pullRequest.PullRequest.JiraKey, readyToMerge, cancellationToken);
 
-        if (!IsMergeCandidate(threads.Unresolved, failedCount))
+        if (!candidate)
         {
             return;
         }
 
-        var prefix = $"PR #{pullRequest.PullRequest.PullRequestNumber} ({pullRequest.PullRequest.JiraKey})";
         if (readyToMerge)
         {
             Log($"{prefix} is ready to be merged: all review comments are resolved.");
         }
 
-        if (!options.AutoMergeEnabled)
+        if (!options.AutoMergeEnabled || info is null)
         {
             return;
         }
 
         try
         {
-            var info = await client.GetMergeInfoAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
             if (string.IsNullOrEmpty(checkedHead)
                 || !string.Equals(checkedHead, info.HeadSha, StringComparison.OrdinalIgnoreCase))
             {
