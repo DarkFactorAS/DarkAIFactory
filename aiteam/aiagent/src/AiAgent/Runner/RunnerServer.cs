@@ -99,7 +99,7 @@ internal static class RunnerServer
                 var duration = elapsed;
                 if (claude)
                 {
-                    (var parsed, usage, duration) = RunnerPolicy.ParseClaudeJson(result.Output, elapsed);
+                    (var parsed, usage, duration) = RunnerPolicy.ParseClaudeStreamJson(result.Output, elapsed);
                     output = exitCode == 0 ? parsed : Combine(result);
                 }
                 else

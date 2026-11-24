@@ -88,7 +88,7 @@ public sealed class RunnerPolicyTests
         await using var app = RunnerServer.Build("http://127.0.0.1:0", root, 2, (_, args, _, env, input, _) =>
         {
             stdin = input; seenEnv = env; seenArgs = args;
-            return Task.FromResult(new ProcessResult(0, "{\"result\":\"ok\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4},\"duration_api_ms\":7}", ""));
+            return Task.FromResult(new ProcessResult(0, "{\"type\":\"result\",\"result\":\"ok\",\"usage\":{\"input_tokens\":3,\"output_tokens\":4},\"duration_ms\":7}", ""));
         });
         await app.StartAsync();
         using var client = new RunnerClient(new Uri(app.Urls.First()));

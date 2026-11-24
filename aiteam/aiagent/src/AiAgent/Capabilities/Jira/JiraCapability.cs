@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AiAgent.Core;
+using AiAgent.Metrics;
 using AiAgent.Repositories;
 using DFCommonLib.Logger;
 
@@ -16,7 +17,8 @@ public sealed class JiraCapability(
     IAgentTaskProcessorRepository tasks,
     IAgentPullRequestRepository pullRequests,
     IPullRequestMergeChecker mergeChecker,
-    Func<string, Uri?> resolveRepository) : IAgentCapability
+    Func<string, Uri?> resolveRepository,
+    AiAgent.Metrics.IAgentRunRecorder? recorder = null) : IAgentCapability
 {
     private readonly ConcurrentDictionary<long, Dictionary<long, int>> _attempts = new();
 
@@ -26,23 +28,24 @@ public sealed class JiraCapability(
     {
         var config = loadConfig();
         var jira = createClient(config);
+        var record = (recorder ?? AiAgent.Metrics.NullAgentRunRecorder.Instance).Bind(context, Kind);
         try
         {
             if (config.IntakeEnabled)
             {
                 await RunStepAsync("intake", () => new AgentTaskIntake(
                         tasks, jira, config.SelectedStatus, JiraCapabilityConfig.MaxIntakeAttempts,
-                        _attempts.GetOrAdd(context.AgentId, _ => []), context.ClaimLock, context.AgentId)
+                        _attempts.GetOrAdd(context.AgentId, _ => []), context.ClaimLock, context.AgentId, record)
                     .ProcessNewTasksAsync(context.ProjectKeys, cancellationToken), cancellationToken);
             }
 
             var recovery = new PullRequestTrackingRecovery(
                 context.AgentId, jira, pullRequests,
-                key => resolveRepository(key));
+                key => resolveRepository(key), record);
             var closer = new PullRequestCloser(
                 config, jira, pullRequests,
-                (record, token) => mergeChecker.IsMergedAsync(config.GitHubToken, record, token));
-            var unblocker = new BlockedIssueUnblocker(config, jira);
+                (pullRequest, token) => mergeChecker.IsMergedAsync(config.GitHubToken, pullRequest, token), record);
+            var unblocker = new BlockedIssueUnblocker(config, jira, record);
             foreach (var projectKey in context.ProjectKeys)
             {
                 await RunStepAsync($"recovery for {projectKey}", () => recovery.RecoverAsync(projectKey, cancellationToken), cancellationToken);

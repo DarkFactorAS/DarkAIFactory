@@ -7,7 +7,8 @@ namespace AiAgent.Capabilities.Jira;
 /// Moves an issue to the selected-for-development status once all its "is blocked by" issues are Done.
 /// Only issues in the configured source statuses (default To Do / Backlog) are considered.
 /// </summary>
-internal sealed class BlockedIssueUnblocker(JiraCapabilityConfig configuration, IJiraClient jira)
+internal sealed class BlockedIssueUnblocker(
+    JiraCapabilityConfig configuration, IJiraClient jira, AiAgent.Metrics.RecordRun? record = null)
 {
     public async Task<IReadOnlyList<string>> UnblockAsync(string jiraProjectKey, CancellationToken cancellationToken)
     {
@@ -36,7 +37,11 @@ internal sealed class BlockedIssueUnblocker(JiraCapabilityConfig configuration, 
 
             try
             {
-                await jira.TransitionToAsync(issue.Key, configuration.SelectedStatus, cancellationToken);
+                await (record ?? AiAgent.Metrics.NullAgentRunRecorder.Record)(issue.Key, async run =>
+                {
+                    await jira.TransitionToAsync(issue.Key, configuration.SelectedStatus, cancellationToken);
+                    run.Succeed();
+                });
                 moved.Add(issue.Key);
                 AgentLog.LogOutput(
                     DFLogLevel.INFO, "JiraUnblocker",

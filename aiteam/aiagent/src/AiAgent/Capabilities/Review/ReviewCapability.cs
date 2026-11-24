@@ -1,4 +1,5 @@
 using AiAgent.Core;
+using AiAgent.Metrics;
 using AiAgent.Capabilities.Jira;
 using AiAgent.LanguageModel;
 using AiAgent.GitHub;
@@ -22,7 +23,8 @@ public sealed class ReviewCapability(
     RunnerClient runnerClient,
     HttpMessageHandler? gitHubHandler = null,
     Uri? gitHubApiUrl = null,
-    Func<IJiraClient>? createJiraClient = null) : IAgentCapability
+    Func<IJiraClient>? createJiraClient = null,
+    AiAgent.Metrics.IAgentRunRecorder? recorder = null) : IAgentCapability
 {
     private const string Category = "Review";
     internal const string ReadyToMergeLabel = "aiagent-ready-to-merge";
@@ -72,8 +74,13 @@ public sealed class ReviewCapability(
 
             try
             {
-                var failedCount = await FixPullRequestAsync(
-                    context, client, pullRequest, scan.Actionable, scan.ThreadMembers, cancellationToken);
+                int? failedCount = null;
+                await (recorder ?? AiAgent.Metrics.NullAgentRunRecorder.Instance)
+                    .Bind(context, Kind)(pullRequest.PullRequest.JiraKey, async run =>
+                    {
+                        failedCount = await FixPullRequestAsync(
+                            context, client, pullRequest, scan.Actionable, scan.ThreadMembers, run, cancellationToken);
+                    });
                 if (failedCount is { } completedFailedCount)
                 {
                     await LogIfReadyToMergeAsync(client, pullRequest, completedFailedCount, cancellationToken);
@@ -223,6 +230,7 @@ public sealed class ReviewCapability(
         StoredAgentPullRequest pullRequest,
         IReadOnlyList<ReviewComment> comments,
         IReadOnlyList<ReviewThreadMember> threadMembers,
+        AiAgent.Metrics.IAgentRun run,
         CancellationToken cancellationToken)
     {
         var number = pullRequest.PullRequest.PullRequestNumber;
@@ -230,6 +238,7 @@ public sealed class ReviewCapability(
         if (comments.Any(comment => !string.Equals(comment.HeadSha, headSha, StringComparison.OrdinalIgnoreCase)))
         {
             Log($"PR #{number}: head moved while reading comments; retrying next cycle.");
+            run.Discard();
             return null;
         }
 
@@ -244,6 +253,7 @@ public sealed class ReviewCapability(
             if (!string.Equals(revision, headSha, StringComparison.OrdinalIgnoreCase))
             {
                 Log($"PR #{number}: branch is at {revision}, expected {headSha}; retrying next cycle.");
+                run.Discard();
                 return null;
             }
 
@@ -261,6 +271,7 @@ public sealed class ReviewCapability(
             Log($"PR #{number}: fix run finished with {result.Outcome}; " +
                 $"{result.PushedCount} pushed, {result.FailedCount} failed" +
                 (result.Error is null ? "." : $". Last error: {result.Error}"));
+            MapOutcome(run, result);
             return result.FailedCount;
         }
         finally
@@ -276,6 +287,27 @@ public sealed class ReviewCapability(
                 // remove that object database too so per-attempt clones do not accumulate on disk.
                 TryDelete(Builder.BuilderCapability.GitMetadataDirectoryFor(workspace));
             }
+        }
+    }
+
+    /// <summary>Succeeded only when a fix was pushed; a discarded fix or reached attempt limit is Failed.</summary>
+    internal static void MapOutcome(AiAgent.Metrics.IAgentRun run, FixResult result)
+    {
+        switch (result.Outcome)
+        {
+            case FixOutcome.Pushed:
+                run.Succeed();
+                break;
+            case FixOutcome.Skipped:
+                // Every comment had used its attempts: nothing was attempted, so no run is recorded.
+                run.Discard();
+                break;
+            case FixOutcome.NoChanges:
+                run.Fail("The fix was discarded: the agent made no change.");
+                break;
+            default:
+                run.Fail(result.Error ?? "The fix failed or the attempt limit was reached.");
+                break;
         }
     }
 
