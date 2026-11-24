@@ -12,7 +12,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal("AgentTables", patcher.System);
-        Assert.Equal(16, patcher.Sql.Count);
+        Assert.Equal(17, patcher.Sql.Count);
         string[] tables =
         [
             "agent_definitions", "agent_capabilities", "agent_projects",
@@ -81,8 +81,8 @@ public sealed class AgentTablesPatcherTests
         var patcher = new RecordingPatcher(0);
         Assert.True(AgentTablesPatcher.Run(patcher));
 
-        Assert.Contains("'Dashboard.ActiveStatuses'", patcher.Sql[^2]);
-        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", patcher.Sql[^2]);
+        Assert.Contains("'Dashboard.ActiveStatuses'", patcher.Sql[^3]);
+        Assert.Contains("`client` = 'aidashboard' AND `name` IN ('Dashboard.AiLabels', 'Dashboard.ActiveStatuses')", patcher.Sql[^3]);
     }
 
     [Fact]
@@ -91,8 +91,33 @@ public sealed class AgentTablesPatcherTests
         var patcher = new RecordingPatcher(0);
         Assert.True(AgentTablesPatcher.Run(patcher));
 
-        Assert.Contains("'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))", patcher.Sql[^1]);
-        Assert.Contains("('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels')", patcher.Sql[^1]);
+        Assert.Contains("'Dashboard.ActiveStatuses', 'Dashboard.CardLabels'))", patcher.Sql[^2]);
+        Assert.Contains("('Dashboard.AiLabels', 'Dashboard.ActiveStatuses', 'Dashboard.CardLabels')", patcher.Sql[^2]);
+    }
+
+    [Fact]
+    public void Patcher_CreatesAgentRunsTableLast()
+    {
+        var patcher = new RecordingPatcher(0);
+        Assert.True(AgentTablesPatcher.Run(patcher));
+
+        Assert.Equal(17, patcher.Numbers[^1]);
+        var sql = patcher.Sql[^1];
+        Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_runs`", sql);
+        Assert.Contains("`id` BIGINT NOT NULL AUTO_INCREMENT", sql);
+        Assert.Contains("`capability` ENUM('Jira', 'Planning', 'Builder', 'Review') NOT NULL", sql);
+        Assert.Contains("`outcome` ENUM('Succeeded', 'Failed') NULL", sql);
+        Assert.Contains("`failure_reason` TEXT NULL", sql);
+        Assert.Contains("`cost_usd` DECIMAL(12,6) NULL", sql);
+        foreach (var column in new[] { "issue_key", "model", "finished_at", "llm_duration_ms", "input_tokens",
+            "output_tokens", "cache_read_tokens", "cache_write_tokens", "tool_calls", "num_turns" })
+        {
+            Assert.Matches($"`{column}` \\w+(\\(\\d+\\))? NULL", sql);
+        }
+        Assert.Contains("(`agent_id`, `started_at`)", sql);
+        Assert.Contains("FOREIGN KEY (`agent_id`)", sql);
+        Assert.Contains("REFERENCES `agent_definitions` (`id`)", sql);
+        Assert.DoesNotContain("DROP", sql);
     }
 
     [Fact]
@@ -102,7 +127,7 @@ public sealed class AgentTablesPatcherTests
         Assert.True(AgentTablesPatcher.Run(patcher));
 
         Assert.Equal(11, patcher.Numbers[10]);
-        Assert.Equal(16, patcher.Numbers[^1]);
+        Assert.Equal(17, patcher.Numbers[^1]);
         var sql = patcher.Sql[10];
         Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_status`", sql);
         Assert.Contains("ENUM('Idle', 'Running', 'Error', 'Disabled')", sql);
@@ -133,6 +158,7 @@ public sealed class AgentTablesPatcherTests
     [InlineData(6)]
     [InlineData(10)]
     [InlineData(11)]
+    [InlineData(17)]
     public void Patcher_StopsAtFailingPatch(int failingPatch)
     {
         var patcher = new RecordingPatcher(failingPatch);

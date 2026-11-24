@@ -4,6 +4,7 @@ using AiAgent.Capabilities.Planning;
 using AiAgent.Capabilities.Review;
 using AiAgent.Core;
 using AiAgent.GitHub;
+using AiAgent.Metrics;
 using AiAgent.Repositories;
 using AiAgent.Runner;
 using DFCommonLib.Config;
@@ -25,6 +26,10 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<IConfigurationHelper, ConfigurationHelper<AgentSettings>>();
 new DFServices(builder.Services).SetupLogger().SetupMySql().LogToConsole(DFLogLevel.INFO);
 builder.Services.AddScoped<IntegrationSettingsRepository>();
+builder.Services.AddSingleton<IAgentRunRepository>(services =>
+    new AgentRunRepository(services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>()));
+builder.Services.AddSingleton<IAgentRunRecorder>(services =>
+    new AgentRunRecorder(services.GetRequiredService<IAgentRunRepository>()));
 builder.Services.AddSingleton<IAgentCapability>(services =>
 {
     var factory = services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
@@ -39,7 +44,8 @@ builder.Services.AddSingleton<IAgentCapability>(services =>
         (url, settings) => new GitHubCore(
             new GitRunner(settings.GitHubRepositoryToken), url, settings.GitHubRepositoryToken, pullRequests),
         new RunnerClient(),
-        RunnerPolicy.WorkspaceRoot);
+        RunnerPolicy.WorkspaceRoot,
+        services.GetRequiredService<IAgentRunRecorder>());
 });
 using var host = builder.Build();
 var appSettings = host.Services.GetRequiredService<IConfigurationHelper>().Settings as AgentSettings
@@ -65,6 +71,7 @@ using var sigtermRegistration = OperatingSystem.IsWindows()
 
 var connectionFactory = host.Services.GetRequiredService<DFCommonLib.DataAccess.IDbConnectionFactory>();
 var agentRepository = new AgentRepository(connectionFactory);
+var runRecorder = host.Services.GetRequiredService<IAgentRunRecorder>();
 var pollSeconds = Math.Max(5, appSettings.PollIntervalSeconds);
 JiraCapabilityConfig LoadJiraConfig() => JiraCapabilityConfig.From(
     new IntegrationSettingsRepository(connectionFactory).Load("aiagent", pollSeconds),
@@ -78,7 +85,8 @@ var jiraCapability = new JiraCapability(
     key => new ManagerProjectRepository(connectionFactory).GetProjects()
         .Where(project => string.Equals(project.JiraProjectKey, key, StringComparison.OrdinalIgnoreCase))
         .Select(project => Uri.TryCreate(project.TargetRepositoryUrl, UriKind.Absolute, out var url) ? url : null)
-        .FirstOrDefault());
+        .FirstOrDefault(),
+    runRecorder);
 JiraCapability.LogIntakeWarning(agentRepository, LoadJiraConfig);
 using var runnerClient = new RunnerClient();
 var capabilities = host.Services.GetServices<IAgentCapability>().Append(new PlanningCapability(
@@ -87,7 +95,8 @@ var capabilities = host.Services.GetServices<IAgentCapability>().Append(new Plan
     () => new ManagerProjectRepository(connectionFactory).GetProjects(),
     new AgentPlanRepository(connectionFactory),
     settings => new PlanningJiraClient(settings.Jira),
-    new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory))))
+    new RunnerPlanningRunner(runnerClient, new AgentPullRequestRepository(connectionFactory)),
+    runRecorder))
     .Append(jiraCapability);
 var reviewSettings = new IntegrationSettingsRepository(connectionFactory).Load("aiagent", pollSeconds);
 if (string.IsNullOrWhiteSpace(reviewSettings.GitHub.GitHubRepositoryToken))
@@ -120,7 +129,8 @@ else
         new AgentReviewAttemptRepository(connectionFactory),
         new GitRunner(repositoryToken),
         runnerClient,
-        createJiraClient: () => new JiraClient(LoadJiraConfig())));
+        createJiraClient: () => new JiraClient(LoadJiraConfig()),
+        recorder: runRecorder));
 }
 var agentsPerInstance = AgentsPerInstancePolicy.Resolve(
     appSettings.AgentsPerInstance, Environment.GetEnvironmentVariable("AIAGENT_AGENTS_PER_INSTANCE"), out var agentsPerInstanceWarning);

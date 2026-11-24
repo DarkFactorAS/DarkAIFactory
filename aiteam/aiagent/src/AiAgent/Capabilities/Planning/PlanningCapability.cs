@@ -1,4 +1,5 @@
 using AiAgent.Core;
+using AiAgent.Metrics;
 using AiAgent.Providers;
 using AiAgent.Repositories;
 using AiAgent.Runner;
@@ -29,7 +30,8 @@ internal sealed class PlanningCapability(
     Func<IReadOnlyList<ManagerProject>> loadProjects,
     IAgentPlanRepository plans,
     Func<IntegrationSettings, IPlanningJira> createJira,
-    IPlanningRunner runner) : IAgentCapability
+    IPlanningRunner runner,
+    AiAgent.Metrics.IAgentRunRecorder? recorder = null) : IAgentCapability
 {
     public const string AgentName = "aiagent";
 
@@ -75,11 +77,18 @@ internal sealed class PlanningCapability(
         IPlanningJira jira, CancellationToken cancellationToken)
     {
         var configuration = PlanningConfiguration.Load(settings, project, labels);
+        var record = (recorder ?? AiAgent.Metrics.NullAgentRunRecorder.Instance).Bind(context, Kind);
+        // The run of the issue being planned; its row is only inserted when the LLM is called.
+        var currentRun = new AsyncLocal<AiAgent.Metrics.IAgentRun?>();
         var planner = new AgentPlanner(
             configuration,
             new AgentPlanStore(plans, context.AgentId),
             jira,
-            (issue, token) => runner.GeneratePlanAsync(context, settings, configuration, issue, token),
+            (issue, token) =>
+            {
+                currentRun.Value?.Begin();
+                return runner.GeneratePlanAsync(context, settings, configuration, issue, token);
+            },
             (config, head, key, summary, token) =>
                 runner.CreateParentPullRequestAsync(context, settings, config, head, key, summary, token));
         await planner.ReportExcludedIssuesAsync(project.JiraProjectKey, cancellationToken);
@@ -94,7 +103,12 @@ internal sealed class PlanningCapability(
 
             try
             {
-                await planner.PlanAsync(project.Id, issue, cancellationToken);
+                await record(issue.Key, async run =>
+                {
+                    currentRun.Value = run;
+                    await planner.PlanAsync(project.Id, issue, cancellationToken, run);
+                    run.Succeed();
+                }, deferStart: true);
             }
             catch (RunnerBusyException exception)
             {

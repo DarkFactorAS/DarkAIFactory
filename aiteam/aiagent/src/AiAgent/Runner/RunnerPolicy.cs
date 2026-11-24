@@ -77,7 +77,7 @@ internal static class RunnerPolicy
 
     public static IReadOnlyList<string> BuildClaudeArguments(string model, string mode)
     {
-        var arguments = new List<string> { "-p", "--output-format", "json" };
+        var arguments = new List<string> { "-p", "--output-format", "stream-json", "--verbose" };
         if (model.Length > 0)
         {
             arguments.Add("--model");
@@ -180,36 +180,95 @@ internal static class RunnerPolicy
         return prompt;
     }
 
-    /// <summary>Extracts result text, usage and duration from <c>claude -p --output-format json</c>.</summary>
-    public static (string Output, RunnerUsage? Usage, long DurationMs) ParseClaudeJson(string stdout, long fallbackMs)
+    /// <summary>
+    /// Extracts result text, usage and duration from <c>claude -p --output-format stream-json --verbose</c>
+    /// (one JSON event per line). Tool calls are the <c>tool_use</c> blocks of assistant events; tokens, cost, turns
+    /// and duration come from the final <c>result</c> event. Malformed lines are skipped; without a result event
+    /// the raw output is returned with no usage.
+    /// </summary>
+    public static (string Output, RunnerUsage? Usage, long DurationMs) ParseClaudeStreamJson(string stdout, long fallbackMs)
     {
-        try
+        var toolCalls = 0;
+        JsonElement? resultEvent = null;
+        using var keepAlive = new CompositeDisposable();
+        foreach (var rawLine in stdout.Split('\n'))
         {
-            using var document = JsonDocument.Parse(stdout);
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line[0] != '{')
+            {
+                continue;
+            }
+
+            JsonDocument document;
+            try
+            {
+                document = JsonDocument.Parse(line);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            keepAlive.Add(document);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("type", out var type) ||
+                type.ValueKind != JsonValueKind.String)
             {
-                return (stdout, null, fallbackMs);
+                continue;
             }
 
-            var output = root.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String
-                ? result.GetString() ?? string.Empty
-                : stdout;
-            RunnerUsage? usage = null;
-            if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
+            switch (type.GetString())
             {
-                usage = new RunnerUsage(Long(u, "input_tokens"), Long(u, "output_tokens"));
-            }
+                case "assistant":
+                    if (root.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.Object &&
+                        message.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
+                    {
+                        toolCalls += content.EnumerateArray().Count(block =>
+                            block.ValueKind == JsonValueKind.Object && block.TryGetProperty("type", out var blockType) &&
+                            blockType.ValueKind == JsonValueKind.String && blockType.GetString() == "tool_use");
+                    }
 
-            var duration = root.TryGetProperty("duration_api_ms", out var d) && d.TryGetInt64(out var ms) ? ms : fallbackMs;
-            return (output, usage, duration);
+                    break;
+                case "result":
+                    resultEvent = root;
+                    break;
+            }
         }
-        catch (JsonException)
+
+        if (resultEvent is not { } result)
         {
             return (stdout, null, fallbackMs);
         }
 
-        static long Long(JsonElement element, string name) =>
-            element.TryGetProperty(name, out var v) && v.TryGetInt64(out var n) ? n : 0;
+        var output = result.TryGetProperty("result", out var text) && text.ValueKind == JsonValueKind.String
+            ? text.GetString() ?? string.Empty
+            : stdout;
+        RunnerUsage? usage = null;
+        if (result.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
+        {
+            usage = new RunnerUsage(
+                Long(u, "input_tokens") ?? 0,
+                Long(u, "output_tokens") ?? 0,
+                Long(u, "cache_read_input_tokens"),
+                Long(u, "cache_creation_input_tokens"),
+                result.TryGetProperty("total_cost_usd", out var cost) && cost.ValueKind == JsonValueKind.Number &&
+                    cost.TryGetDecimal(out var dollars) ? dollars : null,
+                toolCalls,
+                Long(result, "num_turns") is { } turns ? (int)turns : null);
+        }
+
+        return (output, usage, Long(result, "duration_ms") ?? fallbackMs);
+
+        static long? Long(JsonElement element, string name) =>
+            element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n)
+                ? n
+                : null;
+    }
+
+    private sealed class CompositeDisposable : IDisposable
+    {
+        private readonly List<IDisposable> _items = [];
+        public void Add(IDisposable item) => _items.Add(item);
+        public void Dispose() => _items.ForEach(item => item.Dispose());
     }
 }

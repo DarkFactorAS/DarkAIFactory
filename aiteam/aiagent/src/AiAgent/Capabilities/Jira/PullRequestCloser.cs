@@ -9,7 +9,8 @@ internal sealed class PullRequestCloser(
     JiraCapabilityConfig configuration,
     IJiraClient jira,
     IAgentPullRequestRepository pullRequests,
-    Func<AgentPullRequestRecord, CancellationToken, Task<bool>> isMerged)
+    Func<AgentPullRequestRecord, CancellationToken, Task<bool>> isMerged,
+    AiAgent.Metrics.RecordRun? record = null)
 {
     /// <summary>Issues without a stored pull request are left untouched. Returns the keys moved to Done.</summary>
     public async Task<IReadOnlyList<string>> CloseMergedAsync(
@@ -59,7 +60,11 @@ internal sealed class PullRequestCloser(
                     continue;
                 }
 
-                await jira.TransitionToAsync(issue.Key, configuration.DoneStatus, cancellationToken);
+                await (record ?? AiAgent.Metrics.NullAgentRunRecorder.Record)(issue.Key, async run =>
+                {
+                    await jira.TransitionToAsync(issue.Key, configuration.DoneStatus, cancellationToken);
+                    run.Succeed();
+                });
                 closed.Add(issue.Key);
                 AgentLog.LogOutput(
                     DFLogLevel.INFO, "JiraCloser",

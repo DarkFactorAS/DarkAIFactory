@@ -143,3 +143,27 @@ comments until the next cycle.
   sub-tasks) or when it changes agent code (path prefixes from `AIAGENT_AGENT_CODE_PATHS`, comma separated, default
   `aiteam/,.agents/,AGENTS.md,CLAUDE.md,.github/`); the reason is logged. `AIAGENT_MERGE_METHOD` is `squash` (default),
   `merge` or `rebase`. The merge is pinned to the checked head SHA. Jira is moved to Done by the existing flow.
+
+## Run recording (`Metrics`, table `agent_runs`)
+
+Every unit of work of a capability writes exactly one `agent_runs` row (`AgentRunRecorder`): the row is inserted when
+the work starts and finished in a `finally` block with the outcome (`Succeeded`/`Failed`) and a failure reason, so an
+exception is recorded as `Failed`. A database failure of the recorder is logged and never breaks the work. Polling
+cycles with no work write no row. A busy runner discards the row because the work is retried next cycle.
+
+| Capability | Unit of work | Succeeded | Failed |
+| --- | --- | --- | --- |
+| Jira | one intake task, recovery, close or unblock action | the action completed | an exception (intake: each failed attempt, up to the 3-failure limit) |
+| Planning | one issue whose plan is generated (row starts when the LLM is called) | triage posted and saved in `agent_plans` | exception, invalid triage JSON, plan discarded or a failed post |
+| Builder | one issue | pull request opened and build/tests passed | `aiagent-failed` label, failed tests or nothing to commit |
+| Review | one pull request fix | the fix was pushed | the fix was discarded or failed, or the attempt limit was reached |
+
+Usage is added by `RunnerClient` to the run of the current async flow, so several LLM calls accumulate into one row.
+
+* **Claude** runs with `--output-format stream-json --verbose` (permission flags unchanged). The runner counts the
+  `tool_use` blocks and reads `input_tokens`, `output_tokens`, `cache_read_input_tokens`,
+  `cache_creation_input_tokens`, `total_cost_usd`, `num_turns` and `duration_ms` from the final `result` event.
+  Malformed lines are skipped; the plain result text is still returned.
+* **Copilot**: LLM time is the process time; tokens, cache tokens, cost, tool calls and turns stay `NULL`. Copilot CLI
+  1.0.112 (the version installed in the runner image) has no option that prints usage in non-interactive `--silent`
+  mode (`copilot --help` lists no output-format or usage flag), so nothing is parsed. Recheck after a CLI upgrade.
