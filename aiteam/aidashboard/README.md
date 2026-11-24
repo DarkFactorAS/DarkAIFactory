@@ -243,6 +243,7 @@ progress count as neither), `wallClockMs`/`avgWallClockMs` (`finished_at - start
 A value that no run reported is `null` (shown as "N/A"), never 0. Averages cover the runs that reported the value.
 The route is registered before `/api/agents/{id:long}` and does not clash with it.
 
-Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All-time / 7 days toggle; hover shows the
-averages, input vs output tokens and LLM vs wall-clock time. Metrics refresh on the 30 s agent poll.
+Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All-time / 7 days toggle: succeeded/failed,
+wall-clock time and cost. An info icon after the succeeded/failed text shows, on hover or focus, the tokens
+(input/output/total), tool calls, averages and LLM vs wall-clock time. Metrics refresh on the 30 s agent poll.
 The JS bundle is built with `npm install && npm run build` in `aiteam/aidashboard` (output `dist`, git-ignored).
