@@ -270,6 +270,12 @@ public sealed class ReviewCapability(
             try
             {
                 info = await client.GetMergeInfoAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
+                if (info.ReviewerApproved
+                    && !await IsLatestReviewerReviewApprovalAsync(pullRequest, cancellationToken))
+                {
+                    info = info with { ReviewerApproved = false };
+                }
+
                 readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount, info.ReviewerApproved);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -281,7 +287,8 @@ public sealed class ReviewCapability(
         {
             try
             {
-                var approved = await client.HasReviewerApprovalAsync(pullRequest, options.ApprovalPhrase, cancellationToken);
+                var approved = await client.HasReviewerApprovalAsync(pullRequest, options.ApprovalPhrase, cancellationToken)
+                    && await IsLatestReviewerReviewApprovalAsync(pullRequest, cancellationToken);
                 readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount, approved);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -337,6 +344,86 @@ public sealed class ReviewCapability(
         {
             AgentLog.LogOutput(DFLogLevel.WARNING, Category, $"{prefix}: automatic merge failed: {exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// True when the reviewer's latest submitted review (pending reviews are ignored) is an APPROVED or COMMENTED
+    /// review whose body contains the approval phrase. An earlier approval followed by a later non-approval review
+    /// (changes requested, a comment without the phrase or a dismissed review) therefore no longer counts.
+    /// </summary>
+    private async Task<bool> IsLatestReviewerReviewApprovalAsync(
+        StoredAgentPullRequest pullRequest, CancellationToken cancellationToken)
+    {
+        var phrase = options.ApprovalPhrase;
+        if (string.IsNullOrWhiteSpace(phrase))
+        {
+            return false;
+        }
+
+        var segments = new Uri(pullRequest.PullRequest.RepositoryUrl).AbsolutePath.Trim('/').Split('/');
+        if (segments.Length < 2)
+        {
+            return false;
+        }
+
+        var name = segments[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? segments[1][..^4] : segments[1];
+        var path = $"repos/{segments[0]}/{name}/pulls/{pullRequest.PullRequest.PullRequestNumber}/reviews";
+
+        using var http = gitHubHandler is null ? new HttpClient() : new HttpClient(gitHubHandler, disposeHandler: false);
+        http.BaseAddress = gitHubApiUrl ?? new Uri("https://api.github.com/");
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.RepositoryToken);
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("DarkFactor-AiAgent/1.0");
+
+        static string? Normalize(string? login) =>
+            login is not null && login.EndsWith("[bot]", StringComparison.OrdinalIgnoreCase) ? login[..^5] : login;
+
+        var reviewer = Normalize(options.ReviewerLogin);
+        var reviews = new List<System.Text.Json.Nodes.JsonNode>();
+        for (var page = 1; ; page++)
+        {
+            using var response = await http.GetAsync(
+                $"{path}?per_page={ReviewGitHubClient.PageSize}&page={page}", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"GitHub request GET {path} failed with {(int)response.StatusCode}.");
+            }
+
+            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            var list = string.IsNullOrWhiteSpace(text)
+                ? []
+                : System.Text.Json.Nodes.JsonNode.Parse(text)?.AsArray() ?? [];
+            reviews.AddRange(list.Where(item => item is not null)!);
+            if (list.Count < ReviewGitHubClient.PageSize)
+            {
+                break;
+            }
+        }
+
+        var latest = reviews
+            .Where(review => string.Equals(
+                Normalize(review["user"]?["login"]?.GetValue<string>()), reviewer, StringComparison.OrdinalIgnoreCase))
+            .Where(review => !string.Equals(
+                review["state"]?.GetValue<string>(), "PENDING", StringComparison.OrdinalIgnoreCase))
+            .Select((review, order) => (review, order))
+            .OrderBy(item => DateTimeOffset.TryParse(
+                item.review["submitted_at"]?.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var submitted)
+                ? submitted
+                : DateTimeOffset.MinValue)
+            .ThenBy(item => item.order)
+            .Select(item => item.review)
+            .LastOrDefault();
+        if (latest is null)
+        {
+            return false;
+        }
+
+        var state = latest["state"]?.GetValue<string>();
+        return (string.Equals(state, "APPROVED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(state, "COMMENTED", StringComparison.OrdinalIgnoreCase))
+            && (latest["body"]?.GetValue<string>() ?? string.Empty).Contains(phrase, StringComparison.Ordinal);
     }
 
     internal static async Task SetReadinessLabelAsync(
