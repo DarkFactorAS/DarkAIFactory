@@ -70,40 +70,58 @@ public static class AgentMetricsAggregator
 
 public sealed class AgentMetricsRepository(IDbConnectionFactory connectionFactory) : IAgentMetricsRepository
 {
+    private const int ColumnsPerWindow = 10;
+
+    // Aggregates are computed by the database so each poll transfers one row per agent instead of all run history.
+    // filter selects the window: "1 = 1" for all time, "r.started_at >= @since" for the recent window.
+    private static string WindowColumns(string filter) =>
+        $"SUM(CASE WHEN {filter} AND r.outcome = 'Succeeded' THEN 1 ELSE 0 END), " +
+        $"SUM(CASE WHEN {filter} AND r.outcome = 'Failed' THEN 1 ELSE 0 END), " +
+        $"SUM(CASE WHEN {filter} AND r.finished_at IS NOT NULL THEN {WallClockMs} END), " +
+        $"AVG(CASE WHEN {filter} AND r.finished_at IS NOT NULL THEN {WallClockMs} END), " +
+        $"SUM(CASE WHEN {filter} THEN r.llm_duration_ms END), " +
+        $"AVG(CASE WHEN {filter} THEN r.llm_duration_ms END), " +
+        $"SUM(CASE WHEN {filter} THEN r.input_tokens END), " +
+        $"SUM(CASE WHEN {filter} THEN r.output_tokens END), " +
+        $"SUM(CASE WHEN {filter} THEN r.tool_calls END), " +
+        $"SUM(CASE WHEN {filter} THEN r.cost_usd END)";
+
+    private const string WallClockMs =
+        "GREATEST(0, TIMESTAMPDIFF(MICROSECOND, r.started_at, r.finished_at)) / 1000.0";
+
+    private static readonly string MetricsSql =
+        "SELECT a.id, " + WindowColumns("1 = 1") + ", " + WindowColumns("r.started_at >= @since") + " " +
+        "FROM agent_definitions a LEFT JOIN agent_runs r ON r.agent_id = a.id " +
+        "WHERE a.deleted_at IS NULL GROUP BY a.id ORDER BY a.id";
+
     public IReadOnlyList<AgentMetrics> List()
     {
-        var ids = new List<long>();
-        using (var command = connectionFactory.CreateCommand(
-            "SELECT id FROM agent_definitions WHERE deleted_at IS NULL ORDER BY id"))
+        var result = new List<AgentMetrics>();
+        using var command = connectionFactory.CreateCommand(MetricsSql);
+        command.AddParameter("@since", DateTime.UtcNow - AgentMetricsAggregator.RecentWindow);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
         {
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                ids.Add(reader.GetInt64(0));
-            }
+            result.Add(new AgentMetrics(
+                reader.GetInt64(0),
+                ReadTotals(reader, 1),
+                ReadTotals(reader, 1 + ColumnsPerWindow)));
         }
 
-        var runs = new List<AgentRunRow>();
-        using (var command = connectionFactory.CreateCommand(
-            "SELECT r.agent_id, r.started_at, r.finished_at, r.outcome, r.llm_duration_ms, r.input_tokens, " +
-            "r.output_tokens, r.tool_calls, r.cost_usd FROM agent_runs r " +
-            "JOIN agent_definitions a ON a.id = r.agent_id WHERE a.deleted_at IS NULL"))
-        {
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                runs.Add(new AgentRunRow(
-                    reader.GetInt64(0), reader.GetDateTime(1),
-                    reader.IsDBNull(2) ? null : reader.GetDateTime(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3),
-                    reader.IsDBNull(4) ? null : Convert.ToInt64(reader.GetValue(4)),
-                    reader.IsDBNull(5) ? null : Convert.ToInt64(reader.GetValue(5)),
-                    reader.IsDBNull(6) ? null : Convert.ToInt64(reader.GetValue(6)),
-                    reader.IsDBNull(7) ? null : Convert.ToInt32(reader.GetValue(7)),
-                    reader.IsDBNull(8) ? null : Convert.ToDecimal(reader.GetValue(8))));
-            }
-        }
+        return result;
+    }
 
-        return AgentMetricsAggregator.Aggregate(ids, runs, DateTime.UtcNow);
+    private static AgentMetricsTotals ReadTotals(System.Data.IDataRecord reader, int offset)
+    {
+        object? Value(int i) => reader.IsDBNull(offset + i) ? null : reader.GetValue(offset + i);
+        double? AsDouble(int i) => Value(i) is { } v ? Convert.ToDouble(v) : null;
+        long? AsLong(int i) => Value(i) is { } v ? Convert.ToInt64(v) : null;
+
+        return new AgentMetricsTotals(
+            (int)(AsLong(0) ?? 0),
+            (int)(AsLong(1) ?? 0),
+            AsDouble(2), AsDouble(3), AsDouble(4), AsDouble(5),
+            AsLong(6), AsLong(7), AsLong(8),
+            Value(9) is { } cost ? Convert.ToDecimal(cost) : null);
     }
 }
