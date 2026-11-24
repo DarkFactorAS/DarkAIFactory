@@ -47,6 +47,7 @@ public sealed class AiDatabasePatcherTests
                 "patch:WorkflowLabels:3", "successful",
                 "patch:WorkflowLabels:4", "successful",
                 "patch:WorkflowLabels:5", "successful",
+                "patch:WorkflowLabels:6", "successful",
                 "init:AgentTasks",
                 "patch:AgentTasks:1", "successful",
                 "init:ReviewCommentAttempts",
@@ -118,7 +119,8 @@ public sealed class AiDatabasePatcherTests
             Assert.Contains("SELECT 'aiclaudeworker' AS `agent_name`, `code_key`, `label_name`, `description`", dbPatcher.Sql[20]);
             Assert.Contains("WHERE `agent_name` = 'aiworker'", dbPatcher.Sql[20]);
             Assert.Contains("'aiagent-picked'", dbPatcher.Sql[21]);
-            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[22]);
+            Assert.Contains("'aiagent-merge-requested'", dbPatcher.Sql[22]);
+            Assert.Contains("CREATE TABLE IF NOT EXISTS `agent_tasks`", dbPatcher.Sql[23]);
         }
     }
 
