@@ -111,6 +111,13 @@ card shows "Merge requested". A 401 opens the login form as for Approve.
 Manual check: add `aiagent-ready-to-merge` to an active issue; logged in, the Merge button appears within one 30 s poll; click it:
 the issue gets `aiagent-merge-requested` and the card shows "Merge requested". Logged out: no button. Adding `aiagent-failed`
 hides it. Check light and dark themes.
+`POST /api/tasks/{key}/retry` (login required) clears **all** labels on an active issue that has the `aiagent-failed` label
+(`workflow_labels[aiagent, FailureLabel]`) by setting the Jira `labels` field to an empty array; this also removes non-AI labels
+and any `aiagent-pr-tracking-pending` label. 400 invalid key, 403 issue not active, 409 issue has no failure label, 502 Jira
+failure (generic error). The "Active AI tasks" cards show a red **Retry** button for logged-in users when the issue has the failure label.
+Manual check: logged in, add `aiagent-failed` to an active issue; the red Retry button appears; click it: all labels are removed
+in Jira and the card refreshes without the button. Logged out: no button. Check light and dark themes.
+
 `GET /api/tasks/config` also returns `approvalLabel`, `approvedLabel`, `mergeRequestedLabel` and `readyToMergeLabel`, and returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
 The New task form has a project selector fed by `projectKeys`, defaulting to the first key; with only one project it shows the key as read-only text instead. The chosen project is shown as a badge in the pending task list and cannot be changed when editing. `POST`/`PUT /api/agent-tasks` reject a `projectKey` that is not in `manager_projects` (400).
 AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, login

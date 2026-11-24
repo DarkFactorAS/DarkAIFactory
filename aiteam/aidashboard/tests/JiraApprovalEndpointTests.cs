@@ -23,6 +23,8 @@ public sealed class JiraApprovalEndpointTests
             Calls.Add((issueKey, label));
             return Task.CompletedTask;
         }
+
+        public Task ClearLabelsAsync(string issueKey, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class ActiveTasks(params string[] labels) : IActiveAiTaskService

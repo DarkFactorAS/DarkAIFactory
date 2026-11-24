@@ -10,7 +10,7 @@ import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
-import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, mergeTask, workingIssueKeys } from "./agentApi.js";
+import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, mergeTask, retryTask, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
@@ -304,6 +304,20 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       setMerging(null);
     }
   };
+  const [retrying, setRetrying] = useState(null);
+  const [retryError, setRetryError] = useState({});
+  const retry = async (key) => {
+    setRetrying(key);
+    setRetryError((prev) => ({ ...prev, [key]: null }));
+    try {
+      await retryTask(key);
+      state.reload();
+    } catch (err) {
+      setRetryError((prev) => ({ ...prev, [key]: err.message || "Retry failed" }));
+    } finally {
+      setRetrying(null);
+    }
+  };
   useEffect(() => {
     if (openKey && state.data && !state.data.some((task) => task.key === openKey)) {
       setOpenKey(null);
@@ -501,6 +515,25 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                     )}
                   </div>
                 ))}
+              {canEdit && (task.labels ?? []).includes(approvalLabels.failureLabel) && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    data-testid="ai-task-retry-button"
+                    aria-label={`Retry ${task.key}`}
+                    disabled={retrying === task.key}
+                    onClick={() => retry(task.key)}
+                    className="rounded bg-red-600 px-3 py-1 text-sm text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-600"
+                  >
+                    {retrying === task.key ? "Retrying..." : "Retry"}
+                  </button>
+                  {retryError[task.key] && (
+                    <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      {retryError[task.key]}
+                    </p>
+                  )}
+                </div>
+              )}
               {canEdit && openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
             );

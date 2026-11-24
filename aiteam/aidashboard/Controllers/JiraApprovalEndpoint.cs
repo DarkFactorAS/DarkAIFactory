@@ -11,6 +11,8 @@ namespace AiDashboard.Tasks;
 public interface IJiraLabelClient
 {
     Task AddLabelAsync(string issueKey, string label, CancellationToken cancellationToken);
+
+    Task ClearLabelsAsync(string issueKey, CancellationToken cancellationToken);
 }
 
 // Adds one label to a Jira issue (PUT update.labels.add); no other field is changed.
@@ -35,6 +37,17 @@ public sealed class JiraLabelClient : IJiraLabelClient
 
     public static string BuildBody(string label) =>
         JsonSerializer.Serialize(new { update = new { labels = new[] { new { add = label } } } });
+
+    public static string BuildClearBody() =>
+        JsonSerializer.Serialize(new { fields = new { labels = Array.Empty<string>() } });
+
+    public async Task ClearLabelsAsync(string issueKey, CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(BuildClearBody(), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PutAsync(
+            $"/rest/api/3/issue/{Uri.EscapeDataString(issueKey)}", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 
     public async Task AddLabelAsync(string issueKey, string label, CancellationToken cancellationToken)
     {
