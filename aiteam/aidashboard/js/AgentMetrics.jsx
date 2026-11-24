@@ -51,24 +51,28 @@ export default function AgentMetrics({ metrics }) {
   const details = metricsDetails(t);
   return (
     <div data-testid="agent-metrics" className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-      <div className="mb-1 inline-flex overflow-hidden rounded border border-slate-300 dark:border-slate-600">
-        {[
-          ["allTime", "All-time"],
-          ["last7Days", "7 days"],
-        ].map(([key, text]) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={range === key}
-            onClick={() => setRange(key)}
-            className={"px-2 py-0.5 " + (range === key ? "bg-blue-600 text-white" : "")}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-      <p data-testid="agent-metrics-row" className="whitespace-nowrap overflow-x-auto">
-        {t.succeeded} succeeded / {t.failed} failed{" "}
+      <div data-testid="agent-metrics-row" className="flex items-center gap-2 whitespace-nowrap overflow-x-auto">
+        <div className="inline-flex shrink-0 overflow-hidden rounded border border-slate-300 dark:border-slate-600">
+          {[
+            ["allTime", "All", "All time"],
+            ["last7Days", "7d", "Last 7 days"],
+          ].map(([key, text, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={range === key}
+              aria-label={label}
+              title={label}
+              onClick={() => setRange(key)}
+              className={"px-2 py-0.5 " + (range === key ? "bg-blue-600 text-white" : "")}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+        <span>
+          {t.succeeded}/{t.succeeded + t.failed} ok
+        </span>
         <span
           data-testid="agent-metrics-info"
           role="img"
@@ -82,7 +86,7 @@ export default function AgentMetrics({ metrics }) {
           onKeyDown={(e) => {
             if (e.key === "Escape") setShowDetails(false);
           }}
-          className="inline-block cursor-help align-text-bottom text-slate-500 dark:text-slate-400"
+          className="inline-block cursor-help text-slate-500 dark:text-slate-400"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="h-3.5 w-3.5">
             <path
@@ -91,9 +95,11 @@ export default function AgentMetrics({ metrics }) {
               clipRule="evenodd"
             />
           </svg>
-        </span>{" "}
-        · {formatDuration(t.wallClockMs)} · {formatCost(t.costUsd)}
-      </p>
+        </span>
+        <span>
+          · {formatDuration(t.wallClockMs)} · {formatCost(t.costUsd)}
+        </span>
+      </div>
       <div
         id={detailsId}
         role="tooltip"

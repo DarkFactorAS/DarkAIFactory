@@ -103,7 +103,7 @@ click it: the issue gets `aiagent-approved` and, after the agent runs, both labe
 Check light and dark themes. Tip: add `aiagent-awaiting-approval` to the card badge labels to see it on the card.
 `POST /api/tasks/{key}/merge` (login required) requests the merge of a ready pull request by adding the merge-requested label
 (`workflow_labels[aiagent, MergeRequestedLabel]`, default `aiagent-merge-requested`) to an active issue that has the
-`aiagent-ready-to-merge` label and not the `aiagent-failed` label (`FailureLabel`). 400 invalid key, 403 issue not active,
+`aiagent-ready-to-merge` label (also set by the Review capability on reviewer approval, "Approval recommended") and not the `aiagent-failed` label (`FailureLabel`). 400 invalid key, 403 issue not active,
 409 not ready to merge or failed, 502 Jira failure (generic error); 200 without a Jira call if the label is already present.
 The dashboard never calls GitHub. The "Top 5 AI tasks" cards show a **Merge** button for logged-in users when the issue has the
 ready-to-merge label and neither the merge-requested nor the failed label; after the click (or when the label is present) the
@@ -153,7 +153,7 @@ Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`) sit
 uses `/api/agents` plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
-older than 90 s (3 polls), else Idle / `Running on KEY` / Error. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
+older than 90 s (3 polls), else Idle / the Jira key (or Running without a key) / Error. Idle shows no badge. The capability chips sit in the header row next to the agent name, before the badge. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header.
 The agent editor (edit via Edit, create via `+`) opens as a centred modal overlay (native `<dialog>`) above a dimmed
 backdrop instead of below the agent list. Close it with the × button, a backdrop click, Escape or Cancel; all discard
@@ -168,7 +168,9 @@ Top 5 AI tasks cards show a yellow badge (text = label name) next to the status 
 Jira label (`Dashboard.CardLabels`; default `ai-approved`, `aiagent-needs-clarification` and
 `aiagent-ready-to-merge` when empty) that is on the issue (exact match,
 `data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label only after the
-pull request has at least one review comment and all review threads are resolved. It removes the label when
+pull request has at least one review comment and all review threads are resolved, or when the reviewer's latest
+review after the last non-merge commit contains the approval phrase ("Approval recommended", configurable via
+`ApprovalPhrase`) and nothing is unresolved or failed. It removes the label when
 unresolved or failed review work remains, and while the agent is fixing review comments.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
 30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
@@ -268,7 +270,7 @@ progress count as neither), `wallClockMs`/`avgWallClockMs` (`finished_at - start
 A value that no run reported is `null` (shown as "N/A"), never 0. Averages cover the runs that reported the value.
 The route is registered before `/api/agents/{id:long}` and does not clash with it.
 
-Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All-time / 7 days toggle: succeeded/failed,
-wall-clock time and cost. An info icon after the succeeded/failed text shows, on hover or focus, the tokens
+Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All / 7d toggle in front of "x/(x+y) ok" (succeeded/total finished runs),
+wall-clock time and cost. An info icon after the ok text shows, on hover or focus, the tokens
 (input/output/total), tool calls, averages and LLM vs wall-clock time. Metrics refresh on the 30 s agent poll.
 The JS bundle is built with `npm install && npm run build` in `aiteam/aidashboard` (output `dist`, git-ignored).

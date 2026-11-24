@@ -26,37 +26,39 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
         (working ? "border-blue-600 ring-2 ring-blue-300" : "border-slate-200 dark:border-slate-700")
       }
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <span className="font-semibold">{agent.name}</span>
-        <span className={"rounded px-2 py-0.5 text-xs " + statusBadgeColors(label)} data-testid="agent-status">
-          {label}
-        </span>
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            {chips.map((c) =>
+              active && c.toLowerCase() === active.toLowerCase() ? (
+                <span
+                  key={c}
+                  aria-current="step"
+                  data-testid="agent-active-capability"
+                  title="Currently running"
+                  className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white ring-2 ring-blue-300"
+                >
+                  {c}
+                  <span className="sr-only"> (active)</span>
+                </span>
+              ) : (
+                <span key={c} className="rounded bg-blue-100 dark:bg-blue-900 px-2 py-0.5 text-xs">
+                  {c}
+                </span>
+              ),
+            )}
+            {label && (
+              <span className={"rounded px-2 py-0.5 text-xs " + statusBadgeColors(label)} data-testid="agent-status">
+                {label}
+              </span>
+            )}
+          </div>
       </div>
       <p className="text-slate-600 dark:text-slate-300">{agent.role}</p>
       <p className="text-xs text-slate-500 dark:text-slate-400">
         {agent.llmProvider} / {agent.llmModel || "default"}
         {agent.container ? ` / ${agent.container}` : ""}
       </p>
-      <div className="mt-1 flex flex-wrap gap-1">
-        {chips.map((c) =>
-          active && c.toLowerCase() === active.toLowerCase() ? (
-            <span
-              key={c}
-              aria-current="step"
-              data-testid="agent-active-capability"
-              title="Currently running"
-              className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white ring-2 ring-blue-300"
-            >
-              {c}
-              <span className="sr-only"> (active)</span>
-            </span>
-          ) : (
-            <span key={c} className="rounded bg-blue-100 dark:bg-blue-900 px-2 py-0.5 text-xs">
-              {c}
-            </span>
-          ),
-        )}
-      </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
       <AgentMetrics metrics={metrics} />
       {canEdit && (

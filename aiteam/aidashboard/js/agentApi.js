@@ -83,12 +83,13 @@ export function statusLabel(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   const status = agent.status;
   if (!status || isStale(status.heartbeatAt, nowMs, pollMs)) return "Offline";
   if (status.state === "Running") {
-    return status.currentIssueKey ? `Running on ${status.currentIssueKey}` : "Running";
+    return status.currentIssueKey || "Running";
   }
+  if (status.state === "Idle") return null;
   return status.state;
 }
 
-// True when the card shows "Running"/"Running on KEY": enabled, fresh heartbeat, state Running.
+// True when the card is working (shows the Jira key or "Running"): enabled, fresh heartbeat, state Running.
 export function isWorking(agent, nowMs, pollMs = POLL_INTERVAL_MS) {
   const status = agent.status;
   if (!agent.enabled || !status || isStale(status.heartbeatAt, nowMs, pollMs)) return false;
