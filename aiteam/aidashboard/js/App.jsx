@@ -1,5 +1,5 @@
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useApiData from "./useApiData.js";
 import TaskEditor, { request } from "./TaskEditor.jsx";
 import AddTextPanel from "./AddTextPanel.jsx";
@@ -243,7 +243,7 @@ function hasLabelIgnoreCase(labels, label) {
 
 export const DEFAULT_CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
-function ActiveAiTasksPanel({ labelsVersion }) {
+function ActiveAiTasksPanel({ labelsVersion, agentState }) {
   const { canEdit } = useAuth();
   const [openKey, setOpenKey] = useState(null);
   const [editingState, setEditing] = useState(false);
@@ -331,46 +331,6 @@ function ActiveAiTasksPanel({ labelsVersion }) {
     }
   }, [state.data, openKey]);
   useReloadOn(labelsVersion, state.reload);
-  // Agent state only drives the highlight; a failed poll keeps the last known state.
-  const [agentState, setAgentState] = useState({ agents: null, nowMs: Date.now(), fetchedAt: Date.now() });
-  useEffect(() => {
-    let cancelled = false;
-    let inFlight = false;
-    // Advance the server-derived clock by local elapsed time on every tick,
-    // independent of request completion, so cached Running status expires
-    // even when polls stall or fail.
-    const advanceClock = () => {
-      setAgentState((prev) => {
-        const localNow = Date.now();
-        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
-      });
-    };
-    const load = () => {
-      // Skip a tick while the previous poll is still running so a delayed
-      // older response cannot overwrite a newer snapshot.
-      if (inFlight) return;
-      inFlight = true;
-      listAgents()
-        .then(({ agents, nowMs }) => {
-          if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now() });
-        })
-        .catch(() => {
-          if (!cancelled) advanceClock();
-        })
-        .finally(() => {
-          inFlight = false;
-        });
-    };
-    load();
-    const timer = setInterval(() => {
-      advanceClock();
-      load();
-    }, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, []);
   const workingKeys = workingIssueKeys(agentState.agents, agentState.nowMs);
   return (
     <Panel
@@ -553,6 +513,14 @@ function ActiveAiTasksPanel({ labelsVersion }) {
 
 function Dashboard({ theme, resolvedTheme, setTheme }) {
   const { username, canEdit, logout, openLogin } = useAuth();
+  const [agentState, setAgentState] = useState(() => ({
+    agents: null,
+    nowMs: Date.now(),
+    fetchedAt: Date.now(),
+    error: null,
+  }));
+  const agentReloadRef = useRef(() => {});
+  const reloadAgents = useCallback(() => agentReloadRef.current(), []);
   const [labelsVersion, setLabelsVersion] = useState(0);
   const [solvedOpen, setSolvedOpen] = useState(false);
   const handleLabelsSaved = () => setLabelsVersion((v) => v + 1);
@@ -561,6 +529,59 @@ function Dashboard({ theme, resolvedTheme, setTheme }) {
   const drawerRef = useRef(null);
   const closeButtonRef = useRef(null);
   const openerRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+    let reloadPending = false;
+    const advanceClock = () => {
+      setAgentState((prev) => {
+        const localNow = Date.now();
+        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
+      });
+    };
+    const load = () => {
+      if (inFlight) {
+        reloadPending = true;
+        return;
+      }
+      inFlight = true;
+      listAgents()
+        .then(({ agents, nowMs }) => {
+          if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now(), error: null });
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setAgentState((prev) => {
+              const localNow = Date.now();
+              return {
+                ...prev,
+                nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt),
+                fetchedAt: localNow,
+                error: error.message,
+              };
+            });
+          }
+        })
+        .finally(() => {
+          inFlight = false;
+          if (!cancelled && reloadPending) {
+            reloadPending = false;
+            load();
+          }
+        });
+    };
+    agentReloadRef.current = load;
+    load();
+    const timer = setInterval(() => {
+      advanceClock();
+      load();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      agentReloadRef.current = () => {};
+    };
+  }, []);
   useEffect(() => {
     if (!solvedOpen) return undefined;
     const opener = document.activeElement;
@@ -663,12 +684,17 @@ function Dashboard({ theme, resolvedTheme, setTheme }) {
         </div>
       </header>
       <main ref={mainRef} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(20rem,1fr)_2fr_1fr]">
-        <AgentSlots />
+        <AgentSlots
+          agents={agentState.agents}
+          nowMs={agentState.nowMs}
+          error={agentState.error}
+          reloadAgents={reloadAgents}
+        />
         <div className="space-y-6">
-          <ModelOrbs />
+          <ModelOrbs agents={agentState.agents} nowMs={agentState.nowMs} />
           <TaskEditor />
         </div>
-        <ActiveAiTasksPanel labelsVersion={labelsVersion} />
+        <ActiveAiTasksPanel labelsVersion={labelsVersion} agentState={agentState} />
       </main>
       {solvedOpen && (
         <div className="fixed inset-0 z-30 bg-black/30" aria-hidden="true" onClick={() => setSolvedOpen(false)} />

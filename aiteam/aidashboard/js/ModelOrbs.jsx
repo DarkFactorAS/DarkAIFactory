@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Orb from "./Orb.jsx";
-import { POLL_INTERVAL_MS, PROVIDERS, isStale, isWorking, listAgents } from "./agentApi.js";
+import { POLL_INTERVAL_MS, PROVIDERS, isStale, isWorking } from "./agentApi.js";
 
 // One orb per LLM provider (same look as the Claude/Codex status orbs in ThorDashboard).
 const MODELS = [
@@ -41,7 +41,7 @@ export function modelState(agents, provider, nowMs, pollMs = POLL_INTERVAL_MS) {
   return { state: online.length > 0 ? "idle" : "off", running: 0 };
 }
 
-export default function ModelOrbs() {
+export default function ModelOrbs({ agents, nowMs }) {
   const [paused, setPaused] = useState(() => {
     try {
       return localStorage.getItem(PAUSE_KEY) === "1";
@@ -49,44 +49,6 @@ export default function ModelOrbs() {
       return false;
     }
   });
-  const [agentState, setAgentState] = useState({ agents: null, nowMs: Date.now(), fetchedAt: Date.now() });
-
-  useEffect(() => {
-    let cancelled = false;
-    let inFlight = false;
-    const load = () => {
-      if (inFlight) return;
-      inFlight = true;
-      listAgents()
-        .then(({ agents, nowMs }) => {
-          if (!cancelled) setAgentState({ agents, nowMs, fetchedAt: Date.now() });
-        })
-        .catch(() => {
-          // Keep the last known agents; advance the clock so stale heartbeats turn the orb off.
-          if (!cancelled) {
-            setAgentState((prev) => {
-              const localNow = Date.now();
-              return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
-            });
-          }
-        })
-        .finally(() => {
-          inFlight = false;
-        });
-    };
-    load();
-const timer = setInterval(() => {
-      setAgentState((prev) => {
-        const localNow = Date.now();
-        return { ...prev, nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt), fetchedAt: localNow };
-      });
-      load();
-    }, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, []);
 
   const toggle = () => {
     setPaused((p) => {
@@ -119,7 +81,7 @@ const timer = setInterval(() => {
       </button>
       <div className="flex justify-around">
         {MODELS.map((m) => {
-          const { state, running } = modelState(agentState.agents, m.provider, agentState.nowMs);
+          const { state, running } = modelState(agents, m.provider, nowMs);
           const text = `${STATE_TEXT[state]}${running > 1 ? ` (${running})` : ""}`;
           const stateClass = state === "working" ? m.workingText : STATE_CLASS[state] ?? "text-slate-400";
           return (
