@@ -10,7 +10,7 @@ import CardLabelsEditor from "./CardLabelsEditor.jsx";
 import AiLabelsEditor from "./AiLabelsEditor.jsx";
 import { AuthProvider, useAuth } from "./auth.jsx";
 import LoginPage from "./LoginPage.jsx";
-import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, mergeTask, workingIssueKeys } from "./agentApi.js";
+import { POLL_INTERVAL_MS, approveTask, getCardLabels, listAgents, mergeTask, retryTask, workingIssueKeys } from "./agentApi.js";
 import useTheme from "./useTheme.js";
 import ThemeToggle from "./ThemeToggle.jsx";
 
@@ -234,6 +234,12 @@ function SolvedByProjectPanel({ labelsVersion, onLabelsSaved, resolvedTheme }) {
   );
 }
 
+function hasLabelIgnoreCase(labels, label) {
+  if (!label) return false;
+  const target = String(label).toLowerCase();
+  return (labels ?? []).some((l) => String(l).toLowerCase() === target);
+}
+
 export const DEFAULT_CARD_BADGE_LABELS = ["ai-approved", "aiagent-needs-clarification", "aiagent-ready-to-merge"];
 
 function ActiveAiTasksPanel({ labelsVersion }) {
@@ -302,6 +308,20 @@ function ActiveAiTasksPanel({ labelsVersion }) {
       setMergeError((prev) => ({ ...prev, [key]: err.message || "Merge request failed" }));
     } finally {
       setMerging(null);
+    }
+  };
+  const [retrying, setRetrying] = useState(null);
+  const [retryError, setRetryError] = useState({});
+  const retry = async (key) => {
+    setRetrying(key);
+    setRetryError((prev) => ({ ...prev, [key]: null }));
+    try {
+      await retryTask(key);
+      state.reload();
+    } catch (err) {
+      setRetryError((prev) => ({ ...prev, [key]: err.message || "Retry failed" }));
+    } finally {
+      setRetrying(null);
     }
   };
   useEffect(() => {
@@ -477,7 +497,7 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                 )}
               {canEdit &&
                 (task.labels ?? []).includes(approvalLabels.readyToMergeLabel) &&
-                !(task.labels ?? []).includes(approvalLabels.failureLabel) &&
+                !hasLabelIgnoreCase(task.labels, approvalLabels.failureLabel) &&
                 (((task.labels ?? []).includes(approvalLabels.mergeRequestedLabel) || mergeRequested[task.key]) ? (
                   <p data-testid="ai-task-merge-requested" className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                     Merge requested
@@ -501,6 +521,25 @@ function ActiveAiTasksPanel({ labelsVersion }) {
                     )}
                   </div>
                 ))}
+              {canEdit && hasLabelIgnoreCase(task.labels, approvalLabels.failureLabel) && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    data-testid="ai-task-retry-button"
+                    aria-label={`Retry ${task.key}`}
+                    disabled={retrying === task.key}
+                    onClick={() => retry(task.key)}
+                    className="rounded bg-red-600 px-3 py-1 text-sm text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-600"
+                  >
+                    {retrying === task.key ? "Retrying..." : "Retry"}
+                  </button>
+                  {retryError[task.key] && (
+                    <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      {retryError[task.key]}
+                    </p>
+                  )}
+                </div>
+              )}
               {canEdit && openKey === task.key && <AddTextPanel task={task} onClose={() => setOpenKey(null)} />}
             </li>
             );

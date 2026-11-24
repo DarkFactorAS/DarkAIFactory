@@ -143,5 +143,8 @@ export const approveTask = (key) =>
 export const mergeTask = (key) =>
   request(`/api/tasks/${encodeURIComponent(key)}/merge`, { method: "POST" });
 
+export const retryTask = (key) =>
+  request(`/api/tasks/${encodeURIComponent(key)}/retry`, { method: "POST" });
+
 // Latest Jira comments (newest first, at most 3) of an active AI task.
 export const getTaskComments = (key) => request(`/api/tasks/${encodeURIComponent(key)}/comments`);
