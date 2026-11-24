@@ -72,6 +72,7 @@ public sealed class ReviewCapability(
                 continue;
             }
 
+            await TryUpdateReadinessLabelAsync(pullRequest.PullRequest.JiraKey, false, cancellationToken);
             try
             {
                 int? failedCount = null;
@@ -99,9 +100,38 @@ public sealed class ReviewCapability(
         }
     }
 
-    /// <summary>A pull request is ready to merge when no review thread is unresolved and no fix failed.</summary>
-    internal static bool IsReadyToMerge(int unresolvedThreads, int failedCount) =>
-        unresolvedThreads == 0 && failedCount == 0;
+    /// <summary>
+    /// A pull request is ready to merge only after it has received at least one review comment thread,
+    /// no review thread is unresolved and no fix failed.
+    /// </summary>
+    internal static bool IsReadyToMerge(int totalThreads, int unresolvedThreads, int failedCount) =>
+        totalThreads > 0 && unresolvedThreads == 0 && failedCount == 0;
+
+    private async Task TryUpdateReadinessLabelAsync(string issueKey, bool ready, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (createJiraClient is null)
+            {
+                return;
+            }
+
+            var jira = createJiraClient();
+            try
+            {
+                await SetReadinessLabelAsync(jira, issueKey, ready, cancellationToken);
+            }
+            finally
+            {
+                (jira as IDisposable)?.Dispose();
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            AgentLog.LogOutput(DFLogLevel.WARNING, Category,
+                $"{issueKey}: could not update the merge-readiness Jira label: {exception.Message}");
+        }
+    }
 
     private async Task LogIfReadyToMergeAsync(
         ReviewGitHubClient client, StoredAgentPullRequest pullRequest, int failedCount,
@@ -117,27 +147,8 @@ public sealed class ReviewCapability(
             return;
         }
 
-        var readyToMerge = IsReadyToMerge(threads.Unresolved, failedCount);
-        try
-        {
-            if (createJiraClient is not null)
-            {
-                var jira = createJiraClient();
-                try
-                {
-                    await SetReadinessLabelAsync(jira, pullRequest.PullRequest.JiraKey, readyToMerge, cancellationToken);
-                }
-                finally
-                {
-                    (jira as IDisposable)?.Dispose();
-                }
-            }
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            AgentLog.LogOutput(DFLogLevel.WARNING, Category,
-                $"{pullRequest.PullRequest.JiraKey}: could not update the merge-readiness Jira label: {exception.Message}");
-        }
+        var readyToMerge = IsReadyToMerge(threads.Total, threads.Unresolved, failedCount);
+        await TryUpdateReadinessLabelAsync(pullRequest.PullRequest.JiraKey, readyToMerge, cancellationToken);
 
         if (!readyToMerge)
         {

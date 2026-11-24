@@ -116,7 +116,7 @@ public static class AutoMergePolicy
             return "the pull request has no review comments and no reviewer approval";
         }
 
-        if (!ReviewCapability.IsReadyToMerge(unresolvedThreads, failedCount))
+        if (unresolvedThreads != 0 || failedCount != 0)
         {
             return "review comments are not all resolved";
         }

@@ -141,8 +141,9 @@ capability (agents are polled every 30 seconds).
 Top 5 AI tasks cards show a yellow badge (text = label name) next to the status for each configured
 Jira label (`Dashboard.CardLabels`; default `ai-approved`, `aiagent-needs-clarification` and
 `aiagent-ready-to-merge` when empty) that is on the issue (exact match,
-`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label while all
-review threads are resolved, and removes it when unresolved or failed review work remains.
+`data-testid="ai-task-label-badge"`). The Review capability adds the `aiagent-ready-to-merge` label only after the
+pull request has at least one review comment and all review threads are resolved. It removes the label when
+unresolved or failed review work remains, and while the agent is fixing review comments.
 Manual check: add `ai-approved` to an active AI issue in Jira and confirm the yellow badge appears within one
 30-second poll and disappears when removed; repeat with `aiagent-needs-clarification` and
 `aiagent-ready-to-merge`; check light and dark themes.
