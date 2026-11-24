@@ -197,7 +197,7 @@ export default function AgentSlots({ agents, nowMs, error, reloadAgents }) {
               canEdit={canEdit && showEdit}
             />
           ))}
-          {canEdit && (
+          {canEdit && showEdit && (
             <li>
               <button
                 type="button"
