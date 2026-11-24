@@ -45,7 +45,7 @@ internal static class RunnerServer
 
                 if (!RunnerModes.IsValid(request.Mode))
                 {
-                    return Results.BadRequest("Mode must be plan, implement or review.");
+                    return Results.BadRequest("Mode must be plan, implement, review or merge.");
                 }
 
                 workspace = RunnerPolicy.ResolveWorkspace(request.Workspace, root);

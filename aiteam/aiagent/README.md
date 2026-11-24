@@ -91,9 +91,17 @@ target the parent's `aiagent/parent/<KEY>` branch), runs the runner in `implemen
 (recorded in `agent_pull_requests`) and moves the issue to the In Review status. Failures add
 `aiagent-failed` and a recovery comment. Settings are read from the `aiagent` client and the `aiagent` workflow labels.
 
-### Build and test validation (Builder and Review)
+### Runner modes
 
-After the LLM run in `implement` and `review` mode, aiagent-runner works out what to validate from the files the
+`POST /run` accepts the modes `plan` (read-only), `implement`, `review` and `merge`. `merge` resolves merge conflicts: the
+workspace has the base branch merged into the head branch with conflict markers left in the conflicted files, and the
+prompt (`Capabilities/Review/MergeConflictPromptBuilder`) names the issue key, base and head branch and the conflicted
+files, asks the LLM to resolve the markers keeping the intent of both sides and to edit only those files. `merge` has
+the same write permissions as `review` (pushes and `gh` stay denied) and is validated like it.
+
+### Build and test validation (Builder, Review and merge)
+
+After the LLM run in `implement`, `review` and `merge` mode, aiagent-runner works out what to validate from the files the
 LLM changed; there is no build or test command to configure. The runner has no access to the checkout's Git
 metadata, so it compares a file snapshot (size and modification time) taken before the run with one taken after it,
 ignoring `bin`, `obj`, `.git`, `node_modules`, `.vs`, `.idea` and `TestResults`.

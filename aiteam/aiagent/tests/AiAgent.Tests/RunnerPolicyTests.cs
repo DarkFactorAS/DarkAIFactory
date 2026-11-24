@@ -37,6 +37,7 @@ public sealed class RunnerPolicyTests
     [Theory]
     [InlineData(RunnerModes.Implement)]
     [InlineData(RunnerModes.Review)]
+    [InlineData(RunnerModes.Merge)]
     public void EditModesAllowEditsButDenyPushAndGh(string mode)
     {
         var args = RunnerPolicy.BuildClaudeArguments("", mode);
@@ -48,6 +49,14 @@ public sealed class RunnerPolicyTests
         Assert.DoesNotContain("--deny-tool=write", copilot);
         Assert.Contains("--deny-tool=shell(git push)", copilot);
         Assert.Contains("--deny-tool=shell(gh)", copilot);
+    }
+
+    [Fact]
+    public void MergeModeIsValidAndValidated()
+    {
+        Assert.True(RunnerModes.IsValid("merge"));
+        Assert.False(RunnerModes.IsValid("other"));
+        Assert.Contains("`dotnet build`", RunnerPolicy.ComposePrompt(new RunnerRequest(Mode: RunnerModes.Merge, Prompt: "p")));
     }
 
     [Fact]
