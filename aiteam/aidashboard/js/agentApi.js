@@ -130,3 +130,6 @@ export const saveCardLabels = (labels) =>
 
 export const saveAiLabels = (labels) =>
   request("/api/settings/ai-labels", { method: "PUT", body: JSON.stringify({ labels }) });
+
+export const approveTask = (key) =>
+  request(`/api/tasks/${encodeURIComponent(key)}/approve`, { method: "POST" });

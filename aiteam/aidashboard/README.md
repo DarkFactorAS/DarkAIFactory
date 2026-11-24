@@ -80,13 +80,22 @@ On startup, the app loads all shared Jira/GitHub values and its own
 Missing rows fail startup.
 Settings are available server-side via DI, never returned by the blank page.
 The app makes read-only Jira calls for `/api/tasks/active-ai` and
-`/api/stats/solved-by-project`, plus one write: `POST /api/tasks/{key}/comments` (`text`) appends the text
+`/api/stats/solved-by-project`, plus two writes: `POST /api/tasks/{key}/approve` (see below) and `POST /api/tasks/{key}/comments` (`text`) appends the text
 as a new Jira comment on that issue (the description is never changed; 400 on invalid input,
 502 if Jira fails or times out); its GitHub token can remain empty.
 Like every write endpoint, comment submissions require a logged-in session (see [Login](#login)).
 Only issues currently returned by the active AI task list in the configured
 Jira projects are authorized (403 otherwise).
-`GET /api/tasks/config` returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
+`POST /api/tasks/{key}/approve` (login required) adds the approved label (`workflow_labels[aiagent, ApprovedLabel]`,
+default `aiagent-approved`) to an active issue that has the approval label (`ApprovalLabel`, default
+`aiagent-awaiting-approval`) so the agent continues; it changes only the labels field and the agent removes both labels.
+400 invalid key, 403 issue not active, 409 no approval label, 502 Jira failure; 200 without a Jira call if already approved.
+Any logged-in user may approve. The "Top 5 AI tasks" cards show an **Approve** button for logged-in users when the issue has
+the approval label and not the approved label.
+Manual check: add `aiagent-awaiting-approval` to an active issue; logged in, the button appears within one 30 s poll;
+click it: the issue gets `aiagent-approved` and, after the agent runs, both labels are removed. Logged out: no button.
+Check light and dark themes. Tip: add `aiagent-awaiting-approval` to the card badge labels to see it on the card.
+`GET /api/tasks/config` also returns `approvalLabel` and `approvedLabel`, and returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
 The New task form has a project selector fed by `projectKeys`, defaulting to the first key; with only one project it shows the key as read-only text instead. The chosen project is shown as a badge in the pending task list and cannot be changed when editing. `POST`/`PUT /api/agent-tasks` reject a `projectKey` that is not in `manager_projects` (400).
 AI labels: `GET /api/settings/ai-labels` returns `{ labels }`; `PUT /api/settings/ai-labels` (`labels`, login
 required, 401 otherwise) validates (max 20 labels, 1-255 chars, no whitespace or commas; 400 otherwise), writes
