@@ -42,8 +42,33 @@ export function metricsDetails(t) {
   ].join("\n");
 }
 
-export default function AgentMetrics({ metrics }) {
-  const [range, setRange] = useState("allTime");
+export function MetricsRangeToggle({ range, onChange }) {
+  return (
+    <div
+      data-testid="agent-metrics-range-toggle"
+      className="inline-flex shrink-0 overflow-hidden rounded border border-slate-300 text-xs dark:border-slate-600"
+    >
+      {[
+        ["allTime", "All", "All time"],
+        ["last7Days", "7d", "Last 7 days"],
+      ].map(([key, text, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={range === key}
+          aria-label={label}
+          title={label}
+          onClick={() => onChange(key)}
+          className={"px-2 py-0.5 " + (range === key ? "bg-blue-600 text-white" : "")}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function AgentMetrics({ metrics, range = "allTime" }) {
   const [showDetails, setShowDetails] = useState(false);
   const detailsId = useId();
   if (!metrics) return null;
@@ -52,24 +77,6 @@ export default function AgentMetrics({ metrics }) {
   return (
     <div data-testid="agent-metrics" className="mt-2 text-xs text-slate-600 dark:text-slate-300">
       <div data-testid="agent-metrics-row" className="flex items-center gap-2 whitespace-nowrap overflow-x-auto">
-        <div className="inline-flex shrink-0 overflow-hidden rounded border border-slate-300 dark:border-slate-600">
-          {[
-            ["allTime", "All", "All time"],
-            ["last7Days", "7d", "Last 7 days"],
-          ].map(([key, text, label]) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={range === key}
-              aria-label={label}
-              title={label}
-              onClick={() => setRange(key)}
-              className={"px-2 py-0.5 " + (range === key ? "bg-blue-600 text-white" : "")}
-            >
-              {text}
-            </button>
-          ))}
-        </div>
         <span>
           {t.succeeded}/{t.succeeded + t.failed} ok
         </span>

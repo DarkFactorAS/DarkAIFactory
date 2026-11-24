@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
-import AgentMetrics from "./AgentMetrics.jsx";
+import AgentMetrics, { MetricsRangeToggle } from "./AgentMetrics.jsx";
 import { useAuth } from "./auth.jsx";
 import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgentMetrics, statusLabel } from "./agentApi.js";
 
@@ -13,7 +13,7 @@ function statusBadgeColors(label, highlightKey) {
   return "bg-slate-100 dark:bg-slate-700";
 }
 
-function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
+function AgentCard({ agent, metrics, range, nowMs, onEdit, canEdit }) {
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
   const working = isWorking(agent, nowMs);
@@ -70,7 +70,7 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
         {agent.container ? ` / ${agent.container}` : ""}
       </p>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
-      <AgentMetrics metrics={metrics} />
+      <AgentMetrics metrics={metrics} range={range} />
       {canEdit && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
@@ -135,6 +135,7 @@ export default function AgentSlots({ agents, nowMs, error, reloadAgents }) {
   const [editorState, setEditor] = useState(null); // null | { agent }
   const editor = canEdit ? editorState : null;
   const [showEdit, setShowEdit] = useState(false);
+  const [metricsRange, setMetricsRange] = useState("allTime");
 
   // Reset on logout so the Edit buttons do not return automatically after the next login.
   useEffect(() => {
@@ -161,19 +162,22 @@ export default function AgentSlots({ agents, nowMs, error, reloadAgents }) {
     <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Agents</h2>
-        {canEdit && (
-          <button
-            type="button"
-            data-testid="agent-edit-toggle"
-            aria-pressed={showEdit}
-            title={showEdit ? "Hide edit buttons" : "Show edit buttons"}
-            onClick={() => setShowEdit((v) => !v)}
-            className={"rounded border px-2 py-0.5 text-xs" + (showEdit ? " bg-slate-200 dark:bg-slate-600" : "")}
-          >
-            Edit
-            <span className="sr-only">{showEdit ? " (hide edit buttons)" : " (show edit buttons)"}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <MetricsRangeToggle range={metricsRange} onChange={setMetricsRange} />
+          {canEdit && (
+            <button
+              type="button"
+              data-testid="agent-edit-toggle"
+              aria-pressed={showEdit}
+              title={showEdit ? "Hide edit buttons" : "Show edit buttons"}
+              onClick={() => setShowEdit((v) => !v)}
+              className={"rounded border px-2 py-0.5 text-xs" + (showEdit ? " bg-slate-200 dark:bg-slate-600" : "")}
+            >
+              Edit
+              <span className="sr-only">{showEdit ? " (hide edit buttons)" : " (show edit buttons)"}</span>
+            </button>
+          )}
+        </div>
       </div>
       {!agents && !error && (
         <p role="status" className="text-slate-500 dark:text-slate-400">
@@ -192,6 +196,7 @@ export default function AgentSlots({ agents, nowMs, error, reloadAgents }) {
               key={agent.id}
               agent={agent}
               metrics={metrics[agent.id]}
+              range={metricsRange}
               nowMs={nowMs}
               onEdit={(a) => setEditor({ agent: a })}
               canEdit={canEdit && showEdit}
