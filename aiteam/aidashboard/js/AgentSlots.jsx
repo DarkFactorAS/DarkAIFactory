@@ -79,13 +79,17 @@ export default function AgentSlots() {
 
   const load = useCallback(() => {
     // Metrics are optional: a failure leaves the last known values and never blocks the agents.
-    const metricsPromise = listAgentMetrics().catch(() => null);
+    // Merge them in their own continuation so a slow metrics query cannot gate the agent cards.
+    listAgentMetrics()
+      .then((metrics) => {
+        if (metrics) setState((prev) => ({ ...prev, metrics }));
+      })
+      .catch(() => {});
     listAgents()
-      .then(async ({ agents, nowMs }) => {
-        const metrics = await metricsPromise;
+      .then(({ agents, nowMs }) => {
         setState((prev) => ({
+          ...prev,
           agents,
-          metrics: metrics ?? prev.metrics,
           nowMs,
           fetchedAt: Date.now(),
           error: null,
