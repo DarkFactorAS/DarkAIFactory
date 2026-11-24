@@ -36,6 +36,11 @@ Run: `dotnet run --project aiteam/aidashboard/aidashboard.csproj`
 
 ## Docker and deployment
 
+Login cookies are encrypted with ASP.NET Core Data Protection keys. The image stores them in
+`/app/keys` (`DataProtection__KeysPath`), and Compose mounts the named volume
+`aiteam_aidashboard_keys` there, so logins (including "Remember me" for 7 days) survive container
+restarts. Deleting that volume logs everyone out. For `docker run`, mount a volume at `/app/keys`.
+
 Build from the repository root with `NUGET_USERNAME` and `NUGET_TOKEN` set:
 
 ```sh
@@ -113,10 +118,12 @@ the issue gets `aiagent-merge-requested` and the card shows "Merge requested". L
 hides it. Check light and dark themes.
 `POST /api/tasks/{key}/retry` (login required) clears **all** labels on an active issue that has the `aiagent-failed` label
 (`workflow_labels[aiagent, FailureLabel]`) by setting the Jira `labels` field to an empty array; this also removes non-AI labels
-and any `aiagent-pr-tracking-pending` label. 400 invalid key, 403 issue not active, 409 issue has no failure label, 502 Jira
+and any `aiagent-pr-tracking-pending` label. After the labels are cleared it also adds a Jira comment saying the next attempt
+starts on a fresh branch created from the parent branch (or the default branch); if only the comment fails the response is still 200
+with `commentAdded: false`. 400 invalid key, 403 issue not active, 409 issue has no failure label, 502 Jira
 failure (generic error). The "Active AI tasks" cards show a red **Retry** button for logged-in users when the issue has the failure label.
 Manual check: logged in, add `aiagent-failed` to an active issue; the red Retry button appears; click it: all labels are removed
-in Jira and the card refreshes without the button. Logged out: no button. Check light and dark themes.
+in Jira, the issue has a new comment saying the next attempt starts on a fresh branch from the parent branch, and the card refreshes without the button. Logged out: no button. Check light and dark themes.
 
 `GET /api/tasks/config` also returns `approvalLabel`, `approvedLabel`, `mergeRequestedLabel` and `readyToMergeLabel`, and returns the non-secret `projectKeys` from the `manager_projects` table and `projectKey` (the first one) used as the default by task creation.
 The New task form has a project selector fed by `projectKeys`, defaulting to the first key; with only one project it shows the key as read-only text instead. The chosen project is shown as a badge in the pending task list and cannot be changed when editing. `POST`/`PUT /api/agent-tasks` reject a `projectKey` that is not in `manager_projects` (400).
@@ -153,7 +160,7 @@ Agent slots UI (`js/AgentSlots.jsx`, `js/AgentEditor.jsx`, `js/agentApi.js`) sit
 uses `/api/agents` plus the read-only
 `GET /api/agents/projects` (sorted `jira_project_key` values). It polls every 30 s (the aiAgent default poll
 interval). A card shows Disabled when not enabled (the card has no Enabled checkbox; enable or disable an agent via Edit -> Enabled -> Save), otherwise Offline when there is no status or the heartbeat is
-older than 90 s (3 polls), else Idle / the Jira key (or Running without a key) / Error. Idle shows no badge. The capability chips sit in the header row next to the agent name, before the badge. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
+older than 90 s (3 polls), else Idle / the Jira key (or Running without a key) / Error. Idle shows no badge. The capability chips sit in the header row next to the agent name, before the badge. The Disabled badge is yellow and the Offline badge is red; the other statuses keep the neutral badge. While Running (and not Offline) — i.e. only while the capability holds an issue claim and is working on it, not merely triggered or polling — the capability chip matching `status.currentCapability` is highlighted (added if not enabled), the Jira key badge of that working card gets the same blue highlight, and the whole card gets a highlighted blue border (`data-working="true"`); Disabled, Offline, Idle and Error cards keep the normal border. `heartbeatAt` is treated as UTC (the heartbeat
 writer must store UTC); "now" comes from the response `Date` header.
 
 Model status orbs (`js/ModelOrbs.jsx`, `js/Orb.jsx`, DFAI-246) sit in the centre column directly above the New task

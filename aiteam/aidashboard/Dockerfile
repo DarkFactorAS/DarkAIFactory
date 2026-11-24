@@ -23,5 +23,8 @@ WORKDIR /app
 COPY --from=build /app/publish/ .
 COPY --from=client /client/dist/ ./wwwroot/
 EXPOSE 8080
+# Data Protection key ring for the auth cookie; mounted as a volume so logins survive restarts.
+ENV DataProtection__KeysPath=/app/keys
+RUN mkdir -p /app/keys && chown app:app /app/keys
 USER app
 ENTRYPOINT ["dotnet", "/app/aidashboard.dll"]

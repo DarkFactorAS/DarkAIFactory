@@ -4,7 +4,10 @@ import AgentMetrics from "./AgentMetrics.jsx";
 import { useAuth } from "./auth.jsx";
 import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgentMetrics, statusLabel } from "./agentApi.js";
 
-function statusBadgeColors(label) {
+const ACTIVE_HIGHLIGHT = "bg-blue-600 text-white font-semibold ring-2 ring-blue-300";
+
+function statusBadgeColors(label, highlightKey) {
+  if (highlightKey) return ACTIVE_HIGHLIGHT;
   if (label === "Disabled") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
   if (label === "Offline") return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
   return "bg-slate-100 dark:bg-slate-700";
@@ -14,6 +17,8 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
   const working = isWorking(agent, nowMs);
+  const issueKey = agent.status?.currentIssueKey;
+  const highlightKey = working && !!issueKey && label === issueKey;
   const chips = agent.capabilities.filter((c) => c.enabled).map((c) => c.capability);
   if (active && !chips.some((c) => c.toLowerCase() === active.toLowerCase())) chips.push(active);
 
@@ -36,7 +41,7 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
                   aria-current="step"
                   data-testid="agent-active-capability"
                   title="Currently running"
-                  className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white ring-2 ring-blue-300"
+                  className={"rounded px-2 py-0.5 text-xs " + ACTIVE_HIGHLIGHT}
                 >
                   {c}
                   <span className="sr-only"> (active)</span>
@@ -48,8 +53,13 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
               ),
             )}
             {label && (
-              <span className={"rounded px-2 py-0.5 text-xs " + statusBadgeColors(label)} data-testid="agent-status">
+              <span
+                className={"rounded px-2 py-0.5 text-xs " + statusBadgeColors(label, highlightKey)}
+                data-testid="agent-status"
+                {...(highlightKey ? { "aria-current": "step", title: "Currently working on" } : {})}
+              >
                 {label}
+                {highlightKey && <span className="sr-only"> (active)</span>}
               </span>
             )}
           </div>
