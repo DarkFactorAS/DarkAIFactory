@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
 import AgentMetrics from "./AgentMetrics.jsx";
 import { useAuth } from "./auth.jsx";
@@ -67,6 +67,52 @@ function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
         </div>
       )}
     </li>
+  );
+}
+
+// Modal overlay around the agent editor. A native <dialog> opened with showModal()
+// renders in the top layer, makes the page inert, traps focus and restores focus
+// to the opener when closed.
+function AgentEditorDialog({ agent, onCancel, children }) {
+  const ref = useRef(null);
+  const titleId = "agent-editor-title";
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return undefined;
+    if (!dialog.open) dialog.showModal();
+    dialog.querySelector("form input")?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={ref}
+      data-testid="agent-editor-dialog"
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        onCancel();
+      }}
+      onClick={(e) => {
+        if (e.target === ref.current) onCancel();
+      }}
+      className="m-auto w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white p-0 text-inherit shadow-xl backdrop:bg-black/30 dark:bg-slate-800 dark:text-slate-100"
+    >
+      <div className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 id={titleId} className="text-lg font-semibold">
+            {agent ? `Edit ${agent.name}` : "Create agent"}
+          </h2>
+          <button type="button" aria-label="Close agent editor" onClick={onCancel} className="rounded border px-2 py-0.5 text-sm">
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </dialog>
   );
 }
 
@@ -157,6 +203,7 @@ export default function AgentSlots() {
         </ul>
       )}
       {editor && (
+        <AgentEditorDialog agent={editor.agent} onCancel={() => setEditor(null)}>
         <AgentEditor
           key={editor.agent?.id ?? "new"}
           agent={editor.agent}
@@ -173,6 +220,7 @@ export default function AgentSlots() {
             load();
           }}
         />
+        </AgentEditorDialog>
       )}
     </section>
   );
