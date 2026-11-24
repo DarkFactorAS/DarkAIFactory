@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
 import AgentMetrics from "./AgentMetrics.jsx";
 import { useAuth } from "./auth.jsx";
-import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgentMetrics, listAgents, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgentMetrics, statusLabel } from "./agentApi.js";
 
 const ACTIVE_HIGHLIGHT = "bg-blue-600 text-white font-semibold ring-2 ring-blue-300";
 
@@ -129,9 +129,9 @@ function AgentEditorDialog({ agent, onCancel, children }) {
 }
 
 // Agents are visible to everyone; adding and editing them needs a login.
-export default function AgentSlots() {
+export default function AgentSlots({ agents, nowMs, error, reloadAgents }) {
   const { canEdit } = useAuth();
-  const [state, setState] = useState(() => ({ agents: null, metrics: {}, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
+  const [metrics, setMetrics] = useState({});
   const [editorState, setEditor] = useState(null); // null | { agent }
   const editor = canEdit ? editorState : null;
   const [showEdit, setShowEdit] = useState(false);
@@ -141,46 +141,22 @@ export default function AgentSlots() {
     if (!canEdit) setShowEdit(false);
   }, [canEdit]);
 
-  const load = useCallback(() => {
-    // Metrics are optional: a failure leaves the last known values and never blocks the agents.
-    // Merge them in their own continuation so a slow metrics query cannot gate the agent cards.
+  const loadMetrics = useCallback(() => {
     listAgentMetrics()
-      .then((metrics) => {
-        if (metrics) setState((prev) => ({ ...prev, metrics }));
-      })
+      .then((nextMetrics) => setMetrics(nextMetrics))
       .catch(() => {});
-    listAgents()
-      .then(({ agents, nowMs }) => {
-        setState((prev) => ({
-          ...prev,
-          agents,
-          nowMs,
-          fetchedAt: Date.now(),
-          error: null,
-        }));
-      })
-      .catch((e) =>
-        setState((prev) => {
-          // Keep cached agents, but advance the server-derived clock by the
-          // local time elapsed so stale heartbeats eventually show as Offline.
-          const localNow = Date.now();
-          return {
-            ...prev,
-            nowMs: prev.nowMs + Math.max(0, localNow - prev.fetchedAt),
-            fetchedAt: localNow,
-            error: e.message,
-          };
-        }),
-      );
   }, []);
 
   useEffect(() => {
-    load();
-    const timer = setInterval(load, POLL_INTERVAL_MS);
+    loadMetrics();
+    const timer = setInterval(loadMetrics, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [loadMetrics]);
 
-  const { agents, metrics, nowMs, error } = state;
+  const refresh = () => {
+    reloadAgents();
+    loadMetrics();
+  };
   return (
     <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <div className="flex items-center justify-between gap-2">
@@ -243,14 +219,14 @@ export default function AgentSlots() {
           onCancel={() => setEditor(null)}
           onSaved={() => {
             setEditor(null);
-            load();
+            refresh();
           }}
           onDeleted={() => {
             // Only close the editor if it is still the selection that started
             // the delete; the user may have opened another draft meanwhile.
             const deletingEditor = editor;
             setEditor((current) => (current === deletingEditor ? null : current));
-            load();
+            refresh();
           }}
         />
         </AgentEditorDialog>
