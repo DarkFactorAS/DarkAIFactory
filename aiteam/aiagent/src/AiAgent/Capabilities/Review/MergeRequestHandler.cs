@@ -302,6 +302,7 @@ public sealed class MergeRequestHandler(
 
             var hasMarker = File.ReadLines(full).Any(line =>
                 line.StartsWith("<<<<<<< ", StringComparison.Ordinal) || line == "<<<<<<<" ||
+                line == "=======" ||
                 line.StartsWith(">>>>>>> ", StringComparison.Ordinal) || line == ">>>>>>>");
             if (hasMarker)
             {
