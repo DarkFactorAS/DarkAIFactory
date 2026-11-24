@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 const NA = "N/A";
 
@@ -44,6 +44,8 @@ export function metricsDetails(t) {
 
 export default function AgentMetrics({ metrics }) {
   const [range, setRange] = useState("allTime");
+  const [showDetails, setShowDetails] = useState(false);
+  const detailsId = useId();
   if (!metrics) return null;
   const t = metrics[range];
   const details = metricsDetails(t);
@@ -71,8 +73,15 @@ export default function AgentMetrics({ metrics }) {
           data-testid="agent-metrics-info"
           role="img"
           tabIndex={0}
-          title={details}
-          aria-label={details}
+          aria-label="Show metrics details"
+          aria-describedby={detailsId}
+          onFocus={() => setShowDetails(true)}
+          onBlur={() => setShowDetails(false)}
+          onMouseEnter={() => setShowDetails(true)}
+          onMouseLeave={() => setShowDetails(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setShowDetails(false);
+          }}
           className="inline-block cursor-help align-text-bottom text-slate-500 dark:text-slate-400"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="h-3.5 w-3.5">
@@ -85,6 +94,15 @@ export default function AgentMetrics({ metrics }) {
         </span>{" "}
         · {formatDuration(t.wallClockMs)} · {formatCost(t.costUsd)}
       </p>
+      <div
+        id={detailsId}
+        role="tooltip"
+        data-testid="agent-metrics-details"
+        hidden={!showDetails}
+        className="mt-1 whitespace-pre-line rounded border border-slate-300 bg-white p-2 text-slate-700 shadow dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+      >
+        {details}
+      </div>
     </div>
   );
 }
