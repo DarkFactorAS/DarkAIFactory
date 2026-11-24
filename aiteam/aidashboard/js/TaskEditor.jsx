@@ -225,14 +225,11 @@ export default function TaskEditor() {
           to create and edit tasks.
         </p>
       )}
-      <h2 className="text-lg font-semibold">Tasks not yet sent to Jira</h2>
-      <p className="text-xs text-slate-500 dark:text-slate-400">Updates every 30 s</p>
       {error && (
         <p role="alert" className="text-red-600 dark:text-red-400">
           Unable to load tasks: {error}
         </p>
       )}
-      {!error && tasks.length === 0 && <p className="text-slate-500 dark:text-slate-400">No pending tasks.</p>}
       <ul className="space-y-3">
         {tasks.map((task) => (
           <li key={task.id} className="rounded border border-slate-200 dark:border-slate-700 p-3">
