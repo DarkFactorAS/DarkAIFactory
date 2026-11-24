@@ -89,6 +89,18 @@ public static class WorkflowLabelPatcher
                 ('aiagent', 'IgnoredLabel', 'aiagent-ignored', 'Added by a human to make aiAgent skip a Jira issue.')
             ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
             """);
+        if (!patcher.Successful())
+        {
+            return false;
+        }
+
+        // Label the dashboard adds when a human requests the merge of a ready pull request.
+        patcher.Patch(system, 6,
+            """
+            INSERT INTO `workflow_labels` (`agent_name`, `code_key`, `label_name`, `description`) VALUES
+                ('aiagent', 'MergeRequestedLabel', 'aiagent-merge-requested', 'Added by the dashboard when a human requests the merge of a pull request that is ready to merge.')
+            ON DUPLICATE KEY UPDATE `label_name` = `workflow_labels`.`label_name`
+            """);
         return patcher.Successful();
     }
 }

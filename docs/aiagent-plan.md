@@ -272,7 +272,7 @@ Stage 1 also seeds:
 - **`settings` rows** for client key `aiagent`. These are blank credentials, filled
   in the same way as for the existing agents.
 - **`workflow_labels` rows** for client key `aiagent`, for example `aiagent-picked`,
-  `aiagent-failed`, `aiagent-analyzed`, `aiagent-planned` and `aiagent-ignored`.
+  `aiagent-failed`, `aiagent-analyzed`, `aiagent-planned`, `aiagent-ignored` and `aiagent-merge-requested` (key `MergeRequestedLabel`, added by the dashboard when a merge is requested).
 
 **Stage 2**
 
