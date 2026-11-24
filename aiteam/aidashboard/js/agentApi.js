@@ -31,6 +31,11 @@ export async function listAgents() {
   const header = Date.parse(response.headers.get("Date") ?? "");
   return { agents, nowMs: Number.isNaN(header) ? Date.now() : header };
 }
+// Returns a map of agentId -> { allTime, last7Days }.
+export async function listAgentMetrics() {
+  const rows = await request("/api/agents/metrics");
+  return Object.fromEntries(rows.map((m) => [m.agentId, m]));
+}
 export const listProjects = () => request("/api/agents/projects");
 
 export const createAgent = (agent) =>
