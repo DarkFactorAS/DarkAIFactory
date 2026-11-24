@@ -285,7 +285,9 @@ progress count as neither), `wallClockMs`/`avgWallClockMs` (`finished_at - start
 A value that no run reported is `null` (shown as "N/A"), never 0. Averages cover the runs that reported the value.
 The route is registered before `/api/agents/{id:long}` and does not clash with it.
 
-Each agent card (`js/AgentMetrics.jsx`) shows a compact row with an All / 7d toggle in front of "x/(x+y) ok" (succeeded/total finished runs),
-wall-clock time and cost. An info icon after the ok text shows, on hover or focus, the tokens
+Each agent card (`js/AgentMetrics.jsx`) shows a compact row with "x/(x+y) ok" (succeeded/total finished runs),
+wall-clock time and cost for the selected range. A single All / 7d toggle (`data-testid="agent-metrics-range-toggle"`)
+sits in the Agents header next to the Edit button and applies to every agent card. It is visible to all users
+(including anonymous ones), defaults to All, is not persisted and resets on reload. An info icon after the ok text shows, on hover or focus, the tokens
 (input/output/total), tool calls, averages and LLM vs wall-clock time. Metrics refresh on the 30 s agent poll.
 The JS bundle is built with `npm install && npm run build` in `aiteam/aidashboard` (output `dist`, git-ignored).
