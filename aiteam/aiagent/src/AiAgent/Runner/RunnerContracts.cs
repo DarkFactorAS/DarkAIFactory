@@ -18,7 +18,18 @@ public sealed record RunnerRequest(
     string Prompt = "",
     string? CopilotToken = null);
 
-public sealed record RunnerUsage(long InputTokens, long OutputTokens);
+/// <summary>
+/// Token usage of one runner call. The cache, cost, tool-call and turn values are null when the provider does not
+/// report them (Copilot reports none).
+/// </summary>
+public sealed record RunnerUsage(
+    long InputTokens,
+    long OutputTokens,
+    long? CacheReadTokens = null,
+    long? CacheWriteTokens = null,
+    decimal? CostUsd = null,
+    int? ToolCalls = null,
+    int? NumTurns = null);
 
 public sealed record RunnerToolCall(string Name, int Count);
 

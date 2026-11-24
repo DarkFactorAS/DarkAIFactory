@@ -12,7 +12,8 @@ internal sealed class PullRequestTrackingRecovery(
     long agentId,
     IJiraClient jira,
     IAgentPullRequestRepository pullRequests,
-    Func<string, Uri?> resolveRepository)
+    Func<string, Uri?> resolveRepository,
+    AiAgent.Metrics.RecordRun? record = null)
 {
     public const string PendingLabel = "aiagent-pr-tracking-pending";
     public const string PendingCommentPrefix = "Pull request tracking pending: ";
@@ -29,38 +30,43 @@ internal sealed class PullRequestTrackingRecovery(
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var comments = await jira.GetCommentsAsync(issue.Key, cancellationToken);
-                var urls = comments
-                    .SelectMany(comment => comment.Split('\n'))
-                    .Where(line => line.StartsWith(PendingCommentPrefix, StringComparison.Ordinal))
-                    .Select(line => line[PendingCommentPrefix.Length..].Trim())
-                    .Where(url => url.Length > 0)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray();
-                if (urls.Length == 0)
+                await (record ?? AiAgent.Metrics.NullAgentRunRecorder.Record)(issue.Key, async run =>
                 {
-                    AgentLog.LogOutput(
-                        DFLogLevel.WARNING, "JiraRecovery",
-                        $"Could not recover pull-request tracking for {issue.Key}: no tracking URL was found in Jira comments.");
-                    continue;
-                }
-
-                foreach (var url in urls)
-                {
-                    var number = ParsePullRequestNumber(url);
-                    if (repository is null || !BelongsToRepository(repository, url, number))
+                    var comments = await jira.GetCommentsAsync(issue.Key, cancellationToken);
+                    var urls = comments
+                        .SelectMany(comment => comment.Split('\n'))
+                        .Where(line => line.StartsWith(PendingCommentPrefix, StringComparison.Ordinal))
+                        .Select(line => line[PendingCommentPrefix.Length..].Trim())
+                        .Where(url => url.Length > 0)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    if (urls.Length == 0)
                     {
-                        throw new InvalidDataException(
-                            $"The tracking URL for {issue.Key} does not belong to the configured repository.");
+                        AgentLog.LogOutput(
+                            DFLogLevel.WARNING, "JiraRecovery",
+                            $"Could not recover pull-request tracking for {issue.Key}: no tracking URL was found in Jira comments.");
+                        run.Discard();
+                        return;
                     }
 
-                    pullRequests.Record(new AgentPullRequestRecord(agentId, issue.Key, repository.AbsoluteUri, number, url));
-                }
+                    foreach (var url in urls)
+                    {
+                        var number = ParsePullRequestNumber(url);
+                        if (repository is null || !BelongsToRepository(repository, url, number))
+                        {
+                            throw new InvalidDataException(
+                                $"The tracking URL for {issue.Key} does not belong to the configured repository.");
+                        }
 
-                await jira.RemoveLabelAsync(issue.Key, PendingLabel, cancellationToken);
-                AgentLog.LogOutput(
-                    DFLogLevel.INFO, "JiraRecovery",
-                    $"Recovered pull-request tracking for {issue.Key} without rerunning implementation.");
+                        pullRequests.Record(new AgentPullRequestRecord(agentId, issue.Key, repository.AbsoluteUri, number, url));
+                    }
+
+                    await jira.RemoveLabelAsync(issue.Key, PendingLabel, cancellationToken);
+                    run.Succeed();
+                    AgentLog.LogOutput(
+                        DFLogLevel.INFO, "JiraRecovery",
+                        $"Recovered pull-request tracking for {issue.Key} without rerunning implementation.");
+                });
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

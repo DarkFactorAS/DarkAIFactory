@@ -1,4 +1,5 @@
 using AiAgent.Core;
+using AiAgent.Metrics;
 using AiAgent.GitHub;
 using AiAgent.LanguageModel;
 using AiAgent.Repositories;
@@ -18,7 +19,8 @@ internal sealed class BuilderCapability(
     Func<BuilderSettings, IBuilderJira> jiraFactory,
     Func<Uri, BuilderSettings, GitHubCore> gitHubFactory,
     IRunnerClient runner,
-    string workspaceRoot) : IAgentCapability
+    string workspaceRoot,
+    AiAgent.Metrics.IAgentRunRecorder? recorder = null) : IAgentCapability
 {
     private const string Log = "Builder";
 
@@ -146,7 +148,9 @@ internal sealed class BuilderCapability(
             issue.Key, issue.Labels, jira.RemoveLabelAsync,
             message => AgentLog.LogOutput(DFLogLevel.WARNING, Log, message), cancellationToken);
         AgentLog.LogOutput(DFLogLevel.INFO, Log, $"Claiming {issue.Key}: {issue.Summary}");
-        await ImplementAsync(context, settings, repositoryUrl, jira, issue, plan, cancellationToken);
+        var record = (recorder ?? AiAgent.Metrics.NullAgentRunRecorder.Instance).Bind(context, Kind);
+        await record(issue.Key, run =>
+            ImplementAsync(context, settings, repositoryUrl, jira, issue, plan, run, cancellationToken));
     }
 
     private static Task IgnoreAsync(
@@ -160,7 +164,7 @@ internal sealed class BuilderCapability(
 
     private async Task ImplementAsync(
         AgentContext context, BuilderSettings settings, Uri repositoryUrl, IBuilderJira jira, BuilderIssue issue,
-        AgentPlan storedPlan, CancellationToken cancellationToken)
+        AgentPlan storedPlan, AiAgent.Metrics.IAgentRun run, CancellationToken cancellationToken)
     {
         string? workspacePath = null;
         string? branchName = null;
@@ -230,6 +234,16 @@ internal sealed class BuilderCapability(
             }
 
             delivered = true;
+            // The runner only returns success when the build and tests passed.
+            if (pullRequestUrl is not null)
+            {
+                run.Succeed();
+            }
+            else
+            {
+                run.Fail(string.IsNullOrWhiteSpace(message) ? "Nothing to commit." : message);
+            }
+
             AgentLog.LogOutput(DFLogLevel.INFO, Log, $"Completed {issue.Key}.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -253,6 +267,7 @@ internal sealed class BuilderCapability(
         catch (Exception exception)
         {
             AgentLog.LogOutput(DFLogLevel.ERROR, Log, $"Processing {issue.Key} failed: {exception.Message}");
+            run.Fail(exception.Message);
             await ReportFailureAsync(settings, jira, issue, exception, pushedBranch, branchName, workspacePath,
                 pullRequestUrl, inProgressAttempted, resultCommentPosted, cancellationToken);
         }

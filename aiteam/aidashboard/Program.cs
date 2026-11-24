@@ -34,6 +34,7 @@ builder.Services.AddScoped<ICardLabelsStore, CardLabelsStore>();
 builder.Services.AddScoped<WorkflowLabelRepository>();
 builder.Services.AddScoped<IAgentTaskRepository, AgentTaskRepository>();
 builder.Services.AddScoped<IAgentDefinitionRepository, AgentDefinitionRepository>();
+builder.Services.AddScoped<IAgentMetricsRepository, AgentMetricsRepository>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<IActiveAiTaskService>(services =>
 {

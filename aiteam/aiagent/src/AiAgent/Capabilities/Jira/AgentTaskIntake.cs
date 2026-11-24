@@ -12,7 +12,8 @@ namespace AiAgent.Capabilities.Jira;
 /// </summary>
 internal sealed class AgentTaskIntake(
     AiAgent.Core.IAgentTaskProcessorRepository tasks, IJiraClient jira, string jiraStatusName, int maxAttempts,
-    Dictionary<long, int>? attempts = null, AiAgent.Core.IAgentClaimLock? claimLock = null, long agentId = 0)
+    Dictionary<long, int>? attempts = null, AiAgent.Core.IAgentClaimLock? claimLock = null, long agentId = 0,
+    AiAgent.Metrics.RecordRun? record = null)
 {
     private const string Source = "JiraIntake";
     private readonly Dictionary<long, int> _attempts = attempts ?? [];
@@ -41,7 +42,11 @@ internal sealed class AgentTaskIntake(
 
             try
             {
-                await ProcessAsync(task, cancellationToken);
+                await (record ?? AiAgent.Metrics.NullAgentRunRecorder.Record)(task.JiraKey, async run =>
+                {
+                    await ProcessAsync(task, cancellationToken);
+                    run.Succeed();
+                });
                 _attempts.Remove(task.Id);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

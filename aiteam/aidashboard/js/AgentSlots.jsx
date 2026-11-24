@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import AgentEditor from "./AgentEditor.jsx";
+import AgentMetrics from "./AgentMetrics.jsx";
 import { useAuth } from "./auth.jsx";
-import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgents, statusLabel } from "./agentApi.js";
+import { POLL_INTERVAL_MS, activeCapability, compareByContainer, isWorking, listAgentMetrics, listAgents, statusLabel } from "./agentApi.js";
 
 function statusBadgeColors(label) {
   if (label === "Disabled") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
@@ -9,7 +10,7 @@ function statusBadgeColors(label) {
   return "bg-slate-100 dark:bg-slate-700";
 }
 
-function AgentCard({ agent, nowMs, onEdit, canEdit }) {
+function AgentCard({ agent, metrics, nowMs, onEdit, canEdit }) {
   const label = statusLabel(agent, nowMs);
   const active = activeCapability(agent, nowMs);
   const working = isWorking(agent, nowMs);
@@ -57,6 +58,7 @@ function AgentCard({ agent, nowMs, onEdit, canEdit }) {
         )}
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Projects: {agent.projects.join(", ") || "none"}</p>
+      <AgentMetrics metrics={metrics} />
       {canEdit && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => onEdit(agent)} className="rounded border px-2 py-0.5 text-xs">
@@ -71,13 +73,28 @@ function AgentCard({ agent, nowMs, onEdit, canEdit }) {
 // Agents are visible to everyone; adding and editing them needs a login.
 export default function AgentSlots() {
   const { canEdit } = useAuth();
-  const [state, setState] = useState(() => ({ agents: null, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
+  const [state, setState] = useState(() => ({ agents: null, metrics: {}, nowMs: Date.now(), fetchedAt: Date.now(), error: null }));
   const [editorState, setEditor] = useState(null); // null | { agent }
   const editor = canEdit ? editorState : null;
 
   const load = useCallback(() => {
+    // Metrics are optional: a failure leaves the last known values and never blocks the agents.
+    // Merge them in their own continuation so a slow metrics query cannot gate the agent cards.
+    listAgentMetrics()
+      .then((metrics) => {
+        if (metrics) setState((prev) => ({ ...prev, metrics }));
+      })
+      .catch(() => {});
     listAgents()
-      .then(({ agents, nowMs }) => setState({ agents, nowMs, fetchedAt: Date.now(), error: null }))
+      .then(({ agents, nowMs }) => {
+        setState((prev) => ({
+          ...prev,
+          agents,
+          nowMs,
+          fetchedAt: Date.now(),
+          error: null,
+        }));
+      })
       .catch((e) =>
         setState((prev) => {
           // Keep cached agents, but advance the server-derived clock by the
@@ -99,7 +116,7 @@ export default function AgentSlots() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const { agents, nowMs, error } = state;
+  const { agents, metrics, nowMs, error } = state;
   return (
     <section data-testid="agent-slots" className="space-y-3 rounded-lg bg-white dark:bg-slate-800 p-4 shadow">
       <h2 className="text-lg font-semibold">Agents</h2>
@@ -119,6 +136,7 @@ export default function AgentSlots() {
             <AgentCard
               key={agent.id}
               agent={agent}
+              metrics={metrics[agent.id]}
               nowMs={nowMs}
               onEdit={(a) => setEditor({ agent: a })}
               canEdit={canEdit}

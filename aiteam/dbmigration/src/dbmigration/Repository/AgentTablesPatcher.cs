@@ -256,6 +256,33 @@ public static class AgentTablesPatcher
                     (`client` = 'aiagent' AND `name` IN
                         ('GitHub.GitHubRepositoryToken', 'Claude.AnthropicApiKey'))
                 )
+            """,
+            // DFAI-226: one row per unit of work of a capability (usage capture). No cascade: agents are soft deleted.
+            """
+            CREATE TABLE IF NOT EXISTS `agent_runs` (
+                `id` BIGINT NOT NULL AUTO_INCREMENT,
+                `agent_id` BIGINT NOT NULL,
+                `capability` ENUM('Jira', 'Planning', 'Builder', 'Review') NOT NULL,
+                `issue_key` VARCHAR(255) NULL,
+                `provider` VARCHAR(32) NOT NULL,
+                `model` VARCHAR(255) NULL,
+                `started_at` DATETIME NOT NULL,
+                `finished_at` DATETIME NULL,
+                `llm_duration_ms` BIGINT NULL,
+                `outcome` ENUM('Succeeded', 'Failed') NULL,
+                `failure_reason` TEXT NULL,
+                `input_tokens` BIGINT NULL,
+                `output_tokens` BIGINT NULL,
+                `cache_read_tokens` BIGINT NULL,
+                `cache_write_tokens` BIGINT NULL,
+                `cost_usd` DECIMAL(12,6) NULL,
+                `tool_calls` INT NULL,
+                `num_turns` INT NULL,
+                PRIMARY KEY (`id`),
+                KEY `ix_agent_runs_agent_started` (`agent_id`, `started_at`),
+                CONSTRAINT `fk_agent_runs_agent` FOREIGN KEY (`agent_id`)
+                    REFERENCES `agent_definitions` (`id`)
+            )
             """
         ];
 

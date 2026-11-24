@@ -17,7 +17,13 @@ internal sealed class AgentPlanner(
     Func<JiraIssue, CancellationToken, Task<string>> generatePlan,
     Func<PlanningConfiguration, string, string, string, CancellationToken, Task<string>>? createParentPullRequest = null)
 {
-    public async Task PlanAsync(long projectId, JiraIssue candidate, CancellationToken cancellationToken)
+    /// <summary>
+    /// Plans one issue. <paramref name="run"/> (optional) is the agent run of this unit of work: the capability
+    /// begins it when the LLM is called, and this method records the failures that are not exceptions.
+    /// </summary>
+    public async Task PlanAsync(
+        long projectId, JiraIssue candidate, CancellationToken cancellationToken,
+        AiAgent.Metrics.IAgentRun? run = null)
     {
         var issue = await jira.GetIssueAsync(candidate.Key, cancellationToken);
         if (string.Equals(issue.StatusName, candidate.StatusName, StringComparison.Ordinal))
@@ -186,10 +192,16 @@ internal sealed class AgentPlanner(
                 ManagerPlan.Fingerprint(latest.Summary, latest.Description, configuration.GitHubRepositoryUrl) != requirementsHash)
             {
                 AgentLog.LogOutput(DFLogLevel.INFO, "Planner", $"Discarding plan for {issue.Key}: the issue changed or was claimed during planning.");
+                run?.Fail("The plan was discarded: the issue changed or was claimed during planning.");
                 return;
             }
 
-            if (TriageResult.TryParse(plan, out var triage) && triage is not null)
+            if (!(TriageResult.TryParse(plan, out var triage) && triage is not null))
+            {
+                run?.Fail("The agent returned a plan that is not valid triage JSON.");
+            }
+
+            if (triage is not null)
             {
                 var decision = triage.Decision == TriageDecision.Small && !configuration.AutoApproveSmallChanges
                     ? TriageDecision.NeedsApproval

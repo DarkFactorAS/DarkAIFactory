@@ -37,8 +37,11 @@ public sealed class RunnerClient : IRunnerClient, IDisposable
                 (body.Length <= 2_000 ? body : body[..2_000] + "..."));
         }
 
-        return await response.Content.ReadFromJsonAsync<RunnerResponse>(cancellationToken: cancellationToken)
+        var result = await response.Content.ReadFromJsonAsync<RunnerResponse>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("The runner returned no response.");
+        // Every LLM call adds its usage to the agent run of the current async flow (no-op outside a run).
+        AiAgent.Metrics.AgentRunRecorder.AddUsageToCurrent(result);
+        return result;
     }
 
     public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken)

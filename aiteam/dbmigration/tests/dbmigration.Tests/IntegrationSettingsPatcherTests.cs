@@ -119,7 +119,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 10),
             ("AgentTables", 11),
             ("AgentTables", 12),
-            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16),
+            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16), ("AgentTables", 17),
             ("LegacyAgentCleanup", 1), ("LegacyAgentCleanup", 2), ("LegacyAgentCleanup", 3),
             ("LegacyAgentCleanup", 4), ("LegacyAgentCleanup", 5), ("LegacyAgentCleanup", 6),
             ("LegacyAgentCleanup", 7), ("LegacyAgentCleanup", 8)]);
@@ -250,7 +250,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 10),
             ("AgentTables", 11),
             ("AgentTables", 12),
-            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16),
+            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16), ("AgentTables", 17),
             ("LegacyAgentCleanup", 1), ("LegacyAgentCleanup", 2), ("LegacyAgentCleanup", 3),
             ("LegacyAgentCleanup", 4), ("LegacyAgentCleanup", 5), ("LegacyAgentCleanup", 6),
             ("LegacyAgentCleanup", 7), ("LegacyAgentCleanup", 8)], patcher.Executed);
@@ -292,7 +292,7 @@ public sealed class IntegrationSettingsPatcherTests
             ("AgentTables", 10),
             ("AgentTables", 11),
             ("AgentTables", 12),
-            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16),
+            ("AgentTables", 13), ("AgentTables", 14), ("AgentTables", 15), ("AgentTables", 16), ("AgentTables", 17),
             ("LegacyAgentCleanup", 1), ("LegacyAgentCleanup", 2), ("LegacyAgentCleanup", 3),
             ("LegacyAgentCleanup", 4), ("LegacyAgentCleanup", 5), ("LegacyAgentCleanup", 6),
             ("LegacyAgentCleanup", 7), ("LegacyAgentCleanup", 8)], patcher.Executed);
